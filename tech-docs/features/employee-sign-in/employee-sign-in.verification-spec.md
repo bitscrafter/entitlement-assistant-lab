@@ -3,7 +3,7 @@
 | | |
 | :--- | :--- |
 | **Purpose** | States what the feature must do: an employee signs in, the session acts as their internal account, invalid tokens and invalid principals are rejected, and sessions renew up to an absolute lifetime. Each scenario becomes exactly one verification test (`AI_AS_TESTER.md`). |
-| **Status** | Draft — for owner approval |
+| **Status** | Approved by the owner (2026-10-25) |
 | **Feature** | employee-sign-in · scenarios S01–S03, S04a–S04f |
 | **Mode** | feature, no customer data |
 | **Depends on** | — (the first feature) |
@@ -39,7 +39,8 @@ Approving this spec also approves these values:
 | D3 | **Every sign-in failure looks the same to the caller:** wrong password, unknown email, empty password, inactive identity, suspended account. Only the audit record, which the caller never sees, tells them apart. | No account enumeration before authentication (AU-6). |
 | D4 | **A valid token is not enough:** every request re-loads the principal; an inactive identity or a suspended account gets `401`, like an invalid token. | The principal is loaded fresh (CM-16). |
 | D5 | **The fixed instant of every test is `2026-10-22T15:00:00Z`** unless a scenario says otherwise. | Token times must not depend on when the tests run. |
-| D6 | **Fixture ids are readable aliases** (`emp_alex`, `iac_alex`) for seeded UUIDv7 values (CM-14). The host is `app.entitlement-agent.example`. | Readable scenarios. |
+| D6 | **Fixture ids are readable aliases** (`emp_alex`, `iac_alex`) for seeded UUIDv7 values (CM-14). The host is `app.entitlement-agent.example`. A `Content-Length` is computed with the aliases as written; with real ids, each alias is 18 bytes longer. | Readable scenarios. |
+| D7 | **The session cookie is `__Host-session`, `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`, no `Domain`, `Max-Age` equal to the token's remaining lifetime.** Every response carries `Strict-Transport-Security: max-age=31536000; includeSubDomains`; plain HTTP is redirected to HTTPS at Cloudflare's edge (zone setting) before the Worker runs. | Scripts cannot read the token; it never travels over HTTP or to another site or host. |
 
 ## 2. Fixture
 
@@ -120,6 +121,8 @@ GET  /api/authentication/session             session cookie
                                                      job_level, roles } | 401 invalid_session
 session cookie                               __Host-session=<JWT>; HttpOnly; Secure; SameSite=Strict; Path=/
 error bodies                                 OAuth 2 format, top level only (api.md §3): error, error_description
+JSON bodies                                  shown formatted for reading; Content-Length is the length of the
+                                             compact form the server sends
 ```
 
 ---
@@ -149,17 +152,29 @@ Origin: https://app.entitlement-agent.example
 Content-Type: application/json
 Content-Length: 65
 
-{"email":"alex@provider.example","password":"alex-demo-password"}
+{
+  "email": "alex@provider.example",
+  "password": "alex-demo-password"
+}
 ```
 
 **Then:**
 
 ```http
 HTTP/1.1 204 No Content
+Strict-Transport-Security: max-age=31536000; includeSubDomains
 Set-Cookie: __Host-session=<token>; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=1800
 ```
 
 ```yaml
+session_cookie:
+  name: __Host-session                    # the prefix: the browser rejects it unless Secure, Path=/, no Domain
+  http_only: true                         # page scripts cannot read it
+  secure: true                            # sent only over HTTPS
+  same_site: Strict                       # never sent on cross-site requests
+  path: /                                 # required by the prefix; the agent WebSocket under /agents needs it
+  domain: absent                          # bound to this exact host
+  max_age: 1800                            # the token's remaining lifetime
 token:
   header:
     alg: ES256
@@ -193,7 +208,16 @@ HTTP/1.1 200 OK
 Content-Type: application/json
 Content-Length: 159
 
-{"account_id":"iac_alex","display_name":"Alex","department":"customer-support","job_function":"representative","job_level":1,"roles":["support-case-handling"]}
+{
+  "account_id": "iac_alex",
+  "display_name": "Alex",
+  "department": "customer-support",
+  "job_function": "representative",
+  "job_level": 1,
+  "roles": [
+    "support-case-handling"
+  ]
+}
 ```
 
 ### S02 — Sign-in is rejected without revealing which part was wrong
@@ -221,7 +245,10 @@ Origin: https://app.entitlement-agent.example
 Content-Type: application/json
 Content-Length: 61
 
-{"email":"alex@provider.example","password":"wrong-password"}
+{
+  "email": "alex@provider.example",
+  "password": "wrong-password"
+}
 ```
 
 Then:
@@ -231,7 +258,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 89
 
-{"error":"invalid_credentials","error_description":"The email or password is incorrect."}
+{
+  "error": "invalid_credentials",
+  "error_description": "The email or password is incorrect."
+}
 ```
 
 ```yaml
@@ -259,7 +289,10 @@ Origin: https://app.entitlement-agent.example
 Content-Type: application/json
 Content-Length: 67
 
-{"email":"nobody@provider.example","password":"alex-demo-password"}
+{
+  "email": "nobody@provider.example",
+  "password": "alex-demo-password"
+}
 ```
 
 Then:
@@ -269,7 +302,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 89
 
-{"error":"invalid_credentials","error_description":"The email or password is incorrect."}
+{
+  "error": "invalid_credentials",
+  "error_description": "The email or password is incorrect."
+}
 ```
 
 ```yaml
@@ -297,7 +333,10 @@ Origin: https://app.entitlement-agent.example
 Content-Type: application/json
 Content-Length: 47
 
-{"email":"alex@provider.example","password":""}
+{
+  "email": "alex@provider.example",
+  "password": ""
+}
 ```
 
 Then:
@@ -307,7 +346,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 89
 
-{"error":"invalid_credentials","error_description":"The email or password is incorrect."}
+{
+  "error": "invalid_credentials",
+  "error_description": "The email or password is incorrect."
+}
 ```
 
 ```yaml
@@ -339,7 +381,10 @@ Origin: https://app.entitlement-agent.example
 Content-Type: application/json
 Content-Length: 67
 
-{"email":"casey@provider.example","password":"casey-demo-password"}
+{
+  "email": "casey@provider.example",
+  "password": "casey-demo-password"
+}
 ```
 
 Then:
@@ -349,7 +394,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 89
 
-{"error":"invalid_credentials","error_description":"The email or password is incorrect."}
+{
+  "error": "invalid_credentials",
+  "error_description": "The email or password is incorrect."
+}
 ```
 
 ```yaml
@@ -378,7 +426,10 @@ Origin: https://app.entitlement-agent.example
 Content-Type: application/json
 Content-Length: 65
 
-{"email":"dana@provider.example","password":"dana-demo-password"}
+{
+  "email": "dana@provider.example",
+  "password": "dana-demo-password"
+}
 ```
 
 Then:
@@ -388,7 +439,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 89
 
-{"error":"invalid_credentials","error_description":"The email or password is incorrect."}
+{
+  "error": "invalid_credentials",
+  "error_description": "The email or password is incorrect."
+}
 ```
 
 ```yaml
@@ -435,7 +489,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml
@@ -461,7 +518,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml
@@ -487,7 +547,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml
@@ -513,7 +576,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml
@@ -539,7 +605,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml
@@ -565,7 +634,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml
@@ -591,7 +663,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml
@@ -617,7 +692,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml
@@ -691,10 +769,19 @@ Content-Length: 0
 
 ```http
 HTTP/1.1 204 No Content
+Strict-Transport-Security: max-age=31536000; includeSubDomains
 Set-Cookie: __Host-session=<renewed token>; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=1800
 ```
 
 ```yaml
+session_cookie:
+  name: __Host-session                    # the prefix: the browser rejects it unless Secure, Path=/, no Domain
+  http_only: true                         # page scripts cannot read it
+  secure: true                            # sent only over HTTPS
+  same_site: Strict                       # never sent on cross-site requests
+  path: /                                 # required by the prefix; the agent WebSocket under /agents needs it
+  domain: absent                          # bound to this exact host
+  max_age: 1800                            # the token's remaining lifetime
 renewed_token:
   sub: iac_alex
   sid: S
@@ -720,8 +807,8 @@ emp_alex signed in at 2026-10-22T08:00:00Z: auth_time 08:00:00, sid S. The absol
 The token is validly signed, with sub iac_alex, sid S, auth_time 08:00:00, and jti J.
 Half-life is the midpoint between the token's iat and exp.
 iac_alex is Active, with no holds.
-The token has iat 15:40:00, exp 16:00:00 (issued capped; half-life 15:50:00).
-The instant is 15:56:00.
+The token has iat 15:20:00, exp 15:50:00 (half-life 15:35:00).
+The instant is 15:40:00.
 ```
 
 **When:**
@@ -738,16 +825,25 @@ Content-Length: 0
 
 ```http
 HTTP/1.1 204 No Content
-Set-Cookie: __Host-session=<renewed token>; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=240
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Set-Cookie: __Host-session=<renewed token>; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=1200
 ```
 
 ```yaml
+session_cookie:
+  name: __Host-session                    # the prefix: the browser rejects it unless Secure, Path=/, no Domain
+  http_only: true                         # page scripts cannot read it
+  secure: true                            # sent only over HTTPS
+  same_site: Strict                       # never sent on cross-site requests
+  path: /                                 # required by the prefix; the agent WebSocket under /agents needs it
+  domain: absent                          # bound to this exact host
+  max_age: 1200                            # the token's remaining lifetime
 renewed_token:
   sub: iac_alex
   sid: S
   auth_time: "08:00:00"
-  iat: "15:56:00"
-  exp: "16:00:00"                         # min(15:56 + 30 min, 08:00 + 8 h)
+  iat: "15:40:00"
+  exp: "16:00:00"                         # min(15:40 + 30 min, 08:00 + 8 h)
   jti: new, different from J
 audit_records:                            # exactly one
   - action_key: session.renew
@@ -767,8 +863,9 @@ emp_alex signed in at 2026-10-22T08:00:00Z: auth_time 08:00:00, sid S. The absol
 The token is validly signed, with sub iac_alex, sid S, auth_time 08:00:00, and jti J.
 Half-life is the midpoint between the token's iat and exp.
 iac_alex is Active, with no holds.
-The token has iat 15:56:00, exp 16:00:00 (already ends at auth_time + 8 h; half-life 15:58:00).
-The instant is 15:59:00.
+The token has iat 15:40:00, exp 16:00:00 (issued capped by S04c: it already ends at auth_time + 8 h;
+half-life 15:50:00).
+The instant is 15:55:00.
 ```
 
 **When:**
@@ -788,7 +885,10 @@ HTTP/1.1 403 Forbidden
 Content-Type: application/json
 Content-Length: 101
 
-{"error":"absolute_lifetime_reached","error_description":"The session reached its maximum lifetime."}
+{
+  "error": "absolute_lifetime_reached",
+  "error_description": "The session reached its maximum lifetime."
+}
 ```
 
 ```yaml
@@ -802,6 +902,35 @@ audit_records:                            # exactly one
       - session.absolute-lifetime-reached
 ```
 
+**And then**, the current token still works until its own expiry, at 15:59:30:
+
+```http
+GET /api/authentication/session HTTP/1.1
+Host: app.entitlement-agent.example
+Cookie: __Host-session=<the token>
+```
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 159
+
+{
+  "account_id": "iac_alex",
+  "display_name": "Alex",
+  "department": "customer-support",
+  "job_function": "representative",
+  "job_level": 1,
+  "roles": [
+    "support-case-handling"
+  ]
+}
+```
+
+```text
+After 16:00:00 the same request answers 401 invalid_session (S04e); the employee signs in again.
+```
+
 ### S04e — An expired token cannot be renewed
 
 **Level:** `[http]`
@@ -813,7 +942,7 @@ emp_alex signed in at 2026-10-22T08:00:00Z: auth_time 08:00:00, sid S. The absol
 The token is validly signed, with sub iac_alex, sid S, auth_time 08:00:00, and jti J.
 Half-life is the midpoint between the token's iat and exp.
 iac_alex is Active, with no holds.
-The token has iat 15:56:00, exp 16:00:00.
+The token has iat 15:40:00, exp 16:00:00.
 The instant is 16:00:01.
 ```
 
@@ -834,7 +963,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml
@@ -875,7 +1007,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml

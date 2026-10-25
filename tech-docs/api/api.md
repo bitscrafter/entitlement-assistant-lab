@@ -42,10 +42,13 @@ Base URL           https://app.entitlement-agent.example
 Media type         application/json; charset=utf-8 (requests and responses); no body on 204
 Authentication     __Host-session cookie (feature employee-sign-in); no Authorization header
 Origin             required on every non-GET request; must equal the base URL
-Request bodies     strictly validated: unknown fields, wrong types, and malformed ids are rejected (400)
+Request bodies     at most 16 KiB, read whole before any work; strictly validated: unknown fields, wrong types,
+                   and malformed ids are rejected (400)
 Ids                kind prefix + 22 base64url characters; a well-formed id of the wrong kind is malformed
 Tracing            traceparent accepted; a trace id is created at the edge when absent (attribution §7)
 Caching            Cache-Control: no-store on every /api and /agents response
+Transport          HTTPS only: plain HTTP is redirected at the edge; Strict-Transport-Security on every response
+Examples           JSON is shown formatted; Content-Length is the length of the compact form sent
 ```
 
 ## 3. Errors and disclosure
@@ -93,7 +96,7 @@ Specified in [`../features/employee-sign-in/`](../features/employee-sign-in/empl
 | --- | --- | --- | --- |
 | `POST /api/authentication/sign-in` | `SignIn` (Account) | 204 + cookie | 400, 401 `invalid_credentials`, 403 origin |
 | `POST /api/authentication/session/renewal` | `RenewSession` (Account) | 204, with a renewed cookie past half-life | 401, 403 `absolute_lifetime_reached` |
-| `GET /api/authentication/session` | `GetPrincipal` (Account) | 200 principal: account, display name, job attributes, roles | 401 |
+| `GET /api/authentication/session` | `GetSessionPrincipal` (Access, over Account's `LoadPrincipal`) | 200 principal: account, display name, job attributes, roles | 401 |
 | `POST /api/authentication/sign-out` | `SignOut` (Account) | 204 + cookie cleared (`Max-Age=0`); audit `session.sign-out` | 401 |
 
 ```http
@@ -136,7 +139,9 @@ Content-Type: application/json
 Content-Length: 28
 Cookie: __Host-session=<token>
 
-{"account_id":"acc_initech"}
+{
+  "account_id": "acc_initech"
+}
 ```
 
 ## 6. Change request endpoints
@@ -168,7 +173,10 @@ HTTP/1.1 202 Accepted
 Content-Type: application/json
 Content-Length: 72
 
-{"status":"AwaitingApproval","approval_id":"apr_AZK6v4c7Rt3s1Lm8nXp2Qw"}
+{
+  "status": "AwaitingApproval",
+  "approval_id": "apr_AZK6v4c7Rt3s1Lm8nXp2Qw"
+}
 ```
 
 ## 7. Approval endpoints
@@ -246,10 +254,10 @@ Each use case is a PEP (AU-5): authorize through `AuthorizationDecider`, execute
 
 | Subsystem | Use cases |
 | --- | --- |
-| Account | `SignIn`, `RenewSession`, `SignOut`, `GetPrincipal`, `PlaceHold` and `ReleaseHold` (designed), `AdvanceAccountVersion` (internal) |
-| Internal Identity | `VerifyEmployeeCredential` (internal, used by `SignIn`) |
+| Account | `SignIn`, `RenewSession`, `SignOut`, `LoadPrincipal` (internal, used by every authenticated request), `PlaceHold` and `ReleaseHold` (designed), `AdvanceAccountVersion` (internal) |
+| Internal Identity | `VerifyEmployeeCredential` (internal, used by `SignIn`), `GetEmployeeProfile` (internal, used by `LoadPrincipal`) |
 | Product | `GetCatalog`, `FindLowestPlanIncluding` (remedies, PR-10) |
-| Access | `LoadPrincipalPermissions` (internal, used by the PIP), `CountSeatsInUse` |
+| Access | `GetSessionPrincipal` (who am I, with roles: roles live in Access, above Account), `LoadPrincipalPermissions` (internal, used by the PIP), `CountSeatsInUse` |
 | Entitlement | `ComputeEffectiveEntitlements` (internal), `ChangePlan`, `CancelSubscription`, `CreateGrant`, `AddCourtesyTerm`, `RecordGrantExpiry` |
 | Policy | `RegisterPolicySet`, `ActivatePolicySet` (deployment), `EvaluatePolicies` (internal, used by the PDP) |
 | Authorization | `Decide` (the PDP, behind `AuthorizationDecider`) |

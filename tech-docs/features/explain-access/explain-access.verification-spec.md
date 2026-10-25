@@ -414,6 +414,7 @@ GET  /agents/case-agent/<case_id>      WebSocket upgrade; session cookie; same-o
 
 Error bodies: OAuth 2 format (api.md §3). 401 invalid_session · 403 forbidden · 404 not_found, top level only;
 error_details only with access_denied, for a principal who holds account.read (D3).
+JSON bodies are shown formatted for reading; Content-Length is the length of the compact form the server sends.
 
 FindCustomerAccount(query)             → Found(summary) | Ambiguous(authorized candidates) | NotFound | Denied(reason codes)
 CheckEntitlement(account, feature)     → entitled, quota, sources, reason codes and facts | NotFound | Denied(reason codes)
@@ -472,7 +473,9 @@ HTTP/1.1 201 Created
 Content-Type: application/json
 Content-Length: 40
 
-{"case_id":"<cse_ id>"}
+{
+  "case_id": "<cse_ id>"
+}
 ```
 
 ```yaml
@@ -524,7 +527,10 @@ HTTP/1.1 403 Forbidden
 Content-Type: application/json
 Content-Length: 71
 
-{"error":"forbidden","error_description":"The request is not allowed."}
+{
+  "error": "forbidden",
+  "error_description": "The request is not allowed."
+}
 ```
 
 ```yaml
@@ -571,7 +577,10 @@ HTTP/1.1 403 Forbidden
 Content-Type: application/json
 Content-Length: 71
 
-{"error":"forbidden","error_description":"The request is not allowed."}
+{
+  "error": "forbidden",
+  "error_description": "The request is not allowed."
+}
 ```
 
 ```yaml
@@ -613,7 +622,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml
@@ -702,7 +714,10 @@ HTTP/1.1 404 Not Found
 Content-Type: application/json
 Content-Length: 71
 
-{"error":"not_found","error_description":"The resource was not found."}
+{
+  "error": "not_found",
+  "error_description": "The resource was not found."
+}
 ```
 
 ```yaml
@@ -734,7 +749,10 @@ HTTP/1.1 404 Not Found
 Content-Type: application/json
 Content-Length: 71
 
-{"error":"not_found","error_description":"The resource was not found."}
+{
+  "error": "not_found",
+  "error_description": "The resource was not found."
+}
 ```
 
 ```yaml
@@ -766,7 +784,10 @@ HTTP/1.1 404 Not Found
 Content-Type: application/json
 Content-Length: 71
 
-{"error":"not_found","error_description":"The resource was not found."}
+{
+  "error": "not_found",
+  "error_description": "The resource was not found."
+}
 ```
 
 ```yaml
@@ -812,7 +833,10 @@ HTTP/1.1 403 Forbidden
 Content-Type: application/json
 Content-Length: 71
 
-{"error":"forbidden","error_description":"The request is not allowed."}
+{
+  "error": "forbidden",
+  "error_description": "The request is not allowed."
+}
 ```
 
 ```yaml
@@ -858,7 +882,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml
@@ -890,7 +917,10 @@ HTTP/1.1 401 Unauthorized
 Content-Type: application/json
 Content-Length: 78
 
-{"error":"invalid_session","error_description":"A valid session is required."}
+{
+  "error": "invalid_session",
+  "error_description": "A valid session is required."
+}
 ```
 
 ```yaml

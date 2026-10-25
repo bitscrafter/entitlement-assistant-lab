@@ -1,0 +1,41 @@
+{
+  "name": "entitlement-agent-system",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:migrate": "node application/entitlement-agent/src/database/migrate-command.ts",
+    "db:seed": "node application/entitlement-agent/src/database/seed-command.ts",
+    "check": "biome ci --error-on-warnings && tsc --noEmit && tsc --noEmit -p application/entitlement-agent/src/ui && depcruise . --config .dependency-cruiser.cjs && vitest run",
+    "dev": "npm run ui:build && wrangler dev",
+    "secrets:local": "node application/entitlement-agent/src/tools/create-local-secrets-command.ts",
+    "ui:build": "vite build --config application/entitlement-agent/vite.config.ts"
+  },
+  "dependencies": {
+    "canonicalize": "5.1.0",
+    "jose": "6.2.13",
+    "pg": "8.23.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "uuid": "14.0.3",
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.3",
+    "@types/node": "26.6.5",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "dependency-cruiser": "18.7.0",
+    "typescript": "6.0.3",
+    "vite": "8.3.5",
+    "vitest": "5.0.5",
+    "wrangler": "4.152.0"
+  }
+}

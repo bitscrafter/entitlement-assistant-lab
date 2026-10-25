@@ -10,6 +10,7 @@ entitlement-agent/
   tech-docs/
   typescript/
     system/
+      kernel/                    shared pure types and functions: Result, branded ids, the id codec (CM-14)
       port/                      shared ports: Clock, IdGenerator, UnitOfWork, LanguageModel, …
       adapter/                   shared adapters: wrap external libraries, or our own implementations, to satisfy ports
       external/                  third-party libraries
@@ -32,10 +33,11 @@ entitlement-agent/
 
 | Part | May import | Must not contain |
 | --- | --- | --- |
-| `model` | nothing outside its own `model/` | I/O, `fetch`, Cloudflare APIs, SQL, time (`Date.now()`), randomness |
+| `model` | its own `model/` and the shared `kernel/` | I/O, `fetch`, Cloudflare APIs, SQL, time (`Date.now()`), randomness |
 | `usecase` | its `model/`, shared `port/`, other subsystems' public use cases and ports | adapters, framework types, SQL |
 | `infra` | its `usecase/` and `model/`, shared `adapter/`, `external/` | business rules |
-| shared `adapter/` | shared `port/`, `external/` | business rules |
+| shared `kernel/` | nothing outside itself | I/O of any kind |
+| shared `adapter/` | shared `port/`, `kernel/`, `external/` | business rules |
 | `application` (bootstrap) | everything | logic beyond wiring and inbound translation |
 
 - **Subsystems meet only through public use cases and ports**: never another subsystem's model internals,
