@@ -12,6 +12,7 @@
     "db:seed": "node application/entitlement-assistant/src/database/seed-command.ts",
     "check": "biome ci --error-on-warnings && tsc --noEmit && tsc --noEmit -p application/entitlement-assistant/src/ui && depcruise . --config .dependency-cruiser.cjs && vitest run",
     "dev": "npm run ui:build && wrangler dev",
+    "seed:passwords": "node application/entitlement-assistant/src/tools/create-seed-passwords-command.ts",
     "secrets:local": "node application/entitlement-assistant/src/tools/create-local-secrets-command.ts",
     "ui:build": "vite build --config application/entitlement-assistant/vite.config.ts"
   },

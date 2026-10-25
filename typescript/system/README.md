@@ -16,11 +16,20 @@ npm run secrets:local                           # .dev.vars with fresh keys (nev
 npm run dev                                     # builds the UI, then wrangler dev on http://localhost:8787
 ```
 
-Demo employees (password `<name>-demo-password`): `alex@provider.example` (representative, level 1),
+Demo employees (password `<name>-demo-password` in a local database only; see Deploy): `alex@provider.example` (representative, level 1),
 `blair@provider.example` (level 2), `sam@provider.example` (supervisor), `drew@provider.example` (finance);
 `casey@` and `dana@` cannot sign in (suspended).
 
 ## Deploy
+
+The demo passwords are public, so a database that is not local is seeded only with generated passwords
+(`seed` refuses otherwise). As the database owner:
+
+```sh
+npm run seed:passwords        # .env.seed-passwords (git-ignored): email=password, e.g. alex-k7m2-x9qp-4hdr
+DATABASE_URL=<owner connection string> npm run db:migrate
+DATABASE_URL=<owner connection string> SEED_PASSWORDS_FILE=.env.seed-passwords npm run db:seed
+```
 
 Two guards depend on how Hyperdrive is created, so it is created exactly this way:
 

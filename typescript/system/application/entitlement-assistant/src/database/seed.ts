@@ -6,6 +6,7 @@ import { parseYaml } from "../../../../external/yaml.ts";
 import { z } from "../../../../external/zod.ts";
 import type { Uuid } from "../../../../kernel/identifier.ts";
 import { WebCryptoPasswordHasher } from "../../../../subsystem/internal-identity/src/infra/web-crypto-password-hasher.ts";
+import { isLocalDatabase, type SeedPasswords } from "./seed-passwords.ts";
 
 const SEED_DIRECTORY = fileURLToPath(new URL("../../resource/seed/", import.meta.url));
 const SEED_EPOCH_MILLISECONDS = Date.parse("2026-10-01T00:00:00Z");
@@ -107,16 +108,55 @@ async function readSeedFile<Schema extends z.ZodType>(
   return schema.parse(parseYaml(await readFile(`${SEED_DIRECTORY}${fileName}`, "utf8")));
 }
 
+/** The fixture employees a seed password is created for. */
+export async function readSeedEmployees(): Promise<
+  readonly { readonly email: string; readonly given_name: string }[]
+> {
+  return (await readSeedFile("fixtures.yaml", fixturesSchema)).employees;
+}
+
+/**
+ * Chooses the password each fixture employee is seeded with.
+ *
+ * @requires `passwords` is given unless the database is local, and then names every fixture employee.
+ * @ensures With `passwords`, each employee gets the password under its email; without, the fixture's demo password.
+ */
+function choosePasswords(
+  connectionString: string,
+  employees: readonly { readonly email: string; readonly password: string }[],
+  passwords: SeedPasswords | undefined,
+): (email: string) => string {
+  if (passwords === undefined) {
+    if (!isLocalDatabase(connectionString)) {
+      throw new Error(
+        "A database that is not local is seeded only with seed passwords (SEED_PASSWORDS_FILE).",
+      );
+    }
+    const demoPasswords = new Map(employees.map((employee) => [employee.email, employee.password]));
+    return (email) => demoPasswords.get(email) ?? "";
+  }
+  const missing = employees.filter((employee) => !passwords.has(employee.email));
+  if (missing.length > 0) {
+    throw new Error(
+      `Seed passwords are missing for ${missing.map((employee) => employee.email).join(", ")}.`,
+    );
+  }
+  return (email) => passwords.get(email) ?? "";
+}
+
 /**
  * Loads reference data and fixtures straight into the tables, in one transaction. Seeding bypasses the use
  * cases and writes no audit records (production-readiness, migration ordering).
  *
+ * @requires `passwords` is given unless the database is local, and then names every fixture employee.
  * @ensures Every alias in the fixtures maps to its `seededUuid`.
  * @ensures An account is `Suspended` exactly when it has an unreleased hold.
+ * @ensures Each employee's credential verifies its seed password when `passwords` is given, else the fixture's.
  */
-export async function seed(connectionString: string): Promise<SeedAliases> {
+export async function seed(connectionString: string, passwords?: SeedPasswords): Promise<SeedAliases> {
   const reference = await readSeedFile("reference-data.yaml", referenceDataSchema);
   const fixtures = await readSeedFile("fixtures.yaml", fixturesSchema);
+  const passwordOf = choosePasswords(connectionString, fixtures.employees, passwords);
   const hasher = new WebCryptoPasswordHasher();
   const aliases = new Map<string, Uuid>();
   const idOf = (name: string): Uuid => {
@@ -249,7 +289,7 @@ export async function seed(connectionString: string): Promise<SeedAliases> {
         [
           idOf(`crd_${employee.identity}`),
           idOf(employee.identity),
-          await hasher.hash(employee.password),
+          await hasher.hash(passwordOf(employee.email)),
           seededAt,
         ],
       );
