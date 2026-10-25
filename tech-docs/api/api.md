@@ -46,6 +46,8 @@ Request bodies     strictly validated: unknown fields, wrong types, and malforme
 Ids                kind prefix + 22 base64url characters; a well-formed id of the wrong kind is malformed
 Tracing            traceparent accepted; a trace id is created at the edge when absent (attribution §7)
 Caching            Cache-Control: no-store on every /api and /agents response
+Transport          HTTPS only: plain HTTP is redirected at the edge; Strict-Transport-Security on every response
+Examples           JSON is shown formatted; Content-Length is the length of the compact form sent
 ```
 
 ## 3. Errors and disclosure
@@ -136,7 +138,9 @@ Content-Type: application/json
 Content-Length: 28
 Cookie: __Host-session=<token>
 
-{"account_id":"acc_initech"}
+{
+  "account_id": "acc_initech"
+}
 ```
 
 ## 6. Change request endpoints
@@ -168,7 +172,10 @@ HTTP/1.1 202 Accepted
 Content-Type: application/json
 Content-Length: 72
 
-{"status":"AwaitingApproval","approval_id":"apr_AZK6v4c7Rt3s1Lm8nXp2Qw"}
+{
+  "status": "AwaitingApproval",
+  "approval_id": "apr_AZK6v4c7Rt3s1Lm8nXp2Qw"
+}
 ```
 
 ## 7. Approval endpoints

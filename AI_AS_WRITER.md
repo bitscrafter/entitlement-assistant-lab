@@ -32,7 +32,8 @@ Read with `AI_CONSTITUTION.md`.
    separate scenarios with a letter suffix (S04a, S04b, …). Either way, every case has its own complete
    request (or call) and its own complete expected response: never a template with placeholders or a
    shared YAML table of cases. Other structured data is block-style YAML. The spec's contents list every scenario
-   under §4, linked.
+   under §4, linked. JSON is always formatted, one field per line with indentation; `Content-Length` is
+   the length of the compact form actually sent.
 
 
 ## Documentation reviewer checklist
