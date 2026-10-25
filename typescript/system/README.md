@@ -51,8 +51,10 @@ Two guards depend on how Hyperdrive is created, so it is created exactly this wa
      --caching-disabled
    ```
 
-   Put the returned id in `wrangler.jsonc`, then set the secrets (`SESSION_SIGNING_KEY`, its id, the audit and
-   identifier hash keys) with `npx wrangler secret put`, and deploy with `npm run ui:build && npx wrangler deploy`.
+   Put the returned id in `wrangler.jsonc`. Put the secrets (`APPLICATION_ORIGIN`, `SESSION_SIGNING_KEY` and its
+   id, `AUDIT_HASH_KEY` and its id, `IDENTIFIER_HASH_KEY`) in a git-ignored `.env.production-secrets.json`, kept
+   in a password manager because the audit chain cannot be verified without its key, and deploy with
+   `npm run ui:build && npx wrangler deploy --secrets-file .env.production-secrets.json`.
 
 ## Checks
 

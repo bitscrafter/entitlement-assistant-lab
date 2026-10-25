@@ -8,12 +8,13 @@
   "assets": {
     "directory": "application/entitlement-assistant/ui-dist",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/agents/*"]
+    "binding": "ASSETS",
+    "run_worker_first": true
   },
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "00000000000000000000000000000000",
+      "id": "84702090e1e048eeb5970a7b2ab19fa0",
       "localConnectionString": "postgres://postgres:local-development-only@localhost:54329/entitlement_assistant"
     }
   ]

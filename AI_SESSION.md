@@ -1,6 +1,6 @@
 # AI Session — current state
 
-**Updated:** 2026-10-25 (end of session)
+**Updated:** 2026-10-25 (deploy session)
 
 ## State
 
@@ -12,23 +12,19 @@
   `tech-docs/features/employee-sign-in/workflow/`.
 - **Product renamed** Entitlement Assistant (`entitlement-assistant/`), merged to `main` @ 6ca41db (GREEN 91
   passed @ 9d8d2e7).
-- **Not deployed yet.** The owner is doing `wrangler login` (minimum scopes below) and has a Neon project with
-  database `entitlement_assistant`; its owner connection string is in `typescript/system/.env.neon`
-  (git-ignored; never shown in chat, because transcripts are published).
+- **Deployed** (2026-10-25) at `https://entitlement-assistant.jose-luis-rios.workers.dev` from `main`
+  (branch `feature/deploy`: generated seed passwords, HTTPS redirect). Neon migrated and seeded with generated passwords (`typescript/system/.env.seed-passwords`); login role
+  `entitlement_assistant_worker` (URL in `.env.neon`); Hyperdrive `84702090e1e048eeb5970a7b2ab19fa0`, caching
+  disabled; production secrets in `.env.production-secrets.json`. All three files are git-ignored, mode 600, and never
+  shown in chat. Smoke test passed: sign-in, session, identical refusals (demo password, unknown email, suspended),
+  foreign origin 403, `__Host-` cookie with HttpOnly, Secure, SameSite=Strict, CSP and HSTS headers.
 - **Feature explain-access:** its spec exists but predates what employee-sign-in established; it is updated
   just before it is built (owner rule: specs just in time).
 
 ## Next session
 
-1. Owner renames the parent folder `clooudflare` → `cloudflare` between sessions and copies the memory folder to
-   the new Claude Code project path (steps in the last message of this session); the next session starts from
-   `cloudflare/`. The export script takes both transcript folders (`--transcripts-dir` twice).
-2. Deploy (README, Deploy): check `npx wrangler whoami` and `npx wrangler hyperdrive list` (a permission error
-   means one more scope); migrate and seed Neon from `.env.neon`; create the login role
-   `entitlement_assistant_worker` IN ROLE `entitlement_assistant_app` with a generated password stored in
-   `.env.neon`; `wrangler hyperdrive create … --caching-disabled`; put its id in `wrangler.jsonc`; set secrets with
-   fresh production keys; build the UI; deploy; check HTTPS on `workers.dev`; smoke-test the live URL.
-3. Update the explain-access spec, owner approval, build.
+1. Owner: keep the production secrets in a password manager.
+2. Update the explain-access spec, owner approval, build.
 
 ## Decisions (owner, 2026-10-22)
 
@@ -54,8 +50,13 @@
 - Product name: Entitlement Assistant. Neon for PostgreSQL. Wrangler with minimum OAuth scopes:
   `account:read user:read workers:write workers_scripts:write workers_tail:read`.
 - Prompt history and the GitHub remote come at the end; transcripts published redacted under `tech-docs/`.
+- A database that is not local is seeded with generated, easy-to-type passwords (`alex-k7m2-x9qp-4hdr`), never the
+  published demo passwords (option A). `neonctl` installed globally.
+- Plain HTTP is redirected (308) to the configured HTTPS origin by the Worker, which runs first for every request;
+  owner tried the live deployment and approved merging `feature/deploy`.
 
 ## Open
 
 - Feature-spec decisions are approved with each spec.
-- Whether `workers:write` covers Hyperdrive (checked at deploy).
+- `AI_WORKFLOW.md` §3 runs `depcruise src`, but the package has no `src` at its root, so that step checks nothing;
+  `depcruise .` (as in `npm run check`) is the working command. Not yet fixed.

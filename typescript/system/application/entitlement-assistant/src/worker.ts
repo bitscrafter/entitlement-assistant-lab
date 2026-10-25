@@ -5,10 +5,12 @@ import { PostgresConnection } from "../../../adapter/postgres/postgres-connectio
 import { ConsoleSecurityEventLog } from "../../../adapter/security-event-log/console-security-event-log.ts";
 import { importHashKey } from "../../../subsystem/attribution/src/infra/audit-record-hash.ts";
 import { type Application, createApplication } from "./application.ts";
+import { httpsRedirect, servedByApplication } from "./http/request-guard.ts";
 import { errorResponse } from "./http/responses.ts";
 
 /** Bindings and secrets declared in wrangler.jsonc and set with `wrangler secret put` (or .dev.vars locally). */
 interface Environment {
+  readonly ASSETS: { readonly fetch: (request: Request) => Promise<Response> };
   readonly HYPERDRIVE: { readonly connectionString: string };
   readonly APPLICATION_ORIGIN: string;
   readonly SESSION_SIGNING_KEY: string;
@@ -50,7 +52,11 @@ async function build(environment: Environment): Promise<Application> {
 }
 
 export default {
+  /** Every request reaches the Worker first (`run_worker_first`), so plain HTTP is redirected before any page is served. */
   async fetch(request: Request, environment: Environment): Promise<Response> {
+    const redirect = httpsRedirect(request, environment.APPLICATION_ORIGIN);
+    if (redirect !== undefined) return redirect;
+    if (!servedByApplication(new URL(request.url).pathname)) return environment.ASSETS.fetch(request);
     application ??= build(environment);
     try {
       return await (await application).fetch(request);
