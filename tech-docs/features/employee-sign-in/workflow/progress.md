@@ -3,7 +3,7 @@
 | | |
 | :--- | :--- |
 | **Purpose** | The phase table of employee-sign-in: role, status, outcome. |
-| **Status** | Adversarial review accepted; GREEN gate pending a commit |
+| **Status** | Done: merged to main |
 | **References** | • Plan: [`architect-plan.md`](architect-plan.md)<br>• Spec: [`../employee-sign-in.verification-spec.md`](../employee-sign-in.verification-spec.md) |
 
 | Phase | Role | Status | Outcome |
@@ -19,5 +19,5 @@
 | Worker smoke test | tester | ✅ | `wrangler dev` with local Hyperdrive: sign-in, session, refusals, audit chain |
 | P6 UI | coder | ✅ | sign-in and signed-in pages; CSP and security headers on static assets |
 | Checks | assistant | ✅ | Biome, TypeScript (server and UI), dependency-cruiser, 91 tests |
-| GREEN gate | assistant | ⬜ | needs a committed, clean tree |
+| GREEN gate | assistant | ✅ | clean tree; Biome, TypeScript, dependency-cruiser clean; 91 passed, 0 failed @ 76474ed |
 | Adversarial review | review agent | ✅ | round 1: 2 major, 6 minor, all fixed; round 2: ACCEPT, 2 minor, both fixed (discoveries 9–18) |

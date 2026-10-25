@@ -10,7 +10,7 @@
   `tech-docs/features/explain-access/`.
 - Data model designed per subsystem under `tech-docs/data-model/`; Customer Identity, Internal Identity, Access, Product, Entitlement, Support, Account, Attribution, Policy, Authorization ruled: data model complete. Proposal and first feature specs aligned; two reviews applied 2026-10-25 (the second as D1–D26). API ruled (`tech-docs/api/api.md`). Next: case-lifecycle and change-subscription specs. Decisions in `tech-docs/adr/`.
 - Design order (owner): data model per subsystem → policy model → APIs → scenarios (sign-in first).
-- No code yet (owner: not ready to code). Git initialized, no commits.
+- Code in `typescript/system/`; feature employee-sign-in merged to `main` (GREEN 91 passed @ 76474ed). Not yet deployed.
 
 ## Decisions (owner, 2026-10-22)
 

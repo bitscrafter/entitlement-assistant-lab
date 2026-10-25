@@ -2,11 +2,11 @@
 
 ## To Do
 
-1. Owner approves the employee-sign-in and explain-access feature specs (with their decisions).
+1. Deploy: owner runs `wrangler login` and creates the Neon project; then Hyperdrive (caching disabled, login role), secrets, deploy (README, Deploy).
 2. API document ruled (2026-10-25). Owner (2026-10-25): implement employee-sign-in now; later feature specs are written just before each feature is implemented.
 3. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
 4. At the end: GitHub remote (owner, 2026-10-25).
-5. Features employee-sign-in, then explain-access: architect plan → verification tests (RED) → phases → GREEN → adversarial review → deploy.
+5. Feature explain-access: update its spec to what employee-sign-in established, owner approval, then build (demo mode).
 
 ## Completed
 
@@ -30,3 +30,4 @@
 - Thorough review (three reviewers) applied (2026-10-25): subscription terms (EN-9, EN-10, PR-9), layer order and soft references (CM-15), identity-only session token (CM-16), contact authentication (SU-10), lifecycle use cases (SU-9), approval re-check and inbox (SU-11, SU-12), stale requests (SU-13), account.read gate (AU-4), PDP/PIP placement (AU-5), remedies (PR-10), reason-code register, prerequisites, plus wording and consistency fixes.
 - Second review applied (2026-10-25, D1–D26 and section B): disclosure rule (AU-6), assignee rule (SU-14), apply re-check against the confirmer's decision (SU-15, supersedes SU-11), shared ports (CM-17); new policies (trial and courtesy coverage, cancellation approval, grant quota), canonical audit records with soft account references, action registry and `case.reassign`, sign-in in Account, id-prefix register; diagrams, data models, production readiness, proposal, both feature specs, and the tester and architect guides updated.
 - CM-5 accepted (2026-10-25). API document drafted: endpoints, agent frames, tools, use cases by subsystem, one error model with AU-6 disclosure.
+- Feature employee-sign-in (2026-10-25): S01–S03, S04a–S04f green; adversarial review accepted in round 2; GREEN 91 passed @ 76474ed; merged to main.
