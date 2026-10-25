@@ -13,8 +13,8 @@ import type {
   TokenRejection,
 } from "../../port/session-token.ts";
 
-const ISSUER = "entitlement-agent";
-const AUDIENCE = "entitlement-agent";
+const ISSUER = "entitlement-assistant";
+const AUDIENCE = "entitlement-assistant";
 const ALGORITHM = "ES256";
 
 const seconds = (instant: Date) => Math.floor(instant.getTime() / 1000);

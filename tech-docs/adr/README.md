@@ -4,7 +4,7 @@
 | :--- | :--- |
 | **Purpose** | Why the system is the way it is. One file per subsystem, plus `common.md` for decisions that touch more than one subsystem. Ids carry their file's prefix and never change. |
 | **Status** | Living index: every record, its status, and its date |
-| **References** | • Proposal: [`../entitlement-agent-proposal.md`](../entitlement-agent-proposal.md)<br>• Data model: [`../data-model/README.md`](../data-model/README.md) |
+| **References** | • Proposal: [`../entitlement-assistant-proposal.md`](../entitlement-assistant-proposal.md)<br>• Data model: [`../data-model/README.md`](../data-model/README.md) |
 
 | Prefix | File |
 | --- | --- |

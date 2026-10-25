@@ -3,11 +3,11 @@
 | | |
 | :--- | :--- |
 | **Purpose** | States what the feature must do: an employee signs in, the session acts as their internal account, invalid tokens and invalid principals are rejected, and sessions renew up to an absolute lifetime. Each scenario becomes exactly one verification test (`AI_AS_TESTER.md`). |
-| **Status** | Approved by the owner (2026-10-25) |
+| **Status** | Approved by the owner (2026-10-25); amended by the owner the same day: the product is renamed Entitlement Assistant, so the token issuer and audience are `entitlement-assistant` |
 | **Feature** | employee-sign-in · scenarios S01–S03, S04a–S04f |
 | **Mode** | feature, no customer data |
 | **Depends on** | — (the first feature) |
-| **References** | • Proposal: [`../../entitlement-agent-proposal.md`](../../entitlement-agent-proposal.md) §7<br>• Sessions: CM-3, CM-16, AN-5 in [`../../adr/`](../../adr/README.md); disclosure: AU-6<br>• Internal identities and accounts: [`../../data-model/internal-identity.md`](../../data-model/internal-identity.md), [`../../data-model/account.md`](../../data-model/account.md) §4<br>• Audit and reason codes: [`../../data-model/attribution.md`](../../data-model/attribution.md) §4a<br>• Sequence: [`../../diagrams/sign-in.sequence.puml`](../../diagrams/sign-in.sequence.puml) |
+| **References** | • Proposal: [`../../entitlement-assistant-proposal.md`](../../entitlement-assistant-proposal.md) §7<br>• Sessions: CM-3, CM-16, AN-5 in [`../../adr/`](../../adr/README.md); disclosure: AU-6<br>• Internal identities and accounts: [`../../data-model/internal-identity.md`](../../data-model/internal-identity.md), [`../../data-model/account.md`](../../data-model/account.md) §4<br>• Audit and reason codes: [`../../data-model/attribution.md`](../../data-model/attribution.md) §4a<br>• Sequence: [`../../diagrams/sign-in.sequence.puml`](../../diagrams/sign-in.sequence.puml) |
 
 ## Contents
 
@@ -34,12 +34,12 @@ Approving this spec also approves these values:
 
 | # | Decision | Reason |
 | --- | --- | --- |
-| D1 | **Session token:** JWT, ES256, issuer and audience `entitlement-agent`. Claims `sub` (the internal account), `sid`, `auth_time`, `iat`, `exp`, `jti`; no roles (CM-16). Lifetime 30 minutes. | Stateless sessions; the principal is loaded fresh per request. |
+| D1 | **Session token:** JWT, ES256, issuer and audience `entitlement-assistant`. Claims `sub` (the internal account), `sid`, `auth_time`, `iat`, `exp`, `jti`; no roles (CM-16). Lifetime 30 minutes. | Stateless sessions; the principal is loaded fresh per request. |
 | D2 | **Renewal:** `POST /api/authentication/session/renewal`. Before half the token's lifetime it does nothing. Past half-life it re-checks the principal and re-issues the token with the same `sid` and `auth_time`, a new `jti`, and `exp` = min(`iat` + 30 min, `auth_time` + 8 h). When the token already ends at `auth_time` + 8 h, renewal is refused. | A short-lived token kept alive by activity, never beyond the absolute lifetime. |
 | D3 | **Every sign-in failure looks the same to the caller:** wrong password, unknown email, empty password, inactive identity, suspended account. Only the audit record, which the caller never sees, tells them apart. | No account enumeration before authentication (AU-6). |
 | D4 | **A valid token is not enough:** every request re-loads the principal; an inactive identity or a suspended account gets `401`, like an invalid token. | The principal is loaded fresh (CM-16). |
 | D5 | **The fixed instant of every test is `2026-10-22T15:00:00Z`** unless a scenario says otherwise. | Token times must not depend on when the tests run. |
-| D6 | **Fixture ids are readable aliases** (`emp_alex`, `iac_alex`) for seeded UUIDv7 values (CM-14). The host is `app.entitlement-agent.example`. A `Content-Length` is computed with the aliases as written; with real ids, each alias is 18 bytes longer. | Readable scenarios. |
+| D6 | **Fixture ids are readable aliases** (`emp_alex`, `iac_alex`) for seeded UUIDv7 values (CM-14). The host is `app.entitlement-assistant.example`. A `Content-Length` is computed with the aliases as written; with real ids, each alias is 18 bytes longer. | Readable scenarios. |
 | D7 | **The session cookie is `__Host-session`, `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`, no `Domain`, `Max-Age` equal to the token's remaining lifetime.** Every response carries `Strict-Transport-Security: max-age=31536000; includeSubDomains`; plain HTTP is redirected to HTTPS at Cloudflare's edge (zone setting) before the Worker runs. | Scripts cannot read the token; it never travels over HTTP or to another site or host. |
 
 ## 2. Fixture
@@ -147,8 +147,8 @@ The instant is 2026-10-22T15:00:00Z.
 
 ```http
 POST /api/authentication/sign-in HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Content-Type: application/json
 Content-Length: 65
 
@@ -179,8 +179,8 @@ token:
   header:
     alg: ES256
   claims:
-    iss: entitlement-agent
-    aud: entitlement-agent
+    iss: entitlement-assistant
+    aud: entitlement-assistant
     sub: iac_alex
     sid: present
     iat: "2026-10-22T15:00:00Z"
@@ -199,7 +199,7 @@ audit_records:                            # exactly one
 
 ```http
 GET /api/authentication/session HTTP/1.1
-Host: app.entitlement-agent.example
+Host: app.entitlement-assistant.example
 Cookie: __Host-session=<token>
 ```
 
@@ -240,8 +240,8 @@ When:
 
 ```http
 POST /api/authentication/sign-in HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Content-Type: application/json
 Content-Length: 61
 
@@ -284,8 +284,8 @@ When:
 
 ```http
 POST /api/authentication/sign-in HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Content-Type: application/json
 Content-Length: 67
 
@@ -328,8 +328,8 @@ When:
 
 ```http
 POST /api/authentication/sign-in HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Content-Type: application/json
 Content-Length: 47
 
@@ -376,8 +376,8 @@ When:
 
 ```http
 POST /api/authentication/sign-in HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Content-Type: application/json
 Content-Length: 67
 
@@ -421,8 +421,8 @@ When:
 
 ```http
 POST /api/authentication/sign-in HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Content-Type: application/json
 Content-Length: 65
 
@@ -479,7 +479,7 @@ When:
 
 ```http
 GET /api/authentication/session HTTP/1.1
-Host: app.entitlement-agent.example
+Host: app.entitlement-assistant.example
 ```
 
 Then:
@@ -507,7 +507,7 @@ When:
 
 ```http
 GET /api/authentication/session HTTP/1.1
-Host: app.entitlement-agent.example
+Host: app.entitlement-assistant.example
 Cookie: __Host-session=<T with exp 14:59:59, validly signed>
 ```
 
@@ -536,7 +536,7 @@ When:
 
 ```http
 GET /api/authentication/session HTTP/1.1
-Host: app.entitlement-agent.example
+Host: app.entitlement-assistant.example
 Cookie: __Host-session=<T with sub changed to iac_blair, original signature>
 ```
 
@@ -565,7 +565,7 @@ When:
 
 ```http
 GET /api/authentication/session HTTP/1.1
-Host: app.entitlement-agent.example
+Host: app.entitlement-assistant.example
 Cookie: __Host-session=<T with header alg none and no signature>
 ```
 
@@ -594,7 +594,7 @@ When:
 
 ```http
 GET /api/authentication/session HTTP/1.1
-Host: app.entitlement-agent.example
+Host: app.entitlement-assistant.example
 Cookie: __Host-session=<T signed with a key the server does not hold>
 ```
 
@@ -623,7 +623,7 @@ When:
 
 ```http
 GET /api/authentication/session HTTP/1.1
-Host: app.entitlement-agent.example
+Host: app.entitlement-assistant.example
 Cookie: __Host-session=<T with iss someone-else, signed by the server key>
 ```
 
@@ -652,7 +652,7 @@ When:
 
 ```http
 GET /api/authentication/session HTTP/1.1
-Host: app.entitlement-agent.example
+Host: app.entitlement-assistant.example
 Cookie: __Host-session=<T with aud someone-else, signed by the server key>
 ```
 
@@ -681,7 +681,7 @@ When:
 
 ```http
 GET /api/authentication/session HTTP/1.1
-Host: app.entitlement-agent.example
+Host: app.entitlement-assistant.example
 Cookie: __Host-session=<D: a valid token; the principal re-load finds iac_dana suspended>
 ```
 
@@ -723,8 +723,8 @@ The instant is 15:00:00.
 
 ```http
 POST /api/authentication/session/renewal HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Cookie: __Host-session=<the token>
 Content-Length: 0
 ```
@@ -759,8 +759,8 @@ The instant is 15:00:00.
 
 ```http
 POST /api/authentication/session/renewal HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Cookie: __Host-session=<the token>
 Content-Length: 0
 ```
@@ -815,8 +815,8 @@ The instant is 15:40:00.
 
 ```http
 POST /api/authentication/session/renewal HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Cookie: __Host-session=<the token>
 Content-Length: 0
 ```
@@ -872,8 +872,8 @@ The instant is 15:55:00.
 
 ```http
 POST /api/authentication/session/renewal HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Cookie: __Host-session=<the token>
 Content-Length: 0
 ```
@@ -906,7 +906,7 @@ audit_records:                            # exactly one
 
 ```http
 GET /api/authentication/session HTTP/1.1
-Host: app.entitlement-agent.example
+Host: app.entitlement-assistant.example
 Cookie: __Host-session=<the token>
 ```
 
@@ -950,8 +950,8 @@ The instant is 16:00:01.
 
 ```http
 POST /api/authentication/session/renewal HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Cookie: __Host-session=<the token>
 Content-Length: 0
 ```
@@ -994,8 +994,8 @@ The instant is 15:00:00.
 
 ```http
 POST /api/authentication/session/renewal HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Cookie: __Host-session=<the token>
 Content-Length: 0
 ```

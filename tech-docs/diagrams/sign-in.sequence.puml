@@ -86,7 +86,7 @@ else valid
   usecase -> usecase : account = the identity's only internal account (iac_alex);\na declared account must belong to the identity
   usecase -> issuer : issue(sub iac_alex, sid new, auth_time now)
   activate issuer
-  issuer -> issuer : SignJWT ES256 (private key from the Worker secret)\niss, aud = entitlement-agent; iat, exp = iat + 30 min, jti\nno roles: the principal is loaded fresh per decision
+  issuer -> issuer : SignJWT ES256 (private key from the Worker secret)\niss, aud = entitlement-assistant; iat, exp = iat + 30 min, jti\nno roles: the principal is loaded fresh per decision
   issuer --> usecase : session token
   deactivate issuer
   usecase -> audit : record(action_key session.sign-in, actor iac_alex,\naudit_outcome Succeeded, session_id = sid)

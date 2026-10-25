@@ -4,7 +4,7 @@
 | :--- | :--- |
 | **Purpose** | Every way into the system: the HTTP endpoints the browser calls, the case agent's WebSocket and its frames, the tools the language model may call, and the use cases behind all three. One error format and one disclosure rule apply to all of them. |
 | **Status** | Ruled by the owner (2026-10-25) |
-| **References** | • Use cases and their decisions: [`../adr/`](../adr/README.md) (AU-1, AU-4, AU-6, SU-9, SU-12, SU-14, SU-15, CM-5, CM-16, CM-17)<br>• Data model: [`../data-model/README.md`](../data-model/README.md)<br>• Feature specs: [`../features/`](../features/)<br>• Proposal: [`../entitlement-agent-proposal.md`](../entitlement-agent-proposal.md) §2, §6, §9 |
+| **References** | • Use cases and their decisions: [`../adr/`](../adr/README.md) (AU-1, AU-4, AU-6, SU-9, SU-12, SU-14, SU-15, CM-5, CM-16, CM-17)<br>• Data model: [`../data-model/README.md`](../data-model/README.md)<br>• Feature specs: [`../features/`](../features/)<br>• Proposal: [`../entitlement-assistant-proposal.md`](../entitlement-assistant-proposal.md) §2, §6, §9 |
 
 ## Contents
 
@@ -38,7 +38,7 @@
 ## 2. Conventions
 
 ```text
-Base URL           https://app.entitlement-agent.example
+Base URL           https://app.entitlement-assistant.example
 Media type         application/json; charset=utf-8 (requests and responses); no body on 204
 Authentication     __Host-session cookie (feature employee-sign-in); no Authorization header
 Origin             required on every non-GET request; must equal the base URL
@@ -101,8 +101,8 @@ Specified in [`../features/employee-sign-in/`](../features/employee-sign-in/empl
 
 ```http
 POST /api/authentication/sign-out HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Cookie: __Host-session=<token>
 Content-Length: 0
 ```
@@ -133,8 +133,8 @@ subject is set once, so a second `PUT` answers `409` with `subject_already_set`.
 
 ```http
 PUT /api/cases/cse_AZK6v3Wr7kq9Yg3hQm2xTA/subject HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Content-Type: application/json
 Content-Length: 28
 Cookie: __Host-session=<token>
@@ -159,8 +159,8 @@ A repeated confirmation returns the first response (A6). A stale request answers
 
 ```http
 POST /api/cases/cse_AZK6v3Wr7kq9Yg3hQm2xTA/change-requests/chg_AZK6v4b1Qx2r8Kp0sWm9Lg/confirmation HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Content-Type: application/json
 Content-Length: 2
 Cookie: __Host-session=<token>

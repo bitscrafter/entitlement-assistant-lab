@@ -4,7 +4,7 @@
 | :--- | :--- |
 | **Purpose** | The model of the system of record (PostgreSQL), designed one subsystem at a time. The case conversation is not part of it: it lives in each case agent's own SQLite storage. |
 | **Status** | Every subsystem ruled by the owner (2026-10-25) |
-| **References** | • Decisions: [`../adr/README.md`](../adr/README.md)<br>• Diagrams: [`../diagrams/`](../diagrams/)<br>• Proposal and glossary: [`../entitlement-agent-proposal.md`](../entitlement-agent-proposal.md) |
+| **References** | • Decisions: [`../adr/README.md`](../adr/README.md)<br>• Diagrams: [`../diagrams/`](../diagrams/)<br>• Proposal and glossary: [`../entitlement-assistant-proposal.md`](../entitlement-assistant-proposal.md) |
 
 ## Subsystems
 

@@ -9,7 +9,7 @@ import { importHashKey } from "../../../../subsystem/attribution/src/infra/audit
 import { type Application, createApplication } from "../../src/application.ts";
 import { seededUuid } from "../../src/database/seed.ts";
 
-export const HOST = "app.entitlement-agent.example";
+export const HOST = "app.entitlement-assistant.example";
 export const ORIGIN = `https://${HOST}`;
 export const AUDIT_KEY = "dGVzdC1hdWRpdC1oYXNoLWtleS1vZi0zMi1ieXRlcy1sb25nIQ";
 export const IDENTIFIER_KEY = "dGVzdC1pZGVudGlmaWVyLWhhc2gta2V5LTMyLWJ5dGVzLWxvbmch";
@@ -86,8 +86,8 @@ export async function mintToken(key: CryptoKey, claims: TokenClaims): Promise<st
     auth_time: seconds(claims.authTime),
   })
     .setProtectedHeader({ alg: "ES256", kid: "session-key-1" })
-    .setIssuer(claims.iss ?? "entitlement-agent")
-    .setAudience(claims.aud ?? "entitlement-agent")
+    .setIssuer(claims.iss ?? "entitlement-assistant")
+    .setAudience(claims.aud ?? "entitlement-assistant")
     .setSubject(claims.sub ?? external("iac_alex"))
     .setIssuedAt(seconds(claims.iat))
     .setExpirationTime(seconds(claims.exp))

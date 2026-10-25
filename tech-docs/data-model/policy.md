@@ -37,7 +37,7 @@
 
 ## 2. A policy
 
-Authored in YAML (block style) under `application/entitlement-agent/resource/policies/`:
+Authored in YAML (block style) under `application/entitlement-assistant/resource/policies/`:
 
 ```yaml
 policy_key: grants-up-to-14-days
@@ -121,7 +121,7 @@ Attribute meanings that matter for safety:
 ## 7. Testing
 
 Policy cases are **data, kept apart from test code**: one
-`typescript/system/application/entitlement-agent/tests/functional/policy/cases/<policy_key>.cases.yaml` per policy, each case in
+`typescript/system/application/entitlement-assistant/tests/functional/policy/cases/<policy_key>.cases.yaml` per policy, each case in
 Given/When/Then form with `then: true` (satisfied, or not applicable) or `then: false` (unmet). One suite
 runs every case against the real set and evaluator. Every policy has a case file, and a verification test
 fails when one is missing. The policy subsystem keeps its own unit tests on synthetic policies (PO-6).

@@ -1,4 +1,4 @@
-# Entitlement Agent — AI collaboration entry point
+# Entitlement Assistant — AI collaboration entry point
 
 A chat assistant for Customer Service Representatives (CSRs) that explains and changes customer
 entitlements, built on Cloudflare (Workers, Agents SDK, Workflows, Workers AI) with PostgreSQL.
@@ -24,7 +24,7 @@ entitlements, built on Cloudflare (Workers, Agents SDK, Workflows, Workers AI) w
 1. A feature of work follows [`AI_WORKFLOW.md`](AI_WORKFLOW.md).
 
 The product vocabulary is the glossary in
-[`tech-docs/entitlement-agent-proposal.md`](tech-docs/entitlement-agent-proposal.md) §4.
+[`tech-docs/entitlement-assistant-proposal.md`](tech-docs/entitlement-assistant-proposal.md) §4.
 
 ## Hard rules
 

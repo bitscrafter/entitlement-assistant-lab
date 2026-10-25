@@ -4,7 +4,7 @@
 
 ## State
 
-- Proposal drafted and ruled: `tech-docs/entitlement-agent-proposal.md` (§9 records the product rulings).
+- Proposal drafted and ruled: `tech-docs/entitlement-assistant-proposal.md` (§9 records the product rulings).
 - Constitution written: `CLAUDE.md`, `AI_CONSTITUTION.md`, `AI_WORKFLOW.md`, `AI_AS_*.md`.
 - Feature specs drafted, awaiting owner approval: `tech-docs/features/employee-sign-in/` and
   `tech-docs/features/explain-access/`.

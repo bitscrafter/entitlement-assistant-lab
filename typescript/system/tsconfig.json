@@ -22,8 +22,8 @@
   "include": ["kernel", "port", "adapter", "external", "subsystem", "application", "vitest.config.ts"],
   "exclude": [
     "node_modules",
-    "application/entitlement-agent/ui-dist",
-    "application/entitlement-agent/src/ui",
-    "application/entitlement-agent/vite.config.ts"
+    "application/entitlement-assistant/ui-dist",
+    "application/entitlement-assistant/src/ui",
+    "application/entitlement-assistant/vite.config.ts"
   ]
 }

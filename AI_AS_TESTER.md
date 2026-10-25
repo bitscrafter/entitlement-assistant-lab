@@ -5,7 +5,7 @@ verification tests, before the code exists.
 
 ## 1. Verification tests
 
-1. **One scenario, one test**, in `typescript/system/application/entitlement-agent/tests/verification/<feature>/`, named
+1. **One scenario, one test**, in `typescript/system/application/entitlement-assistant/tests/verification/<feature>/`, named
    `scenario NN <contract verb> <what>`, where the verb is `ensures`, `requires`, or `invariant`:
    `test("scenario 03 requires a valid session token before the agent is reached", …)`.
    A scenario with cases (Case A, Case B, …) uses `test.each`, one row per case; the case letter and name

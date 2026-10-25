@@ -32,7 +32,7 @@ export async function migrate(connectionString: string): Promise<readonly string
     const owners = [
       {
         owner: "application",
-        directory: `${SYSTEM_ROOT}application/entitlement-agent/src/database/migrations/`,
+        directory: `${SYSTEM_ROOT}application/entitlement-assistant/src/database/migrations/`,
       },
       ...SUBSYSTEMS_IN_LAYER_ORDER.map((subsystem) => ({
         owner: subsystem,

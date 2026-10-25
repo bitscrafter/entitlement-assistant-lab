@@ -95,5 +95,5 @@ CREATE TABLE internal_permission_assignment (
 );
 
 GRANT SELECT ON resource_operation, permission, role, role_permission, birthright_role_assignment
-  TO entitlement_agent_app;
-GRANT SELECT, INSERT, UPDATE ON internal_role_assignment, internal_permission_assignment TO entitlement_agent_app;
+  TO entitlement_assistant_app;
+GRANT SELECT, INSERT, UPDATE ON internal_role_assignment, internal_permission_assignment TO entitlement_assistant_app;

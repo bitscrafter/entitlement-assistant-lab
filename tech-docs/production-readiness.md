@@ -4,7 +4,7 @@
 | :--- | :--- |
 | **Purpose** | What a production version would have to address. Each entry states the **concern** and **why it matters**, not a solution: the right solution depends on requirements this project does not have. Grouped by subsystem, plus a cross-cutting section. |
 | **Status** | Living list, extended with each subsystem and each review |
-| **References** | • Proposal: [`entitlement-agent-proposal.md`](entitlement-agent-proposal.md)<br>• Data model: [`data-model/README.md`](data-model/README.md) |
+| **References** | • Proposal: [`entitlement-assistant-proposal.md`](entitlement-assistant-proposal.md)<br>• Data model: [`data-model/README.md`](data-model/README.md) |
 
 ## Contents
 
