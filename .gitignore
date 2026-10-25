@@ -9,3 +9,6 @@ coverage/
 
 # Transcripts are published at the end, redacted, under tech-docs/ (owner, 2026-10-25)
 prompt-history/
+
+# Local connection strings and passwords; never committed
+.env.*

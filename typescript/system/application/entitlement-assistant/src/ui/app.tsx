@@ -71,7 +71,7 @@ function SignInForm({ onSignedIn }: { readonly onSignedIn: () => Promise<void> }
   return (
     <main className="page">
       <form className="card" onSubmit={submit}>
-        <h1>Entitlement Agent</h1>
+        <h1>Entitlement Assistant</h1>
         <p className="hint">Sign in with your employee account.</p>
         <label>
           Email

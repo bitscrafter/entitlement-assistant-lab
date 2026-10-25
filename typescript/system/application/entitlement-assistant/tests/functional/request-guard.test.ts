@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { originAllowed } from "../../src/http/request-guard.ts";
 
-const ORIGIN = "https://app.entitlement-agent.example";
+const ORIGIN = "https://app.entitlement-assistant.example";
 const request = (method: string, origin?: string) =>
   new Request(`${ORIGIN}/api/x`, { method, headers: origin === undefined ? {} : { Origin: origin } });
 
@@ -20,8 +20,8 @@ describe("originAllowed", () => {
   test.each([
     ["no origin", undefined],
     ["another site", "https://attacker.example"],
-    ["a subdomain", "https://evil.app.entitlement-agent.example"],
-    ["plain HTTP", "http://app.entitlement-agent.example"],
+    ["a subdomain", "https://evil.app.entitlement-assistant.example"],
+    ["plain HTTP", "http://app.entitlement-assistant.example"],
     ["a null origin", "null"],
   ])("ensures a POST from %s is refused", (_name, origin) => {
     expect(originAllowed(request("POST", origin), ORIGIN)).toBe(false);

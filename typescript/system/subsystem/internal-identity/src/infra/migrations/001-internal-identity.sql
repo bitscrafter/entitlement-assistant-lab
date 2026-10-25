@@ -52,6 +52,6 @@ CREATE TABLE employee_credential (
 CREATE UNIQUE INDEX employee_credential_one_current_per_kind
   ON employee_credential (employee_id, credential_kind) WHERE replaced_at IS NULL;
 
-GRANT SELECT ON department, job_function TO entitlement_agent_app;
+GRANT SELECT ON department, job_function TO entitlement_assistant_app;
 GRANT SELECT, INSERT, UPDATE ON internal_identity, employee, system_identity, employee_credential
-  TO entitlement_agent_app;
+  TO entitlement_assistant_app;

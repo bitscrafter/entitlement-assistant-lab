@@ -1,4 +1,4 @@
-# Entitlement Agent — Product Proposal
+# Entitlement Assistant — Product Proposal
 
 |  |  |
 | :--- | :--- |
@@ -22,7 +22,7 @@
 
 ## 1. Purpose
 
-The Entitlement Agent is a chat assistant for a **Customer Service Representative (CSR)** of a SaaS
+The Entitlement Assistant is a chat assistant for a **Customer Service Representative (CSR)** of a SaaS
 provider. The CSR handles customer cases. The assistant answers questions and makes changes on the
 CSR's behalf across five related domains: **authentication, authorization, entitlements, policy, and
 subscriptions**.
@@ -326,6 +326,7 @@ The architectural decisions are ADRs in [`adr/`](adr/README.md). Product-level r
 | Decision | Ruling |
 | --- | --- |
 | Naming (2026-10-22) | The human is the **CSR**; the AI is the **assistant**. |
+| Product name (2026-10-25) | **Entitlement Assistant** (`entitlement-assistant`): "agent" read as the human support agent; the AI is the assistant. |
 | Scope (2026-10-22) | Build in features; sign-in and explain access first. |
 | Process (2026-10-22) | A slimmed-down version of the working constitution. |
 | Tools (2026-10-25) | Tool calling in the demo; MCP in production (see below). |

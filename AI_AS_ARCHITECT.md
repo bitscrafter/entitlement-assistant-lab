@@ -6,7 +6,7 @@ on the owner's behalf, but must always advise.
 ## 1. Architecture: subsystems as modules, each hexagonal inside
 
 ```text
-entitlement-agent/
+entitlement-assistant/
   tech-docs/
   typescript/
     system/
@@ -23,7 +23,7 @@ entitlement-agent/
             infra/               this subsystem's adapters (its PostgreSQL repositories, its migrations)
           tests/                 unit and functional
       application/
-        entitlement-agent/
+        entitlement-assistant/
           src/                   bootstrap (the composition root), Worker entry, case agent, tools, HTTP endpoints, UI
           resource/              non-code assets: policies/, seed/
           tests/                 end-to-end, and the feature verification tests

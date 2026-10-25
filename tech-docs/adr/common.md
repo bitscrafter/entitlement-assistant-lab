@@ -3,7 +3,7 @@
 |  |  |
 | :--- | :--- |
 | **Purpose** | Decisions that touch more than one subsystem. |
-| **References** | • Architecture: [`../../AI_AS_ARCHITECT.md`](../../AI_AS_ARCHITECT.md)<br>• Proposal: [`../entitlement-agent-proposal.md`](../entitlement-agent-proposal.md)<br>• Index and template: [`README.md`](README.md) |
+| **References** | • Architecture: [`../../AI_AS_ARCHITECT.md`](../../AI_AS_ARCHITECT.md)<br>• Proposal: [`../entitlement-assistant-proposal.md`](../entitlement-assistant-proposal.md)<br>• Index and template: [`README.md`](README.md) |
 
 ---
 
@@ -99,7 +99,7 @@
 | **Context**      | All assistant tools.                                                                                                                                                                                                                             |
 | **Rationale**    | Security: a prompt injection can change what the LLM says, never what the system allows.                                                                                                                                                         |
 | **Consequences** | Tools return structured results with reason codes; the LLM phrases them.                                                                                                                                                                         |
-| **Related**      | • [CM-4](#cm-4-a-policy-engine-of-our-own-behind-a-port)<br>• [Proposal](../entitlement-agent-proposal.md) §2 and §6                                                                                                                                                                                                                   |
+| **Related**      | • [CM-4](#cm-4-a-policy-engine-of-our-own-behind-a-port)<br>• [Proposal](../entitlement-assistant-proposal.md) §2 and §6                                                                                                                                                                                                                   |
 | **Amendments** | 2026-10-25 — the principle holds across the accepted design (AU-1, SU-4, PO-1); its status awaits the owner's ruling.<br>2026-10-25 — accepted with a wording precision: every change to a customer account is a change request the CSR confirms in the UI; case steps (setting the contact, recording contact authentication, closing) are CSR actions in the UI, never triggered by the LLM alone.<br>2026-10-25 — every effect on a customer traces back to a person's click: the CSR's confirmation, and a supervisor's approval where a policy requires one. Other writes (audit records, prepared change requests, conversation storage, recorded expiries) change nothing a customer has. |
 
 ---

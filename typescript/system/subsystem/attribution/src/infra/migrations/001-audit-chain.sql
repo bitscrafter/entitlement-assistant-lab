@@ -47,5 +47,5 @@ CREATE TABLE audit_chain_head (
 INSERT INTO audit_chain_head (chain_head_id, last_sequence_number, last_record_hash, updated_at)
 VALUES (1, 0, decode(repeat('00', 32), 'hex'), now());
 
-GRANT SELECT, INSERT ON audit_chain_record, audit_participant, audit_reason TO entitlement_agent_app;
-GRANT SELECT, UPDATE ON audit_chain_head TO entitlement_agent_app;
+GRANT SELECT, INSERT ON audit_chain_record, audit_participant, audit_reason TO entitlement_assistant_app;
+GRANT SELECT, UPDATE ON audit_chain_head TO entitlement_assistant_app;

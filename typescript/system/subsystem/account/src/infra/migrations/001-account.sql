@@ -37,4 +37,4 @@ CREATE TABLE account_hold (
 
 CREATE INDEX account_hold_unreleased ON account_hold (account_id) WHERE released_at IS NULL;
 
-GRANT SELECT, INSERT, UPDATE ON account, internal_account, account_hold TO entitlement_agent_app;
+GRANT SELECT, INSERT, UPDATE ON account, internal_account, account_hold TO entitlement_assistant_app;

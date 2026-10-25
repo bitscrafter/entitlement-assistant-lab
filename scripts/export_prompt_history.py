@@ -6,7 +6,7 @@ For each session transcript (JSONL) it writes:
   prompt-history/<session-id>.md          a readable rendering: prompts, replies, tool calls
 
 Usage:
-  scripts/export_prompt_history.py [--transcripts-dir DIR] [--redact TEXT ...]
+  scripts/export_prompt_history.py [--transcripts-dir DIR ...] [--redact TEXT ...]
 
 By default the transcripts directory is the Claude Code project folder of this repository's parent
 directory, where sessions are started. Every --redact value is replaced by "[redacted]" in both outputs.
@@ -71,14 +71,20 @@ def render_session(transcript_lines: list[dict]) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--transcripts-dir", type=Path, default=default_transcripts_directory())
+    parser.add_argument(
+        "--transcripts-dir",
+        type=Path,
+        action="append",
+        help="a Claude Code project folder; repeat it when the sessions ran from more than one directory",
+    )
     parser.add_argument("--redact", action="append", default=[])
     arguments = parser.parse_args()
 
     raw_directory = OUTPUT_DIRECTORY / "raw"
     raw_directory.mkdir(parents=True, exist_ok=True)
 
-    transcripts = sorted(arguments.transcripts_dir.glob("*.jsonl"))
+    directories = arguments.transcripts_dir or [default_transcripts_directory()]
+    transcripts = sorted(path for directory in directories for path in directory.glob("*.jsonl"))
     for transcript in transcripts:
         text = redact(transcript.read_text(encoding="utf-8"), arguments.redact)
         (raw_directory / transcript.name).write_text(text, encoding="utf-8")

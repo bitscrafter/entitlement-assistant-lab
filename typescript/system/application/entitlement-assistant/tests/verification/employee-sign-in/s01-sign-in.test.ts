@@ -49,8 +49,8 @@ describe("employee-sign-in", () => {
     const token = cookie?.value ?? "";
     expect(decodePart(token, 0).alg).toBe("ES256");
     const claims = decodePart(token, 1);
-    expect(claims.iss).toBe("entitlement-agent");
-    expect(claims.aud).toBe("entitlement-agent");
+    expect(claims.iss).toBe("entitlement-assistant");
+    expect(claims.aud).toBe("entitlement-assistant");
     expect(claims.sub).toBe(external("iac_alex"));
     expect(claims.sid).toMatch(/^ses_[A-Za-z0-9_-]{22}$/);
     expect(claims.iat).toBe(seconds(at("15:00:00")));

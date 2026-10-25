@@ -3,9 +3,9 @@ import { PostgresClient } from "../../../external/postgres.ts";
 
 export const ADMIN_CONNECTION_STRING =
   process.env.TEST_DATABASE_URL ??
-  "postgres://postgres:local-development-only@localhost:54329/entitlement_agent";
+  "postgres://postgres:local-development-only@localhost:54329/entitlement_assistant";
 
-export const TEMPLATE_DATABASE = "entitlement_agent_template";
+export const TEMPLATE_DATABASE = "entitlement_assistant_template";
 
 export function connectionStringFor(database: string): string {
   const url = new URL(ADMIN_CONNECTION_STRING);
@@ -32,7 +32,7 @@ export interface TestDatabase {
 
 /** A database cloned from the migrated and seeded template, private to one test. */
 export async function createTestDatabase(): Promise<TestDatabase> {
-  const name = `entitlement_agent_test_${randomUUID().replaceAll("-", "")}`;
+  const name = `entitlement_assistant_test_${randomUUID().replaceAll("-", "")}`;
   await withAdminClient((client) => client.query(`CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`));
   return {
     connectionString: connectionStringFor(name),

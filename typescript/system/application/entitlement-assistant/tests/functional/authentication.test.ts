@@ -31,7 +31,7 @@ describe("authentication endpoints", () => {
     );
 
   test("ensures nothing happens unaudited: when the audit record cannot be written, sign-in fails (rule audit-fails-closed)", async () => {
-    await harness.owner.query("REVOKE INSERT ON audit_chain_record FROM entitlement_agent_app");
+    await harness.owner.query("REVOKE INSERT ON audit_chain_record FROM entitlement_assistant_app");
     const response = await signIn();
     expect(response.status).toBe(500);
     expect(response.headers.get("set-cookie")).toBeNull();
@@ -80,7 +80,7 @@ describe("authentication endpoints", () => {
   });
 
   test("ensures an unexpected failure answers server_error with the trace id, and nothing else", async () => {
-    await harness.owner.query("REVOKE INSERT ON audit_chain_record FROM entitlement_agent_app");
+    await harness.owner.query("REVOKE INSERT ON audit_chain_record FROM entitlement_assistant_app");
     const response = await harness.application.fetch(
       request("POST", "/api/authentication/sign-in", {
         headers: {

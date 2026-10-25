@@ -7,7 +7,7 @@
 | **Feature** | explain-access · scenarios S05a–S05j, S06a–S06b, S07a–S07d, S08a–S08e, S09a–S09b, S10a–S10b, S11, S12, S13 |
 | **Mode** | feature; reads customer data; writes only cases, case assignments, and audit records |
 | **Depends on** | feature employee-sign-in (a valid session) |
-| **References** | • Proposal: [`../../entitlement-agent-proposal.md`](../../entitlement-agent-proposal.md) §7<br>• Authorization decision: AU-1 to AU-6 in [`../../adr/authorization.md`](../../adr/authorization.md); [`../../diagrams/authorization-decision.activity.puml`](../../diagrams/authorization-decision.activity.puml)<br>• Disclosure of refusals: AU-6; the `account.read` finding: AU-4; one record per decision: AT-3 in [`../../adr/attribution.md`](../../adr/attribution.md)<br>• Case assignee: SU-14 in [`../../adr/support.md`](../../adr/support.md); shared ports: CM-17 in [`../../adr/common.md`](../../adr/common.md)<br>• Data model: [`../../data-model/README.md`](../../data-model/README.md) (Access, Entitlement, Product, Policy, Support, Attribution)<br>• Reason codes: [`../../data-model/attribution.md`](../../data-model/attribution.md) §4a |
+| **References** | • Proposal: [`../../entitlement-assistant-proposal.md`](../../entitlement-assistant-proposal.md) §7<br>• Authorization decision: AU-1 to AU-6 in [`../../adr/authorization.md`](../../adr/authorization.md); [`../../diagrams/authorization-decision.activity.puml`](../../diagrams/authorization-decision.activity.puml)<br>• Disclosure of refusals: AU-6; the `account.read` finding: AU-4; one record per decision: AT-3 in [`../../adr/attribution.md`](../../adr/attribution.md)<br>• Case assignee: SU-14 in [`../../adr/support.md`](../../adr/support.md); shared ports: CM-17 in [`../../adr/common.md`](../../adr/common.md)<br>• Data model: [`../../data-model/README.md`](../../data-model/README.md) (Access, Entitlement, Product, Policy, Support, Attribution)<br>• Reason codes: [`../../data-model/attribution.md`](../../data-model/attribution.md) §4a |
 
 ## Contents
 
@@ -61,7 +61,7 @@ Approving this spec also approves these values:
 | D5 | **An explanation evaluates the person's account as principal**, through the same decision chain (AU-1), for `feature.<feature_key>.<operation>` in the subject account. It is not that person's action, so it is not audited as theirs; the employee's decision is. | One algorithm for real and explained decisions. |
 | D6 | **The server closes an agent connection when the session token it was opened with expires:** close code `4401`, reason `session_expired`. Renewing the cookie does not extend an open connection; the UI reconnects with the renewed token. | A connection never outlives its credential. |
 | D7 | **The fixed instant of every test is `2026-10-22T15:00:00Z`** unless a scenario says otherwise. | Terms and grants must not depend on when the tests run. |
-| D8 | **Fixture ids are readable aliases** for seeded UUIDv7 values (CM-14). Generated ids are written `<cse_ id>`: `cse_` plus 22 characters. The host is `app.entitlement-agent.example`. | Readable scenarios; exact `Content-Length` values. |
+| D8 | **Fixture ids are readable aliases** for seeded UUIDv7 values (CM-14). Generated ids are written `<cse_ id>`: `cse_` plus 22 characters. The host is `app.entitlement-assistant.example`. | Readable scenarios; exact `Content-Length` values. |
 
 ## 2. Fixture
 
@@ -449,7 +449,7 @@ denied candidates are left out (D3).
 iac_alex (customer-support, representative, level 1) holds case.open through support-case-handling.
 iac_drew (finance, analyst, level 1) holds no role, so not case.open.
 iac_alex and iac_drew hold valid session tokens (exp 15:20:00).
-The application's origin is https://app.entitlement-agent.example.
+The application's origin is https://app.entitlement-assistant.example.
 The instant is 2026-10-22T15:00:00Z.
 ```
 
@@ -457,8 +457,8 @@ The instant is 2026-10-22T15:00:00Z.
 
 ```http
 POST /api/cases HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Content-Type: application/json
 Content-Length: 2
 Cookie: __Host-session=<iac_alex's token>
@@ -503,7 +503,7 @@ audit_records:                            # exactly two, in this order
 iac_alex (customer-support, representative, level 1) holds case.open through support-case-handling.
 iac_drew (finance, analyst, level 1) holds no role, so not case.open.
 iac_alex and iac_drew hold valid session tokens (exp 15:20:00).
-The application's origin is https://app.entitlement-agent.example.
+The application's origin is https://app.entitlement-assistant.example.
 The instant is 2026-10-22T15:00:00Z.
 ```
 
@@ -511,8 +511,8 @@ The instant is 2026-10-22T15:00:00Z.
 
 ```http
 POST /api/cases HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Content-Type: application/json
 Content-Length: 2
 Cookie: __Host-session=<iac_drew's token>
@@ -553,7 +553,7 @@ audit_records:                            # exactly one
 iac_alex (customer-support, representative, level 1) holds case.open through support-case-handling.
 iac_drew (finance, analyst, level 1) holds no role, so not case.open.
 iac_alex and iac_drew hold valid session tokens (exp 15:20:00).
-The application's origin is https://app.entitlement-agent.example.
+The application's origin is https://app.entitlement-assistant.example.
 The instant is 2026-10-22T15:00:00Z.
 ```
 
@@ -561,7 +561,7 @@ The instant is 2026-10-22T15:00:00Z.
 
 ```http
 POST /api/cases HTTP/1.1
-Host: app.entitlement-agent.example
+Host: app.entitlement-assistant.example
 Origin: https://attacker.example
 Content-Type: application/json
 Content-Length: 2
@@ -599,7 +599,7 @@ security_event_log: one entry, cause foreign origin
 iac_alex (customer-support, representative, level 1) holds case.open through support-case-handling.
 iac_drew (finance, analyst, level 1) holds no role, so not case.open.
 iac_alex and iac_drew hold valid session tokens (exp 15:20:00).
-The application's origin is https://app.entitlement-agent.example.
+The application's origin is https://app.entitlement-assistant.example.
 The instant is 2026-10-22T15:00:00Z.
 ```
 
@@ -607,8 +607,8 @@ The instant is 2026-10-22T15:00:00Z.
 
 ```http
 POST /api/cases HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Content-Type: application/json
 Content-Length: 2
 
@@ -645,7 +645,7 @@ Case cse_alex_1 is assigned to iac_alex. No case has the id cse_missing.
 iac_alex, iac_blair, and iac_sam hold valid session tokens (feature employee-sign-in), each with exp 15:20:00.
 T_expired is iac_alex's token with exp 14:59:59, validly signed.
 iac_sam is a supervisor; cse_alex_1 has not been reassigned to Sam.
-The application's origin is https://app.entitlement-agent.example.
+The application's origin is https://app.entitlement-assistant.example.
 The language model is the scripted double.
 The instant is 2026-10-22T15:00:00Z.
 ```
@@ -654,8 +654,8 @@ The instant is 2026-10-22T15:00:00Z.
 
 ```http
 GET /agents/case-agent/cse_alex_1 HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Connection: Upgrade
 Upgrade: websocket
 Sec-WebSocket-Version: 13
@@ -687,7 +687,7 @@ Case cse_alex_1 is assigned to iac_alex. No case has the id cse_missing.
 iac_alex, iac_blair, and iac_sam hold valid session tokens (feature employee-sign-in), each with exp 15:20:00.
 T_expired is iac_alex's token with exp 14:59:59, validly signed.
 iac_sam is a supervisor; cse_alex_1 has not been reassigned to Sam.
-The application's origin is https://app.entitlement-agent.example.
+The application's origin is https://app.entitlement-assistant.example.
 The language model is the scripted double.
 The instant is 2026-10-22T15:00:00Z.
 ```
@@ -698,8 +698,8 @@ When:
 
 ```http
 GET /agents/case-agent/cse_alex_1 HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Connection: Upgrade
 Upgrade: websocket
 Sec-WebSocket-Version: 13
@@ -733,8 +733,8 @@ When:
 
 ```http
 GET /agents/case-agent/cse_alex_1 HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Connection: Upgrade
 Upgrade: websocket
 Sec-WebSocket-Version: 13
@@ -768,8 +768,8 @@ When:
 
 ```http
 GET /agents/case-agent/cse_missing HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Connection: Upgrade
 Upgrade: websocket
 Sec-WebSocket-Version: 13
@@ -808,7 +808,7 @@ Case cse_alex_1 is assigned to iac_alex. No case has the id cse_missing.
 iac_alex, iac_blair, and iac_sam hold valid session tokens (feature employee-sign-in), each with exp 15:20:00.
 T_expired is iac_alex's token with exp 14:59:59, validly signed.
 iac_sam is a supervisor; cse_alex_1 has not been reassigned to Sam.
-The application's origin is https://app.entitlement-agent.example.
+The application's origin is https://app.entitlement-assistant.example.
 The language model is the scripted double.
 The instant is 2026-10-22T15:00:00Z.
 ```
@@ -817,7 +817,7 @@ The instant is 2026-10-22T15:00:00Z.
 
 ```http
 GET /agents/case-agent/cse_alex_1 HTTP/1.1
-Host: app.entitlement-agent.example
+Host: app.entitlement-assistant.example
 Origin: https://attacker.example
 Connection: Upgrade
 Upgrade: websocket
@@ -856,7 +856,7 @@ Case cse_alex_1 is assigned to iac_alex. No case has the id cse_missing.
 iac_alex, iac_blair, and iac_sam hold valid session tokens (feature employee-sign-in), each with exp 15:20:00.
 T_expired is iac_alex's token with exp 14:59:59, validly signed.
 iac_sam is a supervisor; cse_alex_1 has not been reassigned to Sam.
-The application's origin is https://app.entitlement-agent.example.
+The application's origin is https://app.entitlement-assistant.example.
 The language model is the scripted double.
 The instant is 2026-10-22T15:00:00Z.
 ```
@@ -867,8 +867,8 @@ When:
 
 ```http
 GET /agents/case-agent/cse_alex_1 HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Connection: Upgrade
 Upgrade: websocket
 Sec-WebSocket-Version: 13
@@ -901,8 +901,8 @@ When:
 
 ```http
 GET /agents/case-agent/cse_alex_1 HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Connection: Upgrade
 Upgrade: websocket
 Sec-WebSocket-Version: 13
@@ -2876,8 +2876,8 @@ The connection has closed. The instant is 2026-10-22T15:00:00Z.
 
 ```http
 GET /agents/case-agent/cse_blair_1 HTTP/1.1
-Host: app.entitlement-agent.example
-Origin: https://app.entitlement-agent.example
+Host: app.entitlement-assistant.example
+Origin: https://app.entitlement-assistant.example
 Connection: Upgrade
 Upgrade: websocket
 Sec-WebSocket-Version: 13

@@ -1,5 +1,5 @@
 @startuml data-model
-title SUPERSEDED DRAFT, kept for history — see the subsystem diagrams\nEntitlement Agent — data model (system of record, PostgreSQL)
+title SUPERSEDED DRAFT, kept for history — see the subsystem diagrams\nEntitlement Assistant — data model (system of record, PostgreSQL)
 
 hide circle
 skinparam linetype ortho

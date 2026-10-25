@@ -1,7 +1,7 @@
 import { PostgresClient } from "../../external/postgres.ts";
 
 /** The role created by the application's first migration; every unit of work acts with it. */
-export const APPLICATION_DATABASE_ROLE = "entitlement_agent_app";
+export const APPLICATION_DATABASE_ROLE = "entitlement_assistant_app";
 
 export type SqlValue = string | number | boolean | Date | Uint8Array | null | readonly string[];
 

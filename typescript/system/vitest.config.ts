@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     include: ["**/tests/**/*.test.ts"],
     exclude: ["node_modules/**"],
-    globalSetup: ["application/entitlement-agent/tests/support/global-setup.ts"],
+    globalSetup: ["application/entitlement-assistant/tests/support/global-setup.ts"],
     passWithNoTests: true,
     testTimeout: 20000,
     hookTimeout: 60000,

@@ -80,7 +80,7 @@
 
 | | |
 | :--- | :--- |
-| **Decision** | Policies live in files and are recorded in the database:<br>• YAML under `application/entitlement-agent/resource/policies/`, bundled into the Worker at build<br>• each deployed set inserted once into the database, never changed (insert-only privileges)<br>• `policy_set_version` = keyless SHA-256 of the canonical set, unpadded base64url<br>• `policy_set_activation` records which set is in force; two only during a rollout<br>• a Worker decides only while its bundled set is active: checked at startup and lazily, at most once a minute; fail closed |
+| **Decision** | Policies live in files and are recorded in the database:<br>• YAML under `application/entitlement-assistant/resource/policies/`, bundled into the Worker at build<br>• each deployed set inserted once into the database, never changed (insert-only privileges)<br>• `policy_set_version` = keyless SHA-256 of the canonical set, unpadded base64url<br>• `policy_set_activation` records which set is in force; two only during a rollout<br>• a Worker decides only while its bundled set is active: checked at startup and lazily, at most once a minute; fail closed |
 | **Status** | Accepted · 2026-10-24 · decided by the owner |
 | **Rationale** | • Speed: no database read per decision.<br>• Evidence: auditors read the exact text that decided, through the audit record.<br>• Reproducible versions: anyone can hash the file and match it. |
 | **Consequences** | Changing policy means deploying. |
@@ -97,4 +97,4 @@
 | **Decision** | Each policy has a case file of Given/When/Then cases:<br>• `then: true` (satisfied or not applicable) or `then: false` (unmet)<br>• kept apart from test code; one functional suite runs every case<br>• the build type-checks the set; policy files hold no examples |
 | **Status** | Accepted · 2026-10-24 · decided by the owner |
 | **Rationale** | Policy files stay declarative; cases serve as the examples and cannot rot, because they run. |
-| **Amendments** | 2026-10-25 — case files live with the policies' application: `application/entitlement-agent/tests/functional/policy/cases/`; the policy subsystem keeps evaluator unit tests on synthetic policies. |
+| **Amendments** | 2026-10-25 — case files live with the policies' application: `application/entitlement-assistant/tests/functional/policy/cases/`; the policy subsystem keeps evaluator unit tests on synthetic policies. |
