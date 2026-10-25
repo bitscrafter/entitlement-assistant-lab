@@ -86,7 +86,7 @@ guard is a work item.**
 
 | Rule | Statement | Guard |
 | --- | --- | --- |
-| `model-has-no-io` | A subsystem's `model/` imports nothing outside itself: no I/O, framework, or other layer. | dependency-cruiser rule in the GREEN gate |
+| `model-has-no-io` | A subsystem's `model/` imports nothing outside itself and the shared pure `kernel/`: no I/O, framework, or other layer. | dependency-cruiser rule in the GREEN gate |
 | `dependencies-point-inward` | Inside a subsystem: `model` ← `usecase` ← `infra`; only `infra` and shared adapters import `external/`; only the application's bootstrap wires adapters. | dependency-cruiser rule in the GREEN gate |
 | `subsystems-meet-through-use-cases` | A subsystem uses another only through its public use cases and ports; never its model internals or tables. | dependency-cruiser rule in the GREEN gate |
 | `llm-never-authorizes` | Every tool call reaches a use case that asks the PDP before reading or changing data. | verification tests per feature; architecture test that every use case calls the PDP |

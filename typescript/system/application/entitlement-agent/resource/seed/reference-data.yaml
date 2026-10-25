@@ -1,0 +1,118 @@
+# Reference data every environment needs (data-model/access.md, internal-identity.md).
+departments:
+  - department: customer-support
+    name: Customer Support
+  - department: finance
+    name: Finance
+job_functions:
+  - job_function: representative
+    name: Representative
+  - job_function: supervisor
+    name: Supervisor
+  - job_function: analyst
+    name: Analyst
+resource_operations:
+  - permission: account.read
+    held_by: Employee
+    description: Read a customer account and what it is entitled to.
+  - permission: audit.read
+    held_by: Employee
+    description: Read the audit records of a customer account.
+  - permission: case.open
+    held_by: Employee
+    description: Open a case.
+  - permission: case.reassign
+    held_by: Employee
+    description: Reassign a case to another employee.
+  - permission: subscription.change-plan
+    held_by: Employee
+    description: Change a subscription's plan.
+  - permission: subscription.cancel
+    held_by: Employee
+    description: Cancel a subscription.
+  - permission: subscription.add-courtesy-term
+    held_by: Employee
+    description: Add a courtesy term to a subscription.
+  - permission: grant.create
+    held_by: Employee
+    description: Grant a feature to a subscription until an expiry.
+  - permission: grant.record-expiry
+    held_by: System
+    description: Record the end of an expired grant.
+  - permission: approval.decide
+    held_by: Employee
+    description: Approve or deny a change request.
+  - permission: change-request.apply
+    held_by: System
+    description: Apply an approved change request.
+  - permission: subscription.request-plan-change
+    held_by: Individual
+    description: Ask support to change the plan of an account.
+  - permission: subscription.request-cancellation
+    held_by: Individual
+    description: Ask support to cancel the subscription of an account.
+  - permission: grant.request
+    held_by: Individual
+    description: Ask support to grant a feature to an account.
+roles:
+  - role: support-case-handling
+    principal_kind: Employee
+    name: Support case handling
+    description: Handle customer cases.
+    permissions:
+      - account.read
+      - audit.read
+      - case.open
+      - subscription.change-plan
+      - subscription.add-courtesy-term
+      - grant.create
+  - role: subscription-cancellation
+    principal_kind: Employee
+    name: Subscription cancellation
+    description: Cancel subscriptions.
+    permissions:
+      - subscription.cancel
+  - role: approval-decision
+    principal_kind: Employee
+    name: Approval decision
+    description: Decide approvals of change requests.
+    permissions:
+      - approval.decide
+  - role: case-supervision
+    principal_kind: Employee
+    name: Case supervision
+    description: Reassign cases.
+    permissions:
+      - case.reassign
+  - role: entitlement-maintenance
+    principal_kind: System
+    name: Entitlement maintenance
+    description: Record grant expiries and apply approved changes.
+    permissions:
+      - grant.record-expiry
+      - change-request.apply
+birthright_role_assignments:
+  - department: customer-support
+    job_function: representative
+    minimum_job_level: 1
+    role: support-case-handling
+  - department: customer-support
+    job_function: representative
+    minimum_job_level: 2
+    role: subscription-cancellation
+  - department: customer-support
+    job_function: supervisor
+    minimum_job_level: 1
+    role: support-case-handling
+  - department: customer-support
+    job_function: supervisor
+    minimum_job_level: 1
+    role: subscription-cancellation
+  - department: customer-support
+    job_function: supervisor
+    minimum_job_level: 1
+    role: approval-decision
+  - department: customer-support
+    job_function: supervisor
+    minimum_job_level: 1
+    role: case-supervision

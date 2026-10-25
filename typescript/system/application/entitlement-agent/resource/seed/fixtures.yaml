@@ -1,0 +1,91 @@
+# The dataset of the feature verification specs (employee-sign-in §2, explain-access §2).
+# Aliases (emp_alex, iac_alex) stand for deterministic UUIDv7 values.
+seeded_at: "2026-10-01T00:00:00Z"
+system_identities:
+  - identity: sys_grant_expiry
+    account: iac_sys_grant_expiry
+    name: grant-expiry
+    description: Records the end of expired grants.
+    roles:
+      - entitlement-maintenance
+  - identity: sys_approval_process
+    account: iac_sys_approval_process
+    name: approval-process
+    description: Applies approved change requests and expires undecided approvals.
+    roles:
+      - entitlement-maintenance
+employees:
+  - identity: emp_alex
+    account: iac_alex
+    status: Active
+    email: alex@provider.example
+    given_name: Alex
+    family_name: Rivera
+    display_name: Alex
+    department: customer-support
+    job_function: representative
+    job_level: 1
+    password: alex-demo-password
+  - identity: emp_blair
+    account: iac_blair
+    status: Active
+    email: blair@provider.example
+    given_name: Blair
+    family_name: Chen
+    display_name: Blair
+    department: customer-support
+    job_function: representative
+    job_level: 2
+    password: blair-demo-password
+  - identity: emp_sam
+    account: iac_sam
+    status: Active
+    email: sam@provider.example
+    given_name: Sam
+    family_name: Okafor
+    display_name: Sam
+    department: customer-support
+    job_function: supervisor
+    job_level: 1
+    password: sam-demo-password
+  - identity: emp_drew
+    account: iac_drew
+    status: Active
+    email: drew@provider.example
+    given_name: Drew
+    family_name: Novak
+    display_name: Drew
+    department: finance
+    job_function: analyst
+    job_level: 1
+    password: drew-demo-password
+  - identity: emp_casey
+    account: iac_casey
+    status: Suspended
+    email: casey@provider.example
+    given_name: Casey
+    family_name: Lindqvist
+    display_name: Casey
+    department: customer-support
+    job_function: representative
+    job_level: 1
+    password: casey-demo-password
+    holds:
+      - reason: InternalIdentityInactive
+        placed_at: "2026-10-20T09:00:00Z"
+        placed_by: iac_sam
+  - identity: emp_dana
+    account: iac_dana
+    status: Active
+    email: dana@provider.example
+    given_name: Dana
+    family_name: Park
+    display_name: Dana
+    department: customer-support
+    job_function: representative
+    job_level: 1
+    password: dana-demo-password
+    holds:
+      - reason: OperationalSuspension
+        placed_at: "2026-10-22T14:55:00Z"
+        placed_by: iac_sam
