@@ -1,36 +1,61 @@
 # AI Session — current state
 
-**Updated:** 2026-10-25
+**Updated:** 2026-10-25 (end of session)
 
 ## State
 
-- Proposal drafted and ruled: `tech-docs/entitlement-assistant-proposal.md` (§9 records the product rulings).
-- Constitution written: `CLAUDE.md`, `AI_CONSTITUTION.md`, `AI_WORKFLOW.md`, `AI_AS_*.md`.
-- Feature specs drafted, awaiting owner approval: `tech-docs/features/employee-sign-in/` and
-  `tech-docs/features/explain-access/`.
-- Data model designed per subsystem under `tech-docs/data-model/`; Customer Identity, Internal Identity, Access, Product, Entitlement, Support, Account, Attribution, Policy, Authorization ruled: data model complete. Proposal and first feature specs aligned; two reviews applied 2026-10-25 (the second as D1–D26). API ruled (`tech-docs/api/api.md`). Next: case-lifecycle and change-subscription specs. Decisions in `tech-docs/adr/`.
-- Design order (owner): data model per subsystem → policy model → APIs → scenarios (sign-in first).
-- Code in `typescript/system/`; feature employee-sign-in merged to `main` (GREEN 91 passed @ 76474ed). Not yet deployed.
+- **Design complete:** proposal (`tech-docs/entitlement-assistant-proposal.md`, rulings in §9), data model per
+  subsystem (`tech-docs/data-model/`), ADRs (`tech-docs/adr/`), API (`tech-docs/api/api.md`), production
+  readiness, diagrams.
+- **Feature employee-sign-in: done.** Spec approved (amended for the rename); built in demo mode; adversarial
+  review accepted in round 2; GREEN 91 passed @ 76474ed; merged to `main`. Records in
+  `tech-docs/features/employee-sign-in/workflow/`.
+- **Product renamed** Entitlement Assistant (`entitlement-assistant/`), merged to `main` @ 6ca41db (GREEN 91
+  passed @ 9d8d2e7).
+- **Not deployed yet.** The owner is doing `wrangler login` (minimum scopes below) and has a Neon project with
+  database `entitlement_assistant`; its owner connection string is in `typescript/system/.env.neon`
+  (git-ignored; never shown in chat, because transcripts are published).
+- **Feature explain-access:** its spec exists but predates what employee-sign-in established; it is updated
+  just before it is built (owner rule: specs just in time).
+
+## Next session
+
+1. Owner renames the parent folder `clooudflare` → `cloudflare` between sessions and copies the memory folder to
+   the new Claude Code project path (steps in the last message of this session); the next session starts from
+   `cloudflare/`. The export script takes both transcript folders (`--transcripts-dir` twice).
+2. Deploy (README, Deploy): check `npx wrangler whoami` and `npx wrangler hyperdrive list` (a permission error
+   means one more scope); migrate and seed Neon from `.env.neon`; create the login role
+   `entitlement_assistant_worker` IN ROLE `entitlement_assistant_app` with a generated password stored in
+   `.env.neon`; `wrangler hyperdrive create … --caching-disabled`; put its id in `wrangler.jsonc`; set secrets with
+   fresh production keys; build the UI; deploy; check HTTPS on `workers.dev`; smoke-test the live URL.
+3. Update the explain-access spec, owner approval, build.
 
 ## Decisions (owner, 2026-10-22)
 
 - The human is the CSR; the AI is the assistant.
-- CSR authentication: application sign-in of pre-seeded CSRs, stateless JWT in an HttpOnly cookie.
+- CSR authentication: application sign-in of pre-seeded employees, stateless JWT in an HttpOnly cookie.
 - Policy engine: a small typed evaluator of the project's own, behind a PDP port.
 - System of record: PostgreSQL through Hyperdrive.
-- Work in features (renamed from slices 2026-10-25); employee-sign-in and explain-access first.
-- Hexagonal and clean architecture; slimmed-down constitution.
+- Work in features; hexagonal and clean architecture; slimmed-down constitution.
 
 ## Decisions (owner, 2026-10-25)
 
-- Tool calling in the demo; MCP in production.
-- Prompt history and the GitHub remote are done at the end.
-- API: authentication and case domains, OAuth 2 errors (details only when the caller may see them), snake_case on the wire; adapters as namespaces documented for production.
-- Spec cases are written one by one (Case A, B, …), each with its full request and response.
-
-- Reviews kept light to finish the demo: no per-phase or plan reviews by agents; one adversarial review of each feature before merge; gates (lint, types, layering, tests) unchanged.
+- Security over speed: all recommendations accepted to time-box the demo, never at security's cost; refusals
+  reveal information only to a proven legitimate principal (AU-6).
+- CM-5 accepted (every effect on a customer traces back to a person's click).
+- Tool calling in the demo; MCP in production. Channels (browser, chat, tools, MCP) as namespaces with their own
+  constraints: production-readiness.
+- API: authentication and case domains; OAuth 2 errors, details only when the caller may see them; snake_case.
+- Specs: front matter; every scenario listed in the contents; cases one by one (Case A, B, …) or split scenarios
+  (S04a, …); raw HTTP; JSON formatted, `Content-Length` of the compact form.
+- Demo mode: self-reviews, one adversarial review per feature; gates unchanged.
+- Specs are written just before a feature is built.
+- Commits: the owner approved committing and merging employee-sign-in and the rename.
+- Product name: Entitlement Assistant. Neon for PostgreSQL. Wrangler with minimum OAuth scopes:
+  `account:read user:read workers:write workers_scripts:write workers_tail:read`.
+- Prompt history and the GitHub remote come at the end; transcripts published redacted under `tech-docs/`.
 
 ## Open
 
 - Feature-spec decisions are approved with each spec.
-- Security rule from the owner (2026-10-25): refusals reveal information only to a proven legitimate principal (AU-6).
+- Whether `workers:write` covers Hyperdrive (checked at deploy).

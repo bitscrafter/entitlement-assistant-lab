@@ -2,8 +2,8 @@
 
 ## To Do
 
-1. Deploy: owner runs `wrangler login` and creates the Neon project; then Hyperdrive (caching disabled, login role), secrets, deploy (README, Deploy).
-2. API document ruled (2026-10-25). Owner (2026-10-25): implement employee-sign-in now; later feature specs are written just before each feature is implemented.
+1. Owner: rename the parent folder `clooudflare` → `cloudflare` between sessions; copy the memory folder to the new project path.
+2. Deploy (owner: `wrangler login` with minimum scopes; Neon project `entitlement_assistant`, connection in `.env.neon`): migrate and seed Neon, login role, Hyperdrive with caching disabled, secrets, deploy, smoke test (README, Deploy; AI_SESSION, Next session).
 3. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
 4. At the end: GitHub remote (owner, 2026-10-25).
 5. Feature explain-access: update its spec to what employee-sign-in established, owner approval, then build (demo mode).
@@ -14,7 +14,7 @@
 - Slim constitution written.
 - First verification spec drafted (later split into employee-sign-in and explain-access).
 - Sign-in sequence diagram and data model ER diagram (PlantUML).
-- Git repository initialized (no commits); prompt-history export script.
+- Git repository initialized; prompt-history export script (reads several transcript folders).
 - Customer Identity data model ruled and documented (`tech-docs/data-model/customer-identity.md`).
 - ADRs introduced (`tech-docs/adr/`), table-based format.
 - Internal Identity data model ruled and documented (employees, system identities, credentials); emails stored normalized only (CM-10).
@@ -31,3 +31,4 @@
 - Second review applied (2026-10-25, D1–D26 and section B): disclosure rule (AU-6), assignee rule (SU-14), apply re-check against the confirmer's decision (SU-15, supersedes SU-11), shared ports (CM-17); new policies (trial and courtesy coverage, cancellation approval, grant quota), canonical audit records with soft account references, action registry and `case.reassign`, sign-in in Account, id-prefix register; diagrams, data models, production readiness, proposal, both feature specs, and the tester and architect guides updated.
 - CM-5 accepted (2026-10-25). API document drafted: endpoints, agent frames, tools, use cases by subsystem, one error model with AU-6 disclosure.
 - Feature employee-sign-in (2026-10-25): S01–S03, S04a–S04f green; adversarial review accepted in round 2; GREEN 91 passed @ 76474ed; merged to main.
+- Renamed to Entitlement Assistant (2026-10-25): merged @ 6ca41db; GREEN 91 passed @ 9d8d2e7.
