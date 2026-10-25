@@ -15,6 +15,28 @@ export function originAllowed(request: Request, applicationOrigin: string): bool
   return request.method === "GET" || request.headers.get("origin") === applicationOrigin;
 }
 
+/**
+ * Moves a plain-HTTP request to the application's HTTPS origin, so no page is ever served where it can be
+ * tampered with in transit. The target comes from the configured origin, never from the request's host.
+ *
+ * @ensures A plain-HTTP request to an HTTPS application gets a 308 to the application's origin with the same path and query.
+ * @ensures Every other request, including any request to a plain-HTTP (local) application, gets `undefined`.
+ */
+export function httpsRedirect(request: Request, applicationOrigin: string): Response | undefined {
+  const url = new URL(request.url);
+  if (url.protocol !== "http:" || !applicationOrigin.startsWith("https://")) return undefined;
+  return Response.redirect(`${applicationOrigin}${url.pathname}${url.search}`, 308);
+}
+
+/**
+ * Whether a path is answered by the application rather than by the UI's static assets.
+ *
+ * @ensures True exactly for paths under `/api/` and `/agents/`.
+ */
+export function servedByApplication(pathname: string): boolean {
+  return pathname.startsWith("/api/") || pathname.startsWith("/agents/");
+}
+
 /** @ensures The verified claims of the request's session token, or why it has none. */
 export async function authenticateSession(
   request: Request,
