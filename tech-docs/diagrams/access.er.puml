@@ -1,0 +1,236 @@
+@startuml access
+
+!define primary_key(x) <i><color:#7B5A12><&key></color>x</i>
+!define foreign_key(x) <i><color:#A0A0A0><&key></color>x</i>
+!define unique_index(x) <i><color:#5050A0><&flash></color>x</i>
+
+skinparam {
+	classBackgroundColor transparent
+	classheaderBackgroundColor #FCDA72
+	arrowColor #2688D4
+	classBorderColor #2688D4
+	handwritten false
+	shadowing false
+	noteBackgroundColor #E0E0E0
+	noteBorderColor #C0C0C0
+	maxMessageSize 200
+	svgLinkTarget _blank
+	roundCorner 5
+
+	linetype ortho
+	pageMargin 50
+}
+
+hide circle
+
+<style>
+	legend {
+		BackgroundColor #F9F9F9
+		LineColor #A0A0A0
+		Margin 50
+		Padding 15
+		RoundCorner 10
+	}
+</style>
+
+title Access — data model
+
+entity "**resource_operation**" as resource_operation {
+	primary_key(resource_type + operation (pk))
+	__
+	* resource_type : text
+	* operation : text
+	* description : text
+}
+
+entity "**feature_operation**\n<size:10>Product subsystem</size>" as feature_operation #F7F7F7 ##[dashed]A0A0A0 {
+	primary_key(feature_key + operation (pk))
+}
+
+entity "**permission**" as permission {
+	primary_key(permission_key (pk))
+	__
+	foreign_key(resource_type + operation (fk resource_operation))
+	foreign_key(feature_key + operation (fk feature_operation))
+	__
+	unique_index(permission_key + principal_kind (c idx))
+	__
+	* permission_key : text
+	* principal_kind : text (Individual | Employee | System)
+	* operation : text
+	resource_type : text (set for resource permissions)
+	feature_key : text (set for feature permissions)
+	* description : text
+}
+
+entity "**role**" as role {
+	primary_key(role_key (pk))
+	__
+	unique_index(role_key + principal_kind (c idx))
+	__
+	* role_key : text
+	* principal_kind : text (Individual | Employee | System)
+	* name : text
+	* description : text
+}
+
+entity "**role_permission**" as role_permission {
+	primary_key(role_key + permission_key (pk))
+	__
+	foreign_key(role_key + principal_kind (fk role))
+	foreign_key(permission_key + principal_kind (fk permission))
+	__
+	* role_key : text
+	* permission_key : text
+	* principal_kind : text
+}
+
+entity "**account_role_assignment**" as account_role_assignment {
+	primary_key(assignment_id (pk))
+	__
+	foreign_key(member_account_id + member_customer_kind (fk customer_account))
+	foreign_key(member_of_account_id (fk customer_account))
+	foreign_key(role_key + principal_kind (fk role))
+	foreign_key(assigned_by (fk account))
+	foreign_key(ended_by (fk account))
+	__
+	unique_index(member_account_id + member_of_account_id + role_key (c idx where not ended))
+	__
+	* assignment_id : uuid «ara_…»
+	* member_account_id : uuid
+	* member_of_account_id : uuid
+	* role_key : text
+	* member_customer_kind : text = 'Individual'
+	* principal_kind : text = 'Individual'
+	* assigned_at : timestamptz
+	* assigned_by : uuid
+	ended_at : timestamptz
+	ended_by : uuid
+	end_reason : text (Revoked | MembershipEnded)
+}
+
+entity "**birthright_role_assignment**" as birthright_role_assignment {
+	primary_key(department_key + job_function_key + minimum_job_level + role_key (pk))
+	__
+	foreign_key(department_key (fk department))
+	foreign_key(job_function_key (fk job_function))
+	foreign_key(role_key + principal_kind (fk role))
+	__
+	* department_key : text
+	* job_function_key : text
+	* role_key : text
+	* minimum_job_level : integer (> 0)
+	* principal_kind : text = 'Employee'
+}
+
+entity "**internal_role_assignment**" as internal_role_assignment {
+	primary_key(assignment_id (pk))
+	__
+	foreign_key(internal_account_id + principal_kind (fk internal_account))
+	foreign_key(role_key + principal_kind (fk role))
+	foreign_key(assigned_by (fk account))
+	foreign_key(ended_by (fk account))
+	__
+	unique_index(internal_account_id + role_key (c idx where not ended))
+	__
+	* assignment_id : uuid «ira_…»
+	* internal_account_id : uuid
+	* role_key : text
+	* principal_kind : text (Employee | System)
+	* reason : text
+	* assigned_at : timestamptz
+	* assigned_by : uuid
+	expires_at : timestamptz
+	ended_at : timestamptz
+	ended_by : uuid
+	end_reason : text (Revoked)
+}
+
+entity "**internal_permission_assignment**" as internal_permission_assignment {
+	primary_key(assignment_id (pk))
+	__
+	foreign_key(internal_account_id + principal_kind (fk internal_account))
+	foreign_key(permission_key + principal_kind (fk permission))
+	foreign_key(assigned_by (fk account))
+	foreign_key(ended_by (fk account))
+	__
+	* assignment_id : uuid «ipa_…»
+	* internal_account_id : uuid
+	* permission_key : text
+	* principal_kind : text (Employee | System)
+	* reason : text
+	* assigned_at : timestamptz
+	* assigned_by : uuid
+	* expires_at : timestamptz
+	ended_at : timestamptz
+	ended_by : uuid
+	end_reason : text (Revoked)
+}
+
+entity "**customer_account**\n<size:10>Account subsystem</size>" as customer_account #F7F7F7 ##[dashed]A0A0A0 {
+	primary_key(account_id (pk))
+}
+
+entity "**internal_account**\n<size:10>Account subsystem</size>" as internal_account #F7F7F7 ##[dashed]A0A0A0 {
+	primary_key(account_id (pk))
+}
+
+entity "**department · job_function**\n<size:10>Internal Identity</size>" as job_reference #F7F7F7 ##[dashed]A0A0A0 {
+	primary_key(department_key)
+	primary_key(job_function_key)
+}
+
+' Relationships
+' || 1
+' |o, o| 0 or 1
+' }o, o{ 0 to n
+' }|, |{ 1 to n
+
+resource_operation ||--o{ permission : names
+feature_operation ||..o{ permission : names
+role ||--o{ role_permission : bundles
+permission ||--o{ role_permission : bundled in
+
+role ||--o{ account_role_assignment : assigned as
+customer_account ||..o{ account_role_assignment : member
+customer_account ||..o{ account_role_assignment : member of
+
+role ||--o{ birthright_role_assignment : granted by default
+job_reference ||..o{ birthright_role_assignment : selects
+
+role ||--o{ internal_role_assignment : assigned as
+internal_account ||..o{ internal_role_assignment : holds
+permission ||--o{ internal_permission_assignment : assigned as
+internal_account ||..o{ internal_permission_assignment : holds
+
+note right of permission
+	Two patterns:
+	<resource_type>.<operation>
+	feature.<feature_key>.<operation>
+	Exactly one of resource_type and
+	feature_key is set.
+end note
+
+note bottom of account_role_assignment
+	member_account_id is a member of
+	member_of_account_id as role_key.
+	Needs a justifying relationship: the same
+	account, or an active organization membership.
+	Ended with the membership (MembershipEnded).
+end note
+
+note bottom of internal_permission_assignment
+	The exception: reason and expiry required.
+	Active = not ended and not expired.
+end note
+
+legend bottom left
+	primary_key(primary key)
+	foreign_key(foreign key)
+	unique_index(unique index — s: single column · c: composite)
+	""*"" not null
+	solid line: within the subsystem · dashed: another subsystem
+	columns ending in _by reference account (CM-13)
+endlegend
+
+@enduml

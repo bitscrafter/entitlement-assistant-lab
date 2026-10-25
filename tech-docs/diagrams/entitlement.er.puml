@@ -1,0 +1,169 @@
+@startuml entitlement
+
+!define primary_key(x) <i><color:#7B5A12><&key></color>x</i>
+!define foreign_key(x) <i><color:#A0A0A0><&key></color>x</i>
+!define unique_index(x) <i><color:#5050A0><&flash></color>x</i>
+
+skinparam {
+	classBackgroundColor transparent
+	classheaderBackgroundColor #FCDA72
+	arrowColor #2688D4
+	classBorderColor #2688D4
+	handwritten false
+	shadowing false
+	noteBackgroundColor #E0E0E0
+	noteBorderColor #C0C0C0
+	maxMessageSize 200
+	svgLinkTarget _blank
+	roundCorner 5
+
+	linetype ortho
+	pageMargin 50
+}
+
+hide circle
+
+<style>
+	legend {
+		BackgroundColor #F9F9F9
+		LineColor #A0A0A0
+		Margin 50
+		Padding 15
+		RoundCorner 10
+	}
+</style>
+
+title Entitlement — data model
+
+entity "**subscription**" as subscription {
+	primary_key(subscription_id (pk))
+	__
+	foreign_key(account_id (fk customer_account: Standalone))
+	foreign_key(ended_by (fk account))
+	__
+	unique_index(account_id (s idx where not ended))
+	__
+	* subscription_id : uuid «sub_…»
+	* account_id : uuid
+	* started_at : timestamptz
+	ended_at : timestamptz
+	ended_by : uuid
+	end_reason : text (Canceled | CustomerRemoved)
+}
+
+entity "**subscription_term**" as subscription_term {
+	primary_key(term_id (pk))
+	__
+	foreign_key(subscription_id (fk subscription))
+	foreign_key(plan_key (fk plan))
+	foreign_key(created_by (fk account: internal))
+	foreign_key(ended_by (fk account))
+	__
+	* term_id : uuid «trm_…»
+	* subscription_id : uuid
+	* plan_key : text
+	* source : text (FreePlan | Payment | Contract | Trial | Courtesy | Complimentary)
+	* starts_at : timestamptz
+	scheduled_end_at : timestamptz (immutable; empty only for FreePlan, Contract, Complimentary)
+	ended_at : timestamptz (set when cut short)
+	ended_by : uuid
+	end_reason : text (PlanChanged | SubscriptionEnded)
+	* created_by : uuid
+}
+
+entity "**subscription_addon**" as subscription_addon {
+	primary_key(subscription_addon_id (pk))
+	__
+	foreign_key(subscription_id (fk subscription))
+	foreign_key(addon_key (fk addon))
+	foreign_key(ended_by (fk account))
+	__
+	unique_index(subscription_id + addon_key (c idx where not ended))
+	__
+	* subscription_addon_id : uuid «sad_…»
+	* subscription_id : uuid
+	* addon_key : text
+	* started_at : timestamptz
+	ended_at : timestamptz
+	ended_by : uuid
+	end_reason : text (Removed | IncludedByPlan | NotEligible | SubscriptionEnded)
+}
+
+entity "**entitlement_grant**" as entitlement_grant {
+	primary_key(grant_id (pk))
+	__
+	foreign_key(subscription_id (fk subscription))
+	foreign_key(feature_key (fk feature))
+	foreign_key(granted_by (fk account))
+	foreign_key(ended_by (fk account))
+	__
+	* grant_id : uuid «grt_…»
+	* subscription_id : uuid
+	* feature_key : text
+	quota : integer (> 0)
+	* reason : text
+	* granted_by : uuid
+	* starts_at : timestamptz
+	* expires_at : timestamptz
+	ended_at : timestamptz
+	ended_by : uuid
+	end_reason : text (Revoked | Expired | SubscriptionEnded)
+}
+
+entity "**customer_account**\n<size:10>Account subsystem</size>" as customer_account #F7F7F7 ##[dashed]A0A0A0 {
+	primary_key(account_id (pk))
+}
+
+entity "**plan · addon · feature**\n<size:10>Product</size>" as product #F7F7F7 ##[dashed]A0A0A0 {
+	primary_key(plan_key)
+	primary_key(addon_key)
+	primary_key(feature_key)
+}
+
+' Relationships
+' || 1
+' |o, o| 0 or 1
+' }o, o{ 0 to n
+' }|, |{ 1 to n
+
+customer_account ||..o{ subscription : subscribes
+subscription ||--|{ subscription_term : is covered by
+subscription ||--o{ subscription_addon : includes
+subscription ||--o{ entitlement_grant : receives
+product ||..o{ subscription_term : plan
+product ||..o{ subscription_addon : add-on
+product ||..o{ entitlement_grant : feature
+
+note right of subscription
+	A fact in time: in force while ended_at is empty.
+	Only a Standalone customer account subscribes;
+	at most one subscription in force per account.
+end note
+
+note bottom of subscription_term
+	One timeline: which plan, and why it is covered.
+	Terms never overlap. Nothing works (plan, add-ons,
+	grants) unless a term covers now; its plan is the
+	current plan. FreePlan terms only for Free plans.
+	Terms never start in the future.
+end note
+
+note bottom of entitlement_grant
+	Only where it adds something: an unmetered
+	feature the account lacks, or a metered quota
+	(added to the total). Active = not ended and
+	not expired; sys_grant_expiry records the end.
+	Ends with its subscription (SubscriptionEnded).
+	Support records which change request created it.
+end note
+
+legend bottom left
+	primary_key(primary key)
+	foreign_key(foreign key)
+	unique_index(unique index — s: single column · c: composite)
+	""*"" not null
+	solid line: within the subsystem · dashed: another subsystem
+	columns ending in _by reference account (CM-13)
+endlegend
+
+@enduml

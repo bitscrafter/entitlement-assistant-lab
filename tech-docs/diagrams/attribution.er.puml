@@ -1,0 +1,130 @@
+@startuml attribution
+
+!define primary_key(x) <i><color:#7B5A12><&key></color>x</i>
+!define foreign_key(x) <i><color:#A0A0A0><&key></color>x</i>
+!define unique_index(x) <i><color:#5050A0><&flash></color>x</i>
+
+skinparam {
+	classBackgroundColor transparent
+	classheaderBackgroundColor #FCDA72
+	arrowColor #2688D4
+	classBorderColor #2688D4
+	handwritten false
+	shadowing false
+	noteBackgroundColor #E0E0E0
+	noteBorderColor #C0C0C0
+	maxMessageSize 200
+	svgLinkTarget _blank
+	roundCorner 5
+
+	linetype ortho
+	pageMargin 50
+}
+
+hide circle
+
+<style>
+	legend {
+		BackgroundColor #F9F9F9
+		LineColor #A0A0A0
+		Margin 50
+		Padding 15
+		RoundCorner 10
+	}
+</style>
+
+title Attribution — data model
+
+entity "**audit_chain_record**" as audit_chain_record {
+	primary_key(audit_chain_record_id (pk))
+	__
+	__
+	unique_index(sequence_number (s idx))
+	__
+	* audit_chain_record_id : uuid «aud_…»
+	* sequence_number : bigint
+	* occurred_at : timestamptz
+	actor_account_id : uuid (soft reference; empty only for a failed sign-in)
+	session_id : uuid (the session token's sid)
+	* trace_id : text (W3C trace context)
+	* action_key : text (permission keys + session and lifecycle events)
+	* audit_outcome : text (Allow | Deny | Conditional | Succeeded | Failed)
+	policy_set_version : text (soft reference)
+	subject_account_id : uuid (soft reference)
+	case_id : uuid (soft reference)
+	change_request_id : uuid (soft reference)
+	* detail : jsonb (typed per action_key)
+	* hash_key_id : text
+	* previous_hash : bytea (32 bytes)
+	* record_hash : bytea (32 bytes, HMAC-SHA-256)
+}
+
+entity "**audit_participant**" as audit_participant {
+	primary_key(audit_chain_record_id + participant_role + account_id (pk))
+	__
+	foreign_key(audit_chain_record_id (fk audit_chain_record))
+	__
+	* audit_chain_record_id : uuid
+	* participant_role : text (Contact | Requester | Approver)
+	* account_id : uuid (soft reference)
+}
+
+entity "**audit_reason**" as audit_reason {
+	primary_key(audit_chain_record_id + reason_code (pk))
+	__
+	foreign_key(audit_chain_record_id (fk audit_chain_record))
+	__
+	* audit_chain_record_id : uuid
+	* reason_code : text (access. | entitlement. | policy. | account. | session. | support.)
+}
+
+entity "**audit_chain_head**" as audit_chain_head {
+	primary_key(chain_head_id (pk))
+	__
+	* chain_head_id : integer (always 1)
+	* last_sequence_number : bigint
+	* last_record_hash : bytea
+	* updated_at : timestamptz
+}
+
+' Relationships
+' || 1
+' |o, o| 0 or 1
+' }o, o{ 0 to n
+' }|, |{ 1 to n
+
+audit_chain_record ||--o{ audit_participant : involves
+audit_chain_record ||--o{ audit_reason : explained by
+
+note right of audit_chain_record
+	Append-only: the application's database role
+	has INSERT and SELECT only.
+	record_hash = HMAC-SHA-256 (key hash_key_id) over
+	the RFC 8785 canonical JSON of the whole record,
+	including previous_hash, its participants and reasons.
+	previous_hash = record_hash of sequence_number - 1.
+	Every reference (accounts, case, change request,
+	policy set) is soft: attribution is a sink and
+	depends on no table (CM-15).
+end note
+
+note bottom of audit_chain_head
+	One row: the last sequence number and hash.
+	Locked (FOR UPDATE) at the last step of the
+	audited transaction; next = last + 1.
+end note
+
+note bottom of audit_participant
+	Everyone involved other than the actor
+	(who executed) and the subject (acted on).
+end note
+
+legend bottom left
+	primary_key(primary key)
+	foreign_key(foreign key)
+	unique_index(unique index — s: single column · c: composite)
+	""*"" not null
+	solid line: within the subsystem · dashed: another subsystem
+endlegend
+
+@enduml

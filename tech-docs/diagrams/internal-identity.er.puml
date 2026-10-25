@@ -1,0 +1,154 @@
+@startuml internal-identity
+
+!define primary_key(x) <i><color:#7B5A12><&key></color>x</i>
+!define foreign_key(x) <i><color:#A0A0A0><&key></color>x</i>
+!define unique_index(x) <i><color:#5050A0><&flash></color>x</i>
+
+skinparam {
+	classBackgroundColor transparent
+	classheaderBackgroundColor #FCDA72
+	arrowColor #2688D4
+	classBorderColor #2688D4
+	handwritten false
+	shadowing false
+	noteBackgroundColor #E0E0E0
+	noteBorderColor #C0C0C0
+	maxMessageSize 200
+	svgLinkTarget _blank
+	roundCorner 5
+
+	linetype ortho
+	pageMargin 50
+}
+
+hide circle
+
+<style>
+	legend {
+		BackgroundColor #F9F9F9
+		LineColor #A0A0A0
+		Margin 50
+		Padding 15
+		RoundCorner 10
+	}
+</style>
+
+title Internal Identity — data model
+
+entity "**internal_identity**" as internal_identity {
+	primary_key(internal_identity_id (pk))
+	__
+	unique_index(internal_identity_id + identity_kind (c idx))
+	__
+	* internal_identity_id : uuid «emp_… | sys_…»
+	* identity_kind : text (Employee | System)
+	* identity_status : text (Active | Suspended | Terminated)
+	* created_at : timestamptz
+}
+
+entity "**employee**" as employee {
+	primary_key(internal_identity_id (pk))
+	__
+	foreign_key(internal_identity_id + identity_kind (fk internal_identity))
+	foreign_key(department_key (fk department))
+	foreign_key(job_function_key (fk job_function))
+	__
+	unique_index(email (s idx))
+	__
+	* internal_identity_id : uuid
+	* department_key : text
+	* job_function_key : text
+	* identity_kind : text = 'Employee'
+	* email : text (normalized)
+	* given_name : text
+	* family_name : text
+	* job_level : integer (> 0)
+}
+
+entity "**system_identity**" as system_identity {
+	primary_key(internal_identity_id (pk))
+	__
+	foreign_key(internal_identity_id + identity_kind (fk internal_identity))
+	__
+	unique_index(name (s idx))
+	__
+	* internal_identity_id : uuid
+	* identity_kind : text = 'System'
+	* name : text
+	* description : text
+}
+
+entity "**employee_credential**" as employee_credential {
+	primary_key(credential_id (pk))
+	__
+	foreign_key(employee_id (fk employee))
+	__
+	unique_index(employee_id + credential_kind (c idx where not replaced))
+	__
+	* credential_id : uuid «crd_…»
+	* employee_id : uuid
+	* credential_kind : text (Password)
+	* password_hash : text (PHC string)
+	* created_at : timestamptz
+	replaced_at : timestamptz
+}
+
+entity "**department**" as department {
+	primary_key(department_key (pk))
+	__
+	* department_key : text
+	* name : text
+}
+
+entity "**job_function**" as job_function {
+	primary_key(job_function_key (pk))
+	__
+	* job_function_key : text
+	* name : text
+}
+
+entity "**internal_account**\n<size:10>Account subsystem</size>" as internal_account #F7F7F7 ##[dashed]A0A0A0 {
+	foreign_key(internal_identity_id + identity_kind (fk internal_identity))
+}
+
+' Relationships
+' || 1
+' |o, o| 0 or 1
+' }o, o{ 0 to n
+' }|, |{ 1 to n
+
+internal_identity ||--o| employee : is a
+internal_identity ||--o| system_identity : is a
+internal_identity ||..o{ internal_account : operates through
+employee ||--o{ employee_credential : proves identity with
+department ||--o{ employee : employs
+job_function ||--o{ employee : performed by
+
+note right of internal_identity
+	Supertype of every identity that belongs to
+	the provider. The id prefix shows the kind:
+	emp_… for employees, sys_… for system identities.
+	Never deleted: ending is a status.
+end note
+
+note bottom of employee_credential
+	Employees only: the foreign key targets the
+	employee subtype. One current credential per
+	kind; replaced credentials keep their history.
+	PHC string: $pbkdf2-sha256$i=…$<salt>$<hash>
+end note
+
+note bottom of system_identity
+	Automated actors, seeded:
+	sys_grant_expiry, sys_approval_process, …
+	No credentials: they run inside the Worker.
+end note
+
+legend bottom left
+	primary_key(primary key)
+	foreign_key(foreign key)
+	unique_index(unique index — s: single column · c: composite)
+	""*"" not null
+endlegend
+
+@enduml

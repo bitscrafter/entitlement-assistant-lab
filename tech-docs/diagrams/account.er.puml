@@ -1,0 +1,148 @@
+@startuml account
+
+!define primary_key(x) <i><color:#7B5A12><&key></color>x</i>
+!define foreign_key(x) <i><color:#A0A0A0><&key></color>x</i>
+!define unique_index(x) <i><color:#5050A0><&flash></color>x</i>
+
+skinparam {
+	classBackgroundColor transparent
+	classheaderBackgroundColor #FCDA72
+	arrowColor #2688D4
+	classBorderColor #2688D4
+	handwritten false
+	shadowing false
+	noteBackgroundColor #E0E0E0
+	noteBorderColor #C0C0C0
+	maxMessageSize 200
+	svgLinkTarget _blank
+	roundCorner 5
+
+	linetype ortho
+	pageMargin 50
+}
+
+hide circle
+
+<style>
+	legend {
+		BackgroundColor #F9F9F9
+		LineColor #A0A0A0
+		Margin 50
+		Padding 15
+		RoundCorner 10
+	}
+</style>
+
+title Account — data model
+
+entity "**account**" as account {
+	primary_key(account_id (pk))
+	__
+	unique_index(account_id + account_kind (c idx))
+	__
+	* account_id : uuid «acc_… | iac_…»
+	* account_kind : text (Customer | Internal)
+	* account_display_name : text
+	* account_status : text (Active | Suspended)
+	* version : integer
+	* created_at : timestamptz
+}
+
+entity "**customer_account**" as customer_account {
+	primary_key(account_id (pk))
+	__
+	foreign_key(account_id + account_kind (fk account))
+	foreign_key(customer_id + customer_kind (fk customer))
+	__
+	unique_index(customer_id (s idx))
+	__
+	unique_index(account_id + customer_kind (c idx))
+	__
+	* account_id : uuid
+	* account_kind : text = 'Customer'
+	* customer_id : uuid
+	* customer_kind : text (Organization | Individual)
+	* account_category : text (Standalone | OrganizationMember)
+}
+
+entity "**internal_account**" as internal_account {
+	primary_key(account_id (pk))
+	__
+	foreign_key(account_id + account_kind (fk account))
+	foreign_key(internal_identity_id + identity_kind (fk internal_identity))
+	__
+	unique_index(internal_identity_id (s idx))
+	__
+	unique_index(account_id + identity_kind (c idx))
+	__
+	* account_id : uuid
+	* account_kind : text = 'Internal'
+	* internal_identity_id : uuid
+	* identity_kind : text (Employee | System)
+}
+
+entity "**account_hold**" as account_hold {
+	primary_key(hold_id (pk))
+	__
+	foreign_key(account_id (fk account))
+	foreign_key(placed_by (fk account))
+	foreign_key(released_by (fk account))
+	__
+	* hold_id : uuid «hld_…»
+	* account_id : uuid
+	* hold_reason : text (OperationalSuspension | CustomerRemoved | NoActiveMembership | InternalIdentityInactive)
+	* placed_at : timestamptz
+	* placed_by : uuid
+	released_at : timestamptz
+	released_by : uuid
+}
+
+entity "**customer**\n<size:10>Customer Identity</size>" as customer #F7F7F7 ##[dashed]A0A0A0 {
+	primary_key(customer_id (pk))
+}
+
+entity "**internal_identity**\n<size:10>Internal Identity</size>" as internal_identity #F7F7F7 ##[dashed]A0A0A0 {
+	primary_key(internal_identity_id (pk))
+}
+
+' Relationships
+' || 1
+' |o, o| 0 or 1
+' }o, o{ 0 to n
+' }|, |{ 1 to n
+
+account ||--o| customer_account : is a
+account ||--o| internal_account : is a
+customer ||..o{ customer_account : operates through
+internal_identity ||..o{ internal_account : operates through
+account ||--o{ account_hold : is suspended by
+
+note right of account
+	Supertype of every account: what acts,
+	and what is acted on. Every *_by column
+	in every subsystem references account.
+	account_status = Suspended exactly when an
+	unreleased account_hold exists (same transaction).
+end note
+
+note bottom of customer_account
+	Constrained to one account per customer (CM-6)
+	(unique customer_id; shaped for many).
+	account_category is immutable.
+	CHECK: an Organization's account is Standalone.
+end note
+
+note bottom of internal_account
+	Constrained to one account per identity (CM-6)
+	(unique internal_identity_id; shaped for many).
+end note
+
+legend bottom left
+	primary_key(primary key)
+	foreign_key(foreign key)
+	unique_index(unique index — s: single column · c: composite)
+	""*"" not null
+	solid line: within the subsystem · dashed: another subsystem
+endlegend
+
+@enduml

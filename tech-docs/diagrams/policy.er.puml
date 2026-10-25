@@ -1,0 +1,143 @@
+@startuml policy
+
+!define primary_key(x) <i><color:#7B5A12><&key></color>x</i>
+!define foreign_key(x) <i><color:#A0A0A0><&key></color>x</i>
+!define unique_index(x) <i><color:#5050A0><&flash></color>x</i>
+
+skinparam {
+	classBackgroundColor transparent
+	classheaderBackgroundColor #FCDA72
+	arrowColor #2688D4
+	classBorderColor #2688D4
+	handwritten false
+	shadowing false
+	noteBackgroundColor #E0E0E0
+	noteBorderColor #C0C0C0
+	maxMessageSize 200
+	svgLinkTarget _blank
+	roundCorner 5
+
+	linetype ortho
+	pageMargin 50
+}
+
+hide circle
+
+<style>
+	legend {
+		BackgroundColor #F9F9F9
+		LineColor #A0A0A0
+		Margin 50
+		Padding 15
+		RoundCorner 10
+	}
+</style>
+
+title Policy — data model
+
+entity "**policy_set**" as policy_set {
+	primary_key(policy_set_version (pk))
+	__
+	foreign_key(registered_by (fk account))
+	__
+	* policy_set_version : text (SHA-256, base64url, no padding)
+	* scm_revision : text (source control revision)
+	* registered_at : timestamptz
+	* registered_by : uuid
+}
+
+entity "**policy**" as policy {
+	primary_key(policy_set_version + policy_key (pk))
+	__
+	foreign_key(policy_set_version (fk policy_set))
+	__
+	* policy_set_version : text
+	* policy_key : text
+	* description : text
+	* applies_when : text (CEL predicate)
+	* requires : text (CEL predicate)
+	* unmet_outcome : text (Deny | Conditional)
+}
+
+entity "**policy_governed_action**" as policy_governed_action {
+	primary_key(policy_set_version + policy_key + action_key (pk))
+	__
+	foreign_key(policy_set_version + policy_key (fk policy))
+	__
+	* policy_set_version : text
+	* policy_key : text
+	* action_key : text
+}
+
+entity "**policy_prerequisite**" as policy_prerequisite {
+	primary_key(policy_set_version + policy_key + prerequisite_kind (pk))
+	__
+	foreign_key(policy_set_version + policy_key (fk policy))
+	foreign_key(fulfilled_by_permission (fk permission))
+	__
+	* policy_set_version : text
+	* policy_key : text
+	* prerequisite_kind : text (Approval)
+	* fulfilled_by_permission : text
+}
+
+entity "**policy_set_activation**" as policy_set_activation {
+	primary_key(activation_id (pk))
+	__
+	foreign_key(policy_set_version (fk policy_set))
+	foreign_key(activated_by (fk account))
+	foreign_key(ended_by (fk account))
+	__
+	* activation_id : uuid «psa_…»
+	* policy_set_version : text
+	* activated_at : timestamptz
+	* activated_by : uuid
+	ended_at : timestamptz
+	ended_by : uuid
+}
+
+entity "**permission**\n<size:10>Access subsystem</size>" as permission #F7F7F7 ##[dashed]A0A0A0 {
+	primary_key(permission_key (pk))
+}
+
+' Relationships
+' || 1
+' |o, o| 0 or 1
+' }o, o{ 0 to n
+' }|, |{ 1 to n
+
+policy_set ||--|{ policy : contains
+policy ||--|{ policy_governed_action : governs
+policy ||--o{ policy_prerequisite : requires first
+permission ||..o{ policy_prerequisite : fulfilled by
+policy_set ||--o{ policy_set_activation : is activated by
+
+note right of policy_set
+	Immutable: the application's database role
+	has INSERT and SELECT only on every policy table.
+	policy_set_version = SHA-256 of the set's canonical
+	JSON (RFC 8785); anyone can recompute it from the file.
+end note
+
+note bottom of policy
+	A requirement in positive form: when applies_when
+	holds and requires does not, unmet_outcome applies.
+	Conditional names its prerequisites.
+end note
+
+note bottom of policy_set_activation
+	One active set; two only during a rollout
+	(activation use case). A Worker decides only
+	when its bundled set is active.
+end note
+
+legend bottom left
+	primary_key(primary key)
+	foreign_key(foreign key)
+	unique_index(unique index — s: single column · c: composite)
+	""*"" not null
+	solid line: within the subsystem · dashed: another subsystem
+	columns ending in _by reference account (CM-13)
+endlegend
+
+@enduml

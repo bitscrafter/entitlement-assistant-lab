@@ -1,0 +1,85 @@
+# Data Model
+
+|  |  |
+| :--- | :--- |
+| **Purpose** | The model of the system of record (PostgreSQL), designed one subsystem at a time. The case conversation is not part of it: it lives in each case agent's own SQLite storage. |
+| **Status** | Every subsystem ruled by the owner (2026-10-25) |
+| **References** | • Decisions: [`../adr/README.md`](../adr/README.md)<br>• Diagrams: [`../diagrams/`](../diagrams/)<br>• Proposal and glossary: [`../entitlement-agent-proposal.md`](../entitlement-agent-proposal.md) |
+
+## Subsystems
+
+| Subsystem | Scope | Status | Document |
+| --- | --- | --- | --- |
+| Customer Identity | customers (organizations, individuals), memberships | Ruled | [`customer-identity.md`](customer-identity.md) |
+| Account | accounts (customer and internal), account category, status and holds, session account | Ruled | [`account.md`](account.md) |
+| Internal Identity | employees (with department, job function, level), system identities, employee credentials | Ruled | [`internal-identity.md`](internal-identity.md) |
+| Access | permissions, roles, account, birthright, and internal assignments | Ruled | [`access.md`](access.md) |
+| Product | products, features and operations, plan ladders, plans, add-ons, bundles, eligibility | Ruled | [`product.md`](product.md) |
+| Entitlement | subscriptions, subscription terms, add-ons, grants, effective entitlements | Ruled | [`entitlement.md`](entitlement.md) |
+| Support | cases (subject, contact, summary), case assignments, change requests, change approvals | Ruled | [`support.md`](support.md) |
+| Attribution | audit records, participants, reasons, keyed hash chain; traces and logs outside the database | Ruled | [`attribution.md`](attribution.md) |
+| Policy | policy sets, policies, governed actions, prerequisites, activations | Ruled | [`policy.md`](policy.md) |
+| Authorization | the decision (a pipeline of handlers over Account, Access, Entitlement, Policy); the context contract per action; no tables | Ruled | [`../adr/authorization.md`](../adr/authorization.md) |
+
+Every subsystem is designed. [`draft-model.md`](draft-model.md) is the superseded first draft, kept for history.
+
+## Conventions
+
+- **Identifiers** (CM-14). Entities with a lifecycle get UUIDv7 ids, generated in the application and stored as
+  native `uuid`; externally they are shown as a kind prefix plus unpadded base64url. Reference data uses readable kebab-case keys
+  (`plan_key = 'business'`, CM-12). Test fixtures use readable aliases after the prefix (`acc_acme`).
+- **Timestamp names.** `_at` for an instant. A fact that began when it was recorded uses `started_at`; a span
+  whose beginning is a stated instant, possibly different from when the row was written, uses `starts_at`
+  (terms, grants). Ends follow the same rule (`ended_at`, `expires_at`, `scheduled_end_at`).
+- **Names.** Tables are singular and `snake_case`, and avoid SQL reserved words.
+- **Time** is `timestamptz`, in UTC.
+- **Enumerations** are `text` columns with `CHECK` constraints, mirrored by TypeScript union types. Their names end
+  in a role word: `_status`, `_kind`, `_reason`, `_category`, `_role`, `_outcome`, or are `source`.
+- **Shape for many, constrain to one.** Where a relationship is limited to one for simplicity, the table
+  is shaped for many and a constraint enforces one.
+- **Foreign keys point down the layer order** (CM-15). From the bottom up: customer identity and internal
+  identity → account → product → access → entitlement → policy → authorization → support. Attribution is a
+  sink with soft references only. Upward links are soft references; cascades run upward through use cases.
+- **Never delete identities or history** (CM-7).
+- **Status for lifecycles, timestamps for facts** (CM-11).
+- **The database enforces structure; code enforces rules** (CM-13): keys, types, uniqueness, and simple checks in the
+  database; rules that need other rows or time in use cases, whose contracts name what they rely on
+  (`@relies-on db:`). Every `*_by` column references `account`, except in the identity subsystems below Account and in
+  attribution, where they are soft references (CM-15).
+- **Diagrams** use the project's PlantUML ER style, one diagram per subsystem, rendered to SVG beside
+  the source.
+
+## Id prefix register
+
+| Prefix | Entity | Subsystem |
+| --- | --- | --- |
+| `cus_` | customer (organization or individual) | Customer Identity |
+| `mbr_` | membership | Customer Identity |
+| `emp_` | internal identity of an employee | Internal Identity |
+| `sys_` | internal identity of a system | Internal Identity |
+| `crd_` | employee credential | Internal Identity |
+| `acc_` | customer account | Account |
+| `iac_` | internal account | Account |
+| `hld_` | account hold | Account |
+| `ara_` | account role assignment | Access |
+| `ira_` | internal role assignment | Access |
+| `ipa_` | internal permission assignment | Access |
+| `sub_` | subscription | Entitlement |
+| `trm_` | subscription term | Entitlement |
+| `sad_` | subscription add-on | Entitlement |
+| `grt_` | entitlement grant | Entitlement |
+| `cse_` | support case | Support |
+| `asg_` | case assignment | Support |
+| `chg_` | change request | Support |
+| `apr_` | change approval (also its process instance id) | Support |
+| `act_` | policy set activation | Policy |
+| `aud_` | audit chain record | Attribution |
+| `ses_` | session (`sid`) | Account |
+| `jti_` | session token id | Account |
+
+A prefix is shown wherever an id leaves the database; a value with the wrong prefix for its field is
+rejected as malformed (not found).
+
+## Not addressed
+
+Production concerns are collected in [`../production-readiness.md`](../production-readiness.md).

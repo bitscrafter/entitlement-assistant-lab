@@ -1,0 +1,124 @@
+@startuml customer-identity
+
+!define primary_key(x) <i><color:#7B5A12><&key></color>x</i>
+!define foreign_key(x) <i><color:#A0A0A0><&key></color>x</i>
+!define unique_index(x) <i><color:#5050A0><&flash></color>x</i>
+
+skinparam {
+	classBackgroundColor transparent
+	classheaderBackgroundColor #FCDA72
+	arrowColor #2688D4
+	classBorderColor #2688D4
+	handwritten false
+	shadowing false
+	noteBackgroundColor #E0E0E0
+	noteBorderColor #C0C0C0
+	maxMessageSize 200
+	svgLinkTarget _blank
+	roundCorner 5
+
+	linetype ortho
+	pageMargin 50
+}
+
+hide circle
+
+<style>
+	legend {
+		BackgroundColor #F9F9F9
+		LineColor #A0A0A0
+		Margin 50
+		Padding 15
+		RoundCorner 10
+	}
+</style>
+
+title Customer Identity — data model
+
+entity "**customer**" as customer {
+	primary_key(customer_id (pk))
+	__
+	unique_index(customer_id + customer_kind (c idx))
+	__
+	* customer_id : uuid «cus_…»
+	* customer_kind : text (Organization | Individual)
+	* customer_status : text (Active | Removed)
+	* created_at : timestamptz
+}
+
+entity "**organization**" as organization {
+	primary_key(customer_id (pk))
+	__
+	foreign_key(customer_id + customer_kind (fk customer))
+	__
+	unique_index(primary_domain (s idx))
+	__
+	* customer_id : uuid
+	* customer_kind : text = 'Organization'
+	* legal_name : text
+	primary_domain : text
+	* created_at : timestamptz
+}
+
+entity "**individual**" as individual {
+	primary_key(customer_id (pk))
+	__
+	foreign_key(customer_id + customer_kind (fk customer))
+	__
+	unique_index(email (s idx))
+	__
+	* customer_id : uuid
+	* customer_kind : text = 'Individual'
+	* email : text (normalized)
+	* given_name : text
+	* family_name : text
+	* created_at : timestamptz
+}
+
+entity "**organization_membership**" as organization_membership {
+	primary_key(membership_id (pk))
+	__
+	foreign_key(organization_id (fk organization))
+	foreign_key(individual_id (fk individual))
+	__
+	unique_index(individual_id (s idx where not ended))
+	__
+	* membership_id : uuid «mbr_…»
+	* organization_id : uuid
+	* individual_id : uuid
+	* joined_at : timestamptz
+	ended_at : timestamptz
+	end_reason : text (Left | Removed)
+}
+
+entity "**customer_account**\n<size:10>Account subsystem</size>" as customer_account #F7F7F7 ##[dashed]A0A0A0 {
+	foreign_key(customer_id + customer_kind (fk customer))
+}
+
+' Relationships
+' || 1
+' |o, o| 0 or 1
+' }o, o{ 0 to n
+' }|, |{ 1 to n
+
+customer ||--o| organization : is a
+customer ||--o| individual : is a
+organization ||--o{ organization_membership : has members
+individual ||--o{ organization_membership : belongs through
+customer ||..o{ customer_account : operates through
+
+note right of customer
+	Supertype. Exactly one subtype row per
+	customer, of the kind named by customer_kind.
+	Never deleted: removal is a status.
+end note
+
+legend bottom left
+	primary_key(primary key)
+	foreign_key(foreign key)
+	unique_index(unique index — s: single column · c: composite)
+	""*"" not null
+	solid line: within the subsystem · dashed: another subsystem
+endlegend
+
+@enduml

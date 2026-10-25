@@ -1,0 +1,188 @@
+@startuml product
+
+!define primary_key(x) <i><color:#7B5A12><&key></color>x</i>
+!define foreign_key(x) <i><color:#A0A0A0><&key></color>x</i>
+!define unique_index(x) <i><color:#5050A0><&flash></color>x</i>
+
+skinparam {
+	classBackgroundColor transparent
+	classheaderBackgroundColor #FCDA72
+	arrowColor #2688D4
+	classBorderColor #2688D4
+	handwritten false
+	shadowing false
+	noteBackgroundColor #E0E0E0
+	noteBorderColor #C0C0C0
+	maxMessageSize 200
+	svgLinkTarget _blank
+	roundCorner 5
+
+	linetype ortho
+	pageMargin 50
+}
+
+hide circle
+
+<style>
+	legend {
+		BackgroundColor #F9F9F9
+		LineColor #A0A0A0
+		Margin 50
+		Padding 15
+		RoundCorner 10
+	}
+</style>
+
+title Product — data model
+
+entity "**product**" as product {
+	primary_key(product_key (pk))
+	__
+	* product_key : text
+	* name : text
+	* description : text
+}
+
+entity "**feature**" as feature {
+	primary_key(feature_key (pk))
+	__
+	foreign_key(product_key (fk product))
+	__
+	* feature_key : text
+	* product_key : text
+	* name : text
+	* description : text
+	metered_unit : text (empty = not metered)
+}
+
+entity "**feature_operation**" as feature_operation {
+	primary_key(feature_key + operation (pk))
+	__
+	foreign_key(feature_key (fk feature))
+	__
+	* feature_key : text
+	* operation : text
+	* description : text
+}
+
+entity "**plan_ladder**" as plan_ladder {
+	primary_key(plan_ladder_key (pk))
+	__
+	* plan_ladder_key : text
+	* name : text
+	* description : text
+}
+
+entity "**plan**" as plan {
+	primary_key(plan_key (pk))
+	__
+	foreign_key(plan_ladder_key (fk plan_ladder))
+	__
+	unique_index(plan_ladder_key + tier_rank (c idx))
+	__
+	* plan_key : text
+	* plan_ladder_key : text
+	* name : text
+	* tier_rank : integer (> 0)
+	* plan_category : text (Free | Paid)
+}
+
+entity "**addon**" as addon {
+	primary_key(addon_key (pk))
+	__
+	* addon_key : text
+	* name : text
+	* description : text
+}
+
+entity "**plan_feature_bundle**" as plan_feature_bundle {
+	primary_key(plan_key + feature_key (pk))
+	__
+	foreign_key(plan_key (fk plan))
+	foreign_key(feature_key (fk feature))
+	__
+	* plan_key : text
+	* feature_key : text
+	quota : integer (> 0)
+}
+
+entity "**addon_feature_bundle**" as addon_feature_bundle {
+	primary_key(addon_key + feature_key (pk))
+	__
+	foreign_key(addon_key (fk addon))
+	foreign_key(feature_key (fk feature))
+	__
+	* addon_key : text
+	* feature_key : text
+	quota : integer (> 0)
+}
+
+entity "**addon_plan_eligibility**" as addon_plan_eligibility {
+	primary_key(addon_key + plan_key (pk))
+	__
+	foreign_key(addon_key (fk addon))
+	foreign_key(plan_key (fk plan))
+	__
+	* addon_key : text
+	* plan_key : text
+}
+
+entity "**permission**\n<size:10>Access subsystem</size>" as permission #F7F7F7 ##[dashed]A0A0A0 {
+	foreign_key(feature_key + operation (fk feature_operation))
+}
+
+' Relationships
+' || 1
+' |o, o| 0 or 1
+' }o, o{ 0 to n
+' }|, |{ 1 to n
+
+product ||--|{ feature : offers
+feature ||--o{ feature_operation : allows
+feature_operation ||..o{ permission : named by
+
+plan_ladder ||--|{ plan : ranks
+plan ||--o{ plan_feature_bundle : includes
+feature ||--o{ plan_feature_bundle : included in
+addon ||--o{ addon_feature_bundle : includes
+feature ||--o{ addon_feature_bundle : included in
+addon ||--o{ addon_plan_eligibility : can join
+plan ||--o{ addon_plan_eligibility : accepts
+
+note right of plan
+	Not owned by a product. A plan's products are
+	the products of the features it includes:
+	one product, or several (a suite).
+	tier_rank orders plans within their ladder:
+	upgrade and downgrade only compare plans
+	of the same ladder.
+end note
+
+note right of addon
+	Not owned by a product either: its features
+	may come from several products.
+end note
+
+note bottom of plan_feature_bundle
+	quota: maximum of a metered feature.
+	Forbidden on an unmetered feature;
+	empty on a metered one = unlimited.
+	(Catalog validation at load time.)
+end note
+
+note bottom of addon_plan_eligibility
+	Only where the add-on adds something:
+	an unmetered feature the plan lacks,
+	or a metered quota (added to the plan's).
+	(Catalog validation at load time.)
+end note
+
+legend bottom left
+	primary_key(primary key)
+	foreign_key(foreign key)
+	unique_index(unique index — s: single column · c: composite)
+	""*"" not null
+	solid line: within the subsystem · dashed: another subsystem
+endlegend
+
+@enduml

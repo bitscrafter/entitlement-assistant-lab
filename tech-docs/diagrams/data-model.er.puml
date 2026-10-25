@@ -1,0 +1,271 @@
+@startuml data-model
+title SUPERSEDED DRAFT, kept for history — see the subsystem diagrams\nEntitlement Agent — data model (system of record, PostgreSQL)
+
+hide circle
+skinparam linetype ortho
+skinparam entity {
+  BackgroundColor<<staff>> #EEF4FF
+  BackgroundColor<<customer>> #EFFAF0
+  BackgroundColor<<authorization>> #FFF6E5
+  BackgroundColor<<catalog>> #F5EEFF
+  BackgroundColor<<commercial>> #FFEFEF
+  BackgroundColor<<case>> #EEFAFA
+  BackgroundColor<<audit>> #F2F2F2
+}
+
+package "Staff identity" {
+  entity "csr" as csr <<staff>> {
+    * csr_id : text <<PK>> «csr_…»
+    --
+    * email : text <<UK>>
+    * display_name : text
+    * role_key : text <<FK role>>
+    * csr_status : enum (Active, Disabled)
+    * created_at : timestamptz
+  }
+
+  entity "csr_credential" as csr_credential <<staff>> {
+    * csr_id : text <<PK, FK csr>>
+    --
+    * password_hash : bytea
+    * salt : bytea
+    * iterations : integer
+    * algorithm : text (PBKDF2-SHA256)
+    * updated_at : timestamptz
+  }
+}
+
+package "Customer identity" {
+  entity "organization" as organization <<customer>> {
+    * organization_id : text <<PK>> «org_…»
+    --
+    * name : text
+    primary_domain : text
+    * created_at : timestamptz
+  }
+
+  entity "account" as account <<customer>> {
+    * account_id : text <<PK>> «acc_…»
+    --
+    * organization_id : text <<FK organization>>
+    * name : text
+    * account_status : enum (Active, Suspended)
+    * version : integer
+    * created_at : timestamptz
+  }
+
+  entity "customer_user" as customer_user <<customer>> {
+    * user_id : text <<PK>> «usr_…»
+    --
+    * email : text <<UK>>
+    * display_name : text
+    * created_at : timestamptz
+  }
+
+  entity "account_membership" as account_membership <<customer>> {
+    * account_id : text <<PK, FK account>>
+    * user_id : text <<PK, FK customer_user>>
+    --
+    * role_key : text <<FK role>>
+    * membership_status : enum (Active, Deactivated)
+    * created_at : timestamptz
+  }
+}
+
+package "Authorization" {
+  entity "role" as role <<authorization>> {
+    * role_key : text <<PK>>
+    --
+    * role_scope : enum (Csr, AccountMember)
+    * name : text
+    * description : text
+  }
+
+  entity "permission" as permission <<authorization>> {
+    * permission_key : text <<PK>>
+    --
+    * action : text
+    feature_key : text <<FK feature>>
+    * permission_scope : enum (Csr, AccountMember)
+    * description : text
+  }
+
+  entity "role_permission" as role_permission <<authorization>> {
+    * role_key : text <<PK, FK role>>
+    * permission_key : text <<PK, FK permission>>
+  }
+}
+
+package "Catalog" {
+  entity "feature" as feature <<catalog>> {
+    * feature_key : text <<PK>>
+    --
+    * name : text
+    * is_paid : boolean
+    * is_metered : boolean
+  }
+
+  entity "plan" as plan <<catalog>> {
+    * plan_key : text <<PK>>
+    --
+    * name : text
+    * tier_rank : integer <<UK>>
+  }
+
+  entity "addon" as addon <<catalog>> {
+    * addon_key : text <<PK>>
+    --
+    * name : text
+  }
+
+  entity "plan_feature_bundle" as plan_feature_bundle <<catalog>> {
+    * plan_key : text <<PK, FK plan>>
+    * feature_key : text <<PK, FK feature>>
+    --
+    limit_value : integer (null = unlimited)
+  }
+
+  entity "addon_feature_bundle" as addon_feature_bundle <<catalog>> {
+    * addon_key : text <<PK, FK addon>>
+    * feature_key : text <<PK, FK feature>>
+    --
+    limit_value : integer (null = unlimited)
+  }
+}
+
+package "Subscriptions and grants" {
+  entity "subscription" as subscription <<commercial>> {
+    * subscription_id : text <<PK>> «sub_…»
+    --
+    * account_id : text <<FK account, UK>>
+    * plan_key : text <<FK plan>>
+    * subscription_status : enum (Trialing, Active, PastDue, Canceled)
+    past_due_since : date
+    * started_at : timestamptz
+  }
+
+  entity "subscription_addon" as subscription_addon <<commercial>> {
+    * subscription_id : text <<PK, FK subscription>>
+    * addon_key : text <<PK, FK addon>>
+    --
+    * added_at : timestamptz
+  }
+
+  entity "entitlement_grant" as entitlement_grant <<commercial>> {
+    * grant_id : text <<PK>> «grt_…»
+    --
+    * account_id : text <<FK account>>
+    * feature_key : text <<FK feature>>
+    limit_value : integer
+    * reason : text
+    * granted_by_csr_id : text <<FK csr>>
+    case_request_id : text <<FK case_request>>
+    * starts_at : timestamptz
+    * expires_at : timestamptz
+    revoked_at : timestamptz
+    revoked_by : text (csr_id or system)
+  }
+}
+
+package "Cases" {
+  entity "support_case" as support_case <<case>> {
+    * case_id : text <<PK>> «case_…»
+    --
+    * owner_csr_id : text <<FK csr>>
+    account_id : text <<FK account>>
+    caller_user_id : text <<FK customer_user>>
+    * case_status : enum (Open, Closed)
+    * opened_at : timestamptz
+    closed_at : timestamptz
+  }
+
+  entity "case_request" as case_request <<case>> {
+    * case_request_id : text <<PK>> «creq_…»
+    --
+    * case_id : text <<FK support_case>>
+    * request_kind : enum (ChangePlan, GrantEntitlement, …)
+    * parameters : jsonb
+    * account_version : integer
+    * request_status : enum (AwaitingConfirmation, AwaitingApproval,\n Applied, Canceled, Refused, Expired)
+    * requested_by_csr_id : text <<FK csr>>
+    * requested_at : timestamptz
+    applied_at : timestamptz
+  }
+
+  entity "case_request_approval" as case_request_approval <<case>> {
+    * case_request_id : text <<PK, FK case_request>>
+    --
+    * approver_role_key : text <<FK role>>
+    * approval_status : enum (Pending, Approved, Denied, Expired)
+    decided_by_csr_id : text <<FK csr>>
+    comment : text
+    * requested_at : timestamptz
+    * expires_at : timestamptz
+    decided_at : timestamptz
+  }
+}
+
+package "Traceability" {
+  entity "audit_record" as audit_record <<audit>> {
+    * audit_record_id : text <<PK>>
+    --
+    * occurred_at : timestamptz
+    * principal_kind : enum (Csr, System, Anonymous)
+    principal_csr_id : text <<FK csr>>
+    * action : text
+    resource_type : text
+    resource_id : text
+    * decision : enum (Allow, Deny, RequiresApproval)
+    * reason_codes : text[]
+    * policy_set_version : text
+    case_id : text <<FK support_case>>
+    case_request_id : text <<FK case_request>>
+    detail : jsonb
+  }
+}
+
+' Staff identity
+csr ||--|| csr_credential : authenticates with
+csr }o--|| role : has
+
+' Customer identity
+organization ||--|{ account : owns
+account ||--o{ account_membership : has
+customer_user ||--o{ account_membership : belongs through
+account_membership }o--|| role : has
+
+' Authorization
+role ||--o{ role_permission : grants
+permission ||--o{ role_permission : granted by
+permission }o--o| feature : concerns
+
+' Catalog
+plan ||--o{ plan_feature_bundle : bundles
+feature ||--o{ plan_feature_bundle : bundled in
+addon ||--o{ addon_feature_bundle : bundles
+feature ||--o{ addon_feature_bundle : bundled in
+
+' Subscriptions and grants
+account ||--|| subscription : has
+subscription }o--|| plan : is on
+subscription ||--o{ subscription_addon : includes
+addon ||--o{ subscription_addon : included in
+account ||--o{ entitlement_grant : receives
+entitlement_grant }o--|| feature : is for
+entitlement_grant }o--|| csr : granted by
+entitlement_grant }o--o| case_request : created by
+
+' Cases
+csr ||--o{ support_case : owns
+support_case }o--o| account : is about
+support_case }o--o| customer_user : caller
+support_case ||--o{ case_request : contains
+case_request ||--o| case_request_approval : may need
+case_request_approval }o--o| csr : decided by
+
+' Traceability
+audit_record }o--o| csr : principal
+audit_record }o--o| support_case : within
+audit_record }o--o| case_request : about
+
+@enduml

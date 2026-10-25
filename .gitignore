@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+.env
+*.log
+.DS_Store
+coverage/
+
+# Transcripts are published at the end, redacted, under tech-docs/ (owner, 2026-10-25)
+prompt-history/

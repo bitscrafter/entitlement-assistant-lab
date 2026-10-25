@@ -1,0 +1,99 @@
+@startuml authorization-decision
+title The authorization decision — where each concept comes into play\n(a pipeline of handlers: every handler runs, except after a suspension)
+
+skinparam activityBackgroundColor #FFFFFF
+skinparam activityBorderColor #2688D4
+skinparam arrowColor #2688D4
+skinparam noteBackgroundColor #FCF3D0
+skinparam noteBorderColor #C0A040
+skinparam partitionBorderColor #A0A0A0
+
+start
+:A use case (the **PEP**) asks the **PDP**:
+"may **account** A perform **action** X
+on **subject account** S?";
+note right
+  Example: may Jane's account (acc_jane)
+  perform **feature.sso.configure**
+  in Acme's account (acc_acme)?
+end note
+
+:For an employee-initiated use case touching S, **account.read**
+on S is checked as a finding of the same decision (AU-4).
+The **PIP** (Authorization) loads principal, resource and context;
+
+partition "1 · Account" {
+  if (Is A, S (for a feature action or change), or the\n**contact's account** (when a contact asked) suspended?) then (yes)
+    if (Terminating action (end, expire, cancel, record)\nor an employee read of S?) then (yes)
+      :No Deny finding: the hold is reported
+as a fact · the chain continues;
+    else (no)
+      :Finding: **Deny** · account.<hold>;
+      :Decision written to the audit record;
+      stop
+    endif
+  else (no)
+  endif
+}
+
+partition "2 · Access — what the actor holds" {
+  :Load A's current **roles** in S (fresh, never from the token):
+  • **account role assignments** (customers)
+  • **birthright role assignments** + internal assignments (employees);
+  :Expand roles into **permissions**;
+  if (Does A hold the **permission** whose key is X?) then (yes)
+    :Finding: Allow · role that grants it;
+  else (no)
+    :Finding: **Deny** · access.permission-not-held;
+  endif
+}
+
+partition "3 · Contact access (only when a contact asked)" {
+  if (Does the **contact** hold the customer permission in S?) then (yes)
+    :Finding: Allow;
+  else (no)
+    :Finding: **Deny** · access.contact-permission-not-held;
+  endif
+}
+
+partition "4 · Entitlement — what the subject account has (feature actions)" {
+  :S's **subscription** → is it in force?
+  → does a **subscription term** cover now? (its plan is the current plan);
+  :Effective entitlements = the term's **plan** bundles
+  + **add-on** bundles + active **entitlement grants**;
+  if (Is the **feature** among them?) then (yes)
+    :Finding: Allow · source (plan / add-on / grant), covering term;
+  else (no)
+    :Finding: **Deny** · entitlement.<reason>;
+  endif
+}
+
+partition "5 · Policy — requirements on top" {
+  :From the active **policy set**, every **policy**
+  that governs X and whose **applies_when** holds;
+  if (Does every **requires** predicate hold?) then (yes)
+    :No policy finding;
+  else (no)
+    :Finding per unmet policy:
+    **Deny**, or **Conditional** with its prerequisites
+    (for example, an approval);
+  endif
+}
+
+:**Decision** = the most restrictive finding
+(Deny > Conditional > Allow), with every finding;
+:Write the **audit record** (actor, subject,
+action, outcome, reason codes); no record, no decision (fail closed);
+:The PEP answers per AU-6: **Denied** with reasons only to a
+principal holding account.read on S, otherwise **NotFound**;
+stop
+
+legend bottom
+  **Permission**: the right to perform an action, held through **roles** (Access).
+  **Entitlement**: what a subject account can use, from its subscription and **grants** (Entitlement).
+  **Grant**: one feature given to one subscription, until an expiry (Entitlement).
+  **Policy**: a requirement in positive form; never allows, only constrains (Policy).
+  **Subscription term**: which plan, and why it is covered, for a span; nothing works outside a term (Entitlement).
+endlegend
+
+@enduml

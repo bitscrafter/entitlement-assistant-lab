@@ -1,0 +1,188 @@
+@startuml support
+
+!define primary_key(x) <i><color:#7B5A12><&key></color>x</i>
+!define foreign_key(x) <i><color:#A0A0A0><&key></color>x</i>
+!define unique_index(x) <i><color:#5050A0><&flash></color>x</i>
+
+skinparam {
+	classBackgroundColor transparent
+	classheaderBackgroundColor #FCDA72
+	arrowColor #2688D4
+	classBorderColor #2688D4
+	handwritten false
+	shadowing false
+	noteBackgroundColor #E0E0E0
+	noteBorderColor #C0C0C0
+	maxMessageSize 200
+	svgLinkTarget _blank
+	roundCorner 5
+
+	linetype ortho
+	pageMargin 50
+}
+
+hide circle
+
+<style>
+	legend {
+		BackgroundColor #F9F9F9
+		LineColor #A0A0A0
+		Margin 50
+		Padding 15
+		RoundCorner 10
+	}
+</style>
+
+title Support — data model
+
+entity "**support_case**" as support_case {
+	primary_key(case_id (pk))
+	__
+	foreign_key(subject_account_id (fk customer_account))
+	foreign_key(contact_account_id + contact_customer_kind (fk customer_account: Individual))
+	foreign_key(contact_authenticated_by (fk account))
+	foreign_key(opened_by (fk account))
+	foreign_key(closed_by (fk account))
+	__
+	unique_index(case_id + subject_account_id (c idx))
+	__
+	* case_id : uuid «cse_…»
+	subject_account_id : uuid (set once, when identified)
+	contact_account_id : uuid
+	contact_customer_kind : text = 'Individual'
+	contact_authenticated_at : timestamptz
+	contact_authentication_kind : text (KnowledgeFactor | OneTimeCode)
+	contact_authenticated_by : uuid
+	* opened_at : timestamptz
+	* opened_by : uuid
+	closed_at : timestamptz
+	closed_by : uuid
+	close_reason : text (Resolved | Abandoned)
+	case_summary : text
+}
+
+entity "**case_assignment**" as case_assignment {
+	primary_key(assignment_id (pk))
+	__
+	foreign_key(case_id (fk support_case))
+	foreign_key(assignee_account_id (fk internal_account))
+	foreign_key(assigned_by (fk account))
+	foreign_key(ended_by (fk account))
+	__
+	unique_index(case_id (s idx where not ended))
+	__
+	* assignment_id : uuid «asg_…»
+	* case_id : uuid
+	* assignee_account_id : uuid
+	* assigned_at : timestamptz
+	* assigned_by : uuid
+	ended_at : timestamptz
+	ended_by : uuid
+	end_reason : text (Reassigned | CaseClosed)
+}
+
+entity "**change_request**" as change_request {
+	primary_key(change_request_id (pk))
+	__
+	foreign_key(case_id + subject_account_id (fk support_case))
+	foreign_key(contact_account_id + contact_customer_kind (fk customer_account: Individual))
+	foreign_key(requested_by (fk account))
+	foreign_key(confirmed_by (fk account))
+	foreign_key(applied_by (fk account))
+	foreign_key(created_grant_id (fk entitlement_grant))
+	__
+	* change_request_id : uuid «chg_…»
+	* case_id : uuid
+	* subject_account_id : uuid
+	contact_account_id : uuid (who asked; empty if CSR-initiated)
+	contact_customer_kind : text = 'Individual'
+	* change_kind : text (ChangePlan | CancelSubscription | CreateGrant | AddCourtesyTerm)
+	* parameters : jsonb (typed per change_kind)
+	* subject_account_version : integer
+	* entitlement_diff : jsonb (RFC 6902 JSON Patch)
+	* change_status : text (AwaitingConfirmation | AwaitingApproval | Applied | Canceled | Refused | Expired)
+	* requested_by : uuid
+	* requested_at : timestamptz
+	confirmed_at : timestamptz
+	confirmed_by : uuid
+	applied_at : timestamptz
+	applied_by : uuid
+	created_grant_id : uuid (the grant this change created)
+}
+
+entity "**change_approval**" as change_approval {
+	primary_key(approval_id (pk))
+	__
+	foreign_key(change_request_id (fk change_request))
+	foreign_key(decided_by (fk account))
+	__
+	unique_index(change_request_id (s idx))
+	__
+	* approval_id : uuid «apr_…»
+	* change_request_id : uuid
+	* approval_status : text (Pending | Approved | Denied | Expired | Canceled)
+	* process_instance_id : text
+	* expires_at : timestamptz
+	decided_by : uuid
+	decided_at : timestamptz
+	decision_reason : text (InsufficientJustification | ExceedsCustomerAgreement | RiskConcern | DuplicateRequest | Other)
+	decision_comment : text
+}
+
+entity "**customer_account**\n<size:10>Account subsystem</size>" as customer_account #F7F7F7 ##[dashed]A0A0A0 {
+	primary_key(account_id (pk))
+}
+
+entity "**internal_account**\n<size:10>Account subsystem</size>" as internal_account #F7F7F7 ##[dashed]A0A0A0 {
+	primary_key(account_id (pk))
+}
+
+' Relationships
+' || 1
+' |o, o| 0 or 1
+' }o, o{ 0 to n
+' }|, |{ 1 to n
+
+customer_account |o..o{ support_case : subject
+customer_account |o..o{ support_case : contact
+support_case ||--|{ case_assignment : is owned through
+internal_account ||..o{ case_assignment : assignee
+support_case ||--o{ change_request : contains
+change_request ||--o| change_approval : may need
+
+note right of support_case
+	One subject account per case: the customer
+	account it is about. The contact is the person
+	who reached support (always an individual's
+	account); they may be the same account.
+	Closing a case cancels change requests awaiting
+	confirmation and Pending approvals; case actions
+	require the assignee (SU-14).
+end note
+
+note bottom of change_request
+	The target is the case's subject (composite key).
+	Confirming applies exactly what was shown: the
+	subject_account_version must match and the patch's test
+	operations must hold; then re-authorize and apply
+	in one transaction.
+end note
+
+note bottom of change_approval
+	Constrained to one per change request (CM-6).
+	decision_reason is required when Denied; Other
+	requires a comment. Expired by the process
+	instance's timer; decisions after expires_at
+	are refused.
+end note
+
+legend bottom left
+	primary_key(primary key)
+	foreign_key(foreign key)
+	unique_index(unique index — s: single column · c: composite)
+	""*"" not null
+	solid line: within the subsystem · dashed: another subsystem
+	columns ending in _by reference account (CM-13)
+endlegend
+
+@enduml

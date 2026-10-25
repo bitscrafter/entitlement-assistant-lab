@@ -1,0 +1,152 @@
+@startuml sign-in
+title Employee sign-in (feature employee-sign-in, S01–S03, S04a–S04f)
+
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+autonumber "<b>00"
+
+actor "Employee (CSR)" as employee
+
+box "Browser" #F4F8FF
+  participant "Chat UI\n(React, TypeScript)" as ui
+  participant "Cookie jar" as jar
+end box
+
+box "Cloudflare network" #FFF7EC
+  participant "Static assets" as assets
+  participant "Worker\nfetch handler\n(bootstrap)" as worker
+  participant "SignInEndpoint\n«inbound adapter»" as endpoint
+  participant "SignIn\n«use case, Account»" as usecase
+  participant "PostgresEmployeeCredentialRepository\n«infra»" as credentials
+  participant "WebCryptoPasswordHasher\n«adapter»" as hasher
+  participant "JoseSessionTokenIssuer\n«adapter»" as issuer
+  participant "AuditChainWriter\n«Attribution»" as audit
+  participant "Hyperdrive" as hyperdrive
+end box
+
+database "PostgreSQL" as postgres
+
+== Load the application ==
+
+employee -> ui : open https://<app-origin>/
+ui -> assets : GET / , GET /assets/app.js
+note right of assets
+  Served directly from Cloudflare's network;
+  the Worker script does not run for static files.
+end note
+assets --> ui : index.html, JavaScript bundle
+ui -> worker : GET /api/authentication/session (no cookie yet)
+worker --> ui : 401 Unauthorized (not audited: no identity; security event log)
+ui --> employee : show the sign-in form
+
+== Submit credentials ==
+
+employee -> ui : email, password
+ui -> worker : POST /api/authentication/sign-in\nOrigin: https://<app-origin>\n{ email, password }  (account omitted: the identity has one)
+activate worker
+worker -> worker : bootstrap builds adapters from bindings\n(env.HYPERDRIVE, env.SESSION_SIGNING_KEY, env.AUDIT_HASH_KEY)
+worker -> endpoint : handle(request)
+activate endpoint
+endpoint -> endpoint : Origin equals the app origin? (else 403)\nparse body strictly (else 400)
+endpoint -> usecase : signIn(email, password, declaredAccount?)
+activate usecase
+usecase -> usecase : normalizeEmail(email) (CM-10)
+
+usecase -> credentials : findCurrentCredential(normalizedEmail)
+activate credentials
+credentials -> hyperdrive : SELECT employee, identity_status, current Password credential (PHC string),\nthe identity's internal account and account_status
+hyperdrive -> postgres : pooled connection, same query (query caching disabled)
+postgres --> credentials : 0 or 1 row
+credentials --> usecase : EmployeeCredential | NotFound
+deactivate credentials
+
+alt credential found
+  usecase -> hasher : verify(password, phcString)
+else no such employee
+  usecase -> hasher : verify(password, dummyPhcString)
+  note right of usecase
+    The same work is done either way, so
+    response time does not reveal whether
+    the email exists.
+  end note
+end
+activate hasher
+hasher -> hasher : PBKDF2-SHA256 per the PHC parameters\nconstant-time comparison
+hasher --> usecase : matches: true | false
+deactivate hasher
+
+alt invalid credentials, identity not Active, or account Suspended
+  usecase -> audit : record(action_key session.sign-in, no actor,\naudit_outcome Failed, detail.attempted_identifier_hmac)
+  audit -> postgres : lock audit_chain_head; INSERT audit_chain_record (HMAC-SHA-256 chain)
+  usecase --> endpoint : Failure(invalid_credentials)
+  endpoint --> worker : 401 { error: "invalid_credentials", error_description }
+  worker --> ui : 401 (identical in every failure case)
+  ui --> employee : "Email or password is incorrect"
+else valid
+  usecase -> usecase : account = the identity's only internal account (iac_alex);\na declared account must belong to the identity
+  usecase -> issuer : issue(sub iac_alex, sid new, auth_time now)
+  activate issuer
+  issuer -> issuer : SignJWT ES256 (private key from the Worker secret)\niss, aud = entitlement-agent; iat, exp = iat + 30 min, jti\nno roles: the principal is loaded fresh per decision
+  issuer --> usecase : session token
+  deactivate issuer
+  usecase -> audit : record(action_key session.sign-in, actor iac_alex,\naudit_outcome Succeeded, session_id = sid)
+  audit -> postgres : lock audit_chain_head; INSERT audit_chain_record
+  usecase --> endpoint : Success(token)
+  deactivate usecase
+  endpoint --> worker : 204 No Content\nSet-Cookie: __Host-session=<JWT>; HttpOnly; Secure;\nSameSite=Strict; Path=/; Max-Age=1800
+  deactivate endpoint
+  worker --> ui : 204 + Set-Cookie
+  deactivate worker
+  ui -> jar : browser stores the cookie
+  note right of jar
+    HttpOnly: page scripts cannot read it.
+    The browser attaches it to every same-origin
+    request, including the WebSocket upgrade.
+  end note
+end
+
+== Every later request ==
+
+ui -> worker : GET /api/authentication/session\nCookie: __Host-session=<JWT>
+activate worker
+worker -> worker : JoseSessionTokenVerifier: ES256 pinned,\ncheck iss, aud, exp (wrong aud → 401)
+alt token invalid or expired
+  worker --> ui : 401 → back to the sign-in form
+else token valid
+  worker -> postgres : load the principal fresh: account_status, identity status,\njob attributes, roles (birthright + assignments)
+  alt identity not Active or account suspended since sign-in
+    worker --> ui : 401 → back to the sign-in form
+  else principal valid
+    worker --> ui : 200 { account_id, display_name, department, job_function, job_level, roles }
+    ui --> employee : open the chat
+  end
+end
+deactivate worker
+
+== Keeping the session alive (chat traffic runs over the WebSocket) ==
+
+ui -> worker : POST /api/authentication/session/renewal (cookie)
+worker -> worker : verify the token (as above)
+alt before half-life
+  worker --> ui : 204, no Set-Cookie, no audit record
+else past half-life
+  worker -> postgres : re-load the principal: identity Active? account not suspended?
+  alt identity not Active or account suspended
+    worker -> postgres : audit session.renew Failed (session.principal-inactive)
+    worker --> ui : 401 → back to the sign-in form
+  else the token already ends at auth_time + 8 h
+    worker -> postgres : audit session.renew Failed (session.absolute-lifetime-reached)
+    worker --> ui : 403 absolute_lifetime_reached\n(the current token works until it expires; then sign in again)
+  else valid
+    worker -> worker : re-issue: same sid and auth_time, new jti,\nnew iat, exp = min(iat + 30 min, auth_time + 8 h)
+    worker -> postgres : audit session.renew Succeeded
+    worker --> ui : 204 + Set-Cookie (renewed)
+  end
+end
+note over worker
+  The case agent's WebSocket is closed by the
+  server when the token it was opened with
+  expires; the UI renews and reconnects.
+end note
+
+@enduml
