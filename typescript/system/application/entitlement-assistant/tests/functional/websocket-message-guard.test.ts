@@ -9,7 +9,13 @@ const NOW = new Date("2026-10-22T15:00:00Z");
 const SESSION = { principalAccountId: ALEX, sessionId: ALEX, expiresAt: new Date("2026-10-22T15:20:00Z") };
 const STORED = [{ id: "stored-1", role: "user", parts: [{ type: "text", text: "Earlier question" }] }];
 
-function guardWith(options: { readonly rate?: "Allowed" | "Refused"; readonly mayAct?: boolean } = {}) {
+function guardWith(
+  options: {
+    readonly rate?: "Allowed" | "Refused";
+    readonly mayAct?: boolean;
+    readonly assigned?: boolean;
+  } = {},
+) {
   const calls: string[] = [];
   const guard = new WebSocketMessageGuard({
     rateLimiter: {
@@ -22,6 +28,10 @@ function guardWith(options: { readonly rate?: "Allowed" | "Refused"; readonly ma
     principalMayAct: async () => {
       calls.push("principal");
       return options.mayAct ?? true;
+    },
+    caseStillAssigned: async () => {
+      calls.push("case");
+      return options.assigned ?? true;
     },
     newMessageId: () => "server-message-1",
   });
@@ -151,7 +161,7 @@ describe("WebSocketMessageGuard frames", () => {
     async (type) => {
       const { guard, calls } = guardWith();
       expect(await guard.decide(JSON.stringify({ type }), SESSION, STORED)).toEqual({ kind: "PassThrough" });
-      expect(calls).toEqual(["principal"]);
+      expect(calls).toEqual(["principal", "case"]);
     },
   );
 
@@ -175,6 +185,20 @@ describe("WebSocketMessageGuard frames", () => {
         kind: "Close",
         close: { code: 4401, reason: "invalid_session" },
       });
+    },
+  );
+});
+
+describe("WebSocketMessageGuard and a closed case (case-lifecycle D9, review R4)", () => {
+  test.each([userMessageFrame("Hello"), JSON.stringify({ type: "cf_agent_chat_request_cancel" })])(
+    "ensures a message in a case no longer assigned to the principal closes with 4404, checked last",
+    async (frame) => {
+      const { guard, calls } = guardWith({ assigned: false });
+      expect(await guard.decide(frame, SESSION, STORED)).toEqual({
+        kind: "Close",
+        close: { code: 4404, reason: "case_unavailable" },
+      });
+      expect(calls.at(-1)).toBe("case");
     },
   );
 });

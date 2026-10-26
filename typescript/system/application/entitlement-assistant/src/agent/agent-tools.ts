@@ -48,6 +48,8 @@ export interface AgentToolContext {
   readonly runUseCases: <Value>(work: (useCases: CaseWorkUseCases) => Promise<Value>) => Promise<Value>;
   readonly describeReason: (reasonCode: string) => string;
   readonly newTraceId: () => string;
+  /** Whether the case is still open and assigned to the actor: a turn under way when it closed stops (review R4). */
+  readonly caseStillAssigned: () => Promise<boolean>;
   /** Records a tool failure for the operators; nothing about it reaches the model or the browser. */
   readonly logFailure: (failure: {
     readonly traceId: string;
@@ -61,6 +63,7 @@ export interface AgentToolContext {
  *
  * @ensures Arguments are checked by the tool's own strict schema; a refusal reaches the model as the tool's error.
  * @ensures A tool that fails unexpectedly reaches the model only as a generic error naming its trace id.
+ * @ensures In a case no longer open and assigned to the actor, no tool runs: a refusal instead.
  */
 export function agentTools(context: AgentToolContext): Record<string, Tool> {
   return Object.fromEntries(
@@ -74,11 +77,14 @@ export function agentTools(context: AgentToolContext): Record<string, Tool> {
           const actor = context.actor();
           let outcome: Awaited<ReturnType<typeof caseTool.run>>;
           try {
-            outcome = await caseTool.run(input, {
-              request: { ...actor, caseId: context.caseId, toolCallId, traceId },
-              runUseCases: context.runUseCases,
-              describeReason: context.describeReason,
-            });
+            // Inside the try: a failing check is a failure like any other, never its message (review R2-1).
+            outcome = !(await context.caseStillAssigned())
+              ? { errorText: "This case is closed." }
+              : await caseTool.run(input, {
+                  request: { ...actor, caseId: context.caseId, toolCallId, traceId },
+                  runUseCases: context.runUseCases,
+                  describeReason: context.describeReason,
+                });
           } catch (error) {
             context.logFailure({ traceId, toolName: caseTool.definition.name, message: String(error) });
             throw new Error(`The tool could not complete (trace ${traceId}).`);

@@ -6,6 +6,7 @@ import {
   type AccountContext,
   accountContextOf,
   type EntitlementSource,
+  type NotCaseSubject,
   type Quota,
   type ReadRefusal,
   type ReadRequest,
@@ -28,7 +29,8 @@ export type ListEntitlementsResult =
       readonly reasonCodes: readonly string[];
       readonly facts: ReasonFacts;
     }
-  | ReadRefusal;
+  | ReadRefusal
+  | NotCaseSubject;
 
 /** Every effective entitlement of a customer account, or why there is none (EN-6). */
 export class ListEntitlements {
@@ -47,11 +49,14 @@ export class ListEntitlements {
   }
 
   /**
+   * @ensures In a case whose subject is set, another account is `NotCaseSubject`, before anything is read (D6).
    * @ensures Read through the enforcement template: gate, subject, one audited `account.read` decision (AU-4).
    * @ensures Every effective entitlement, ordered by feature key; with none, every reason and its facts.
    * @ensures Either way, the account's name, plan, and covering term, as a CSR recognizes the account.
    */
   async execute(request: ReadRequest & { readonly accountId: Uuid }): Promise<ListEntitlementsResult> {
+    if (await this.#enforcement.outsideCaseSubject(request, request.accountId))
+      return { kind: "NotCaseSubject" };
     return this.#enforcement.read(request, "ListEntitlements", request.accountId, async () => {
       const computed = await this.#computeEffectiveEntitlements.execute({
         accountId: request.accountId,

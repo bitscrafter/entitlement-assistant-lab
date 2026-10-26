@@ -8,6 +8,7 @@ import { importHashKey } from "../../../subsystem/attribution/src/infra/audit-re
 import { type Application, createApplication } from "./application.ts";
 import {
   caseAgentObject,
+  DurableObjectCaseWebSocketConnections,
   type DurableObjectNamespace,
   forwardToCaseAgent,
   MessageRateLimiterObject,
@@ -85,6 +86,7 @@ async function build(environment: Environment): Promise<Application> {
     policySet: await loadBundledPolicySet(),
     forwardToCaseAgent: (request, caseId, session) =>
       forwardToCaseAgent(environment.CASE_AGENT, request, caseId, session),
+    caseWebSocketConnections: new DurableObjectCaseWebSocketConnections(environment.CASE_AGENT),
   });
 }
 

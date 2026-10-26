@@ -11,6 +11,7 @@ import type { FindIndividualByEmail } from "../../customer-identity/src/usecase/
 import type { GetIndividuals } from "../../customer-identity/src/usecase/get-individuals.ts";
 import type { ComputeEffectiveEntitlements } from "../../entitlement/src/usecase/compute-effective-entitlements.ts";
 import type { FindLowestPlanIncluding } from "../../product/src/usecase/find-lowest-plan-including.ts";
+import type { CaseRepository } from "../src/usecase/case-repository.ts";
 import { CheckEntitlement } from "../src/usecase/check-entitlement.ts";
 import { FindCustomerAccount } from "../src/usecase/find-customer-account.ts";
 import { ReadEnforcement } from "../src/usecase/read-enforcement.ts";
@@ -50,7 +51,12 @@ function readers() {
   const getCustomerAccount = new GetCustomerAccount({
     accounts: untouchable<CustomerAccountRepository>("customerAccounts"),
   });
-  const enforcement = new ReadEnforcement({ decider: refusingDecider, audit, getCustomerAccount });
+  const enforcement = new ReadEnforcement({
+    decider: refusingDecider,
+    audit,
+    getCustomerAccount,
+    cases: untouchable<CaseRepository>("cases"),
+  });
   const computeEffectiveEntitlements = untouchable<ComputeEffectiveEntitlements>(
     "computeEffectiveEntitlements",
   );

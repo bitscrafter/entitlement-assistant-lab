@@ -8,6 +8,7 @@ import {
 } from "../../../../subsystem/support/src/usecase/find-customer-account.ts";
 import type {
   AccountContext,
+  NotCaseSubject,
   ReadRefusal,
   ReadRequest,
 } from "../../../../subsystem/support/src/usecase/read-request.ts";
@@ -39,6 +40,22 @@ interface CaseTool {
 }
 
 const NOT_FOUND = { error: "not_found", error_description: ERRORS.not_found.description } as const;
+
+/** The refusal of a read of another account than the case's subject (case-lifecycle D6). */
+export const OTHER_ACCOUNT = "This case is about another account; open a new case for this one.";
+
+/**
+ * A read's refusal as the tool answers it: the subject rule as a refusal of the arguments, the others as their
+ * error (AU-6).
+ */
+function refused(
+  result: ReadRefusal | NotCaseSubject,
+  describeReason: (reasonCode: string) => string,
+): ToolOutcome {
+  return result.kind === "NotCaseSubject"
+    ? { errorText: OTHER_ACCOUNT }
+    : { output: refusal(result, describeReason) };
+}
 
 /** A refusal as the model sees it: the same two levels as an HTTP response (AU-6, api.md §3). */
 function refusal(result: ReadRefusal, describeReason: (reasonCode: string) => string): unknown {
@@ -139,6 +156,8 @@ const catalogKey = z
 
 const checkArguments = z.strictObject({ account_id: z.string().max(64), feature_key: catalogKey });
 const listArguments = z.strictObject({ account_id: z.string().max(64) });
+/** A draft is stored only as the CSR submits it, so it is bounded like the stored summary (D7, D8). */
+const summaryArguments = z.strictObject({ summary: z.string().trim().min(1).max(4000) });
 const explainArguments = z.strictObject({
   person_email: z.string().max(320),
   account_id: z.string().max(64),
@@ -168,11 +187,11 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
       );
       if (result.kind === "QueryTooShort")
         return { errorText: `The query needs at least ${MINIMUM_QUERY_LENGTH} characters.` };
-      if (result.kind === "Found") return { output: { result: "Found", account: summaryOf(result.account) } };
+      if (result.kind === "Found") return { output: { result: "found", account: summaryOf(result.account) } };
       if (result.kind === "Ambiguous") {
         return {
           output: {
-            result: "Ambiguous",
+            result: "ambiguous",
             candidates: result.candidates.map((candidate) => ({
               account_id: encodeIdentifier("acc", candidate.accountId),
               display_name: candidate.displayName,
@@ -183,7 +202,7 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
           },
         };
       }
-      return { output: refusal(result, context.describeReason) };
+      return refused(result, context.describeReason);
     },
   },
   check_entitlement: {
@@ -213,7 +232,7 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
       if (result.kind === "Entitled") {
         return {
           output: {
-            result: "Entitled",
+            result: "entitled",
             account: accountOf(result.account),
             feature_key: parsed.data.feature_key,
             quota: result.quota,
@@ -224,7 +243,7 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
       if (result.kind === "NotEntitled") {
         return {
           output: {
-            result: "NotEntitled",
+            result: "not_entitled",
             account: accountOf(result.account),
             feature_key: parsed.data.feature_key,
             reasons: reasonsOf(result.reasonCodes, context.describeReason),
@@ -233,7 +252,7 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
           },
         };
       }
-      return { output: refusal(result, context.describeReason) };
+      return refused(result, context.describeReason);
     },
   },
   list_entitlements: {
@@ -255,10 +274,10 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
       const result = await context.runUseCases((useCases) =>
         useCases.listEntitlements.execute({ ...context.request, accountId }),
       );
-      if (result.kind !== "Listed") return { output: refusal(result, context.describeReason) };
+      if (result.kind !== "Listed") return refused(result, context.describeReason);
       return {
         output: {
-          result: "Listed",
+          result: "listed",
           account: accountOf(result.account),
           entries: result.entries.map((entry) => ({
             feature_key: entry.featureKey,
@@ -305,10 +324,10 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
           operation: parsed.data.operation,
         }),
       );
-      if (result.kind !== "Explained") return { output: refusal(result, context.describeReason) };
+      if (result.kind !== "Explained") return refused(result, context.describeReason);
       return {
         output: {
-          result: "Explained",
+          result: "explained",
           account: accountOf(result.account),
           person_email: result.personEmail,
           feature_key: parsed.data.feature_key,
@@ -328,6 +347,58 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
           remedy: remedyOf(result.remedy),
         },
       };
+    },
+  },
+  propose_case_subject: {
+    definition: {
+      name: "propose_case_subject",
+      description:
+        "Propose the account this case is about. It sets nothing: the representative sets the subject with a button.",
+      parameters: {
+        type: "object",
+        properties: { account_id: accountIdParameter },
+        required: ["account_id"],
+        additionalProperties: false,
+      },
+    },
+    async run(argumentsWritten, context) {
+      const parsed = listArguments.safeParse(argumentsWritten);
+      if (!parsed.success) return { errorText: argumentError(parsed.error) };
+      const accountId = accountIdOf(parsed.data.account_id);
+      if (accountId === null) return { output: NOT_FOUND };
+      const result = await context.runUseCases((useCases) =>
+        useCases.proposeCaseSubject.execute({ ...context.request, accountId }),
+      );
+      if (result.kind === "SubjectAlreadySet") return { errorText: "This case's subject is already set." };
+      if (result.kind !== "Proposed") return refused(result, context.describeReason);
+      return {
+        output: {
+          result: "proposed",
+          account: {
+            account_id: encodeIdentifier("acc", result.account.accountId),
+            display_name: result.account.displayName,
+            plan_key: result.account.planKey,
+          },
+        },
+      };
+    },
+  },
+  draft_case_summary: {
+    definition: {
+      name: "draft_case_summary",
+      description:
+        "Draft the case's summary for the representative to review when closing. It stores nothing. Plain text, at most 4,000 characters.",
+      parameters: {
+        type: "object",
+        properties: { summary: { type: "string" } },
+        required: ["summary"],
+        additionalProperties: false,
+      },
+    },
+    async run(argumentsWritten) {
+      const parsed = summaryArguments.safeParse(argumentsWritten);
+      if (!parsed.success) return { errorText: argumentError(parsed.error) };
+      return { output: { result: "drafted", summary: parsed.data.summary } };
     },
   },
 };

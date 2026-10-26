@@ -45,6 +45,13 @@ export class ScriptedLanguageModel {
     return this.model.doStreamCalls.length;
   }
 
+  /** The names of the tools the agent offered the model at its first call, sorted. */
+  get offeredTools(): readonly string[] {
+    const tools =
+      (this.model.doStreamCalls[0] as { tools?: readonly { name: string }[] } | undefined)?.tools ?? [];
+    return tools.map((tool) => tool.name).sort();
+  }
+
   #partsOf(step: ScriptedStep | undefined): unknown[] {
     const answer = step ?? { text: this.#fallbackReply, toolCalls: [] };
     return [

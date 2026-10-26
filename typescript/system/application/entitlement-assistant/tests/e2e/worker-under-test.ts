@@ -7,6 +7,7 @@ import { importHashKey } from "../../../../subsystem/attribution/src/infra/audit
 import { type Application, createApplication } from "../../src/application.ts";
 import {
   caseAgentObject,
+  DurableObjectCaseWebSocketConnections,
   DurableObjectMessageRateLimiter,
   type DurableObjectNamespace,
   forwardToCaseAgent,
@@ -60,6 +61,7 @@ function applicationFor(environment: Environment): Promise<Application> {
         lastConnectedCase = caseId;
         return forwardToCaseAgent(environment.CASE_AGENT, request, caseId, session);
       },
+      caseWebSocketConnections: new DurableObjectCaseWebSocketConnections(environment.CASE_AGENT),
     }))();
   return application;
 }
@@ -84,6 +86,8 @@ export class CaseAgentObject extends BaseCaseAgentObject {
     switch (action) {
       case "language-model-calls":
         return new Response(String(scriptedModel(this.env).calls));
+      case "offered-tools":
+        return Response.json(scriptedModel(this.env).offeredTools);
       case "script":
         scriptedModel(this.env).script(...((await request.json()) as ScriptedStep[]));
         return new Response(null, { status: 204 });

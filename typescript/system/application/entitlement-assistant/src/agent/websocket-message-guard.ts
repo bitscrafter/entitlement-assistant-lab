@@ -18,6 +18,7 @@ export const CLOSES = {
   messageTooBig: { code: 1009, reason: "message_too_big" },
   rateLimited: { code: 4429, reason: "rate_limited" },
   sessionExpired: { code: 4401, reason: "session_expired" },
+  caseUnavailable: { code: 4404, reason: "case_unavailable" },
   invalidSession: { code: 4401, reason: "invalid_session" },
 } as const;
 
@@ -45,6 +46,8 @@ export interface WebSocketMessageGuardDependencies {
   readonly clock: Clock;
   /** Whether the principal may still act, loaded fresh (D10, CM-16). */
   readonly principalMayAct: (accountId: Uuid) => Promise<boolean>;
+  /** Whether the case is still open and assigned to the principal (case-lifecycle D9; review R4). */
+  readonly caseStillAssigned: (accountId: Uuid) => Promise<boolean>;
   readonly newMessageId: () => string;
 }
 
@@ -69,6 +72,8 @@ export class WebSocketMessageGuard {
    *          is re-loaded only after the other checks pass.
    * @ensures A stream frame (resume, cancel) is checked for the token's expiry and re-loads the principal (D6, D10),
    *          closing as a chat request would; it is not counted (D13 counts messages to the model).
+   * @ensures Last, a case closed or no longer assigned to the principal closes with `4404 case_unavailable`, so a
+   *          connection the case's close missed is closed at its next message (case-lifecycle D9; review R4).
    */
   async decide(
     frame: string,
@@ -114,6 +119,8 @@ export class WebSocketMessageGuard {
   async #sessionClose(session: ConnectionSession, now: Date): Promise<Close | null> {
     if (now >= session.expiresAt) return CLOSES.sessionExpired;
     if (!(await this.#dependencies.principalMayAct(session.principalAccountId))) return CLOSES.invalidSession;
+    if (!(await this.#dependencies.caseStillAssigned(session.principalAccountId)))
+      return CLOSES.caseUnavailable;
     return null;
   }
 }

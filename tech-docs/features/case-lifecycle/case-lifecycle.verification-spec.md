@@ -65,7 +65,7 @@ Approving this spec also approves these values:
 | D12 | **Each action writes its decision record and, when it succeeds, a `Succeeded` record** (as `case.open` does, explain-access S05a). A state conflict after an allowed decision writes a `Failed` record with its reason code. | One record per decision, one per execution (AT-3). |
 | D13 | **Every tool's `result` is a snake_case code, as error codes are:** `found`, `ambiguous`, `entitled`, `not_entitled`, `listed`, `explained`, `proposed`, `drafted`. Values that are data (`Allow`, `Payment`, `Standalone`) keep their stored spelling. | The API's own codes follow its snake_case convention; data reads the same everywhere. |
 | D14 | **The case shows the subject's holds, and the contact's holds and roles in the subject.** | The CSR sees at once a suspended customer, a stranger calling, or a contact with no rights in the account, before acting. |
-| D15 | **Each part of the case shows only what the CSR may read now.** Reading the case runs one `account.read` decision on the subject and one on the contact (`detail.use_case` `GetCase`); a part the CSR may not read shows its `account_id` (which they set) and `"readable": false`, nothing else. | The case view is a read like any other (AU-4, AU-6). |
+| D15 | **Each part of the case shows only what the CSR may read now.** Reading the case runs one `account.read` decision on the subject and one on the contact (`detail.use_case` `GetCase`); a part the CSR may not read shows its `account_id` (which they set) and `"readable": false`, nothing else; the contact's `roles_in_subject` is `null` unless the subject is readable too (amended 2026-10-26, discovery 1). | The case view is a read like any other (AU-4, AU-6). |
 | D16 | **The four actions answer `204 No Content`; the case panel then reads the case with `GET`.** | One read path: what the case shows is always decided by D15's reads, and an action's audit records are only its own (D12). |
 | D17 | **The closed cases of an account are readable by anyone who may read the account:** `GET /api/cases?subject={account_id}&status=closed` answers its closed cases, newest first, at most 20, each with its reason, who closed it and when, and its summary. One audited `account.read` decision on the account (`detail.use_case` `ListClosedCases`); refusals as any read (AU-6). Open cases and cases of other accounts are never listed. Acting on a closed case stays `404` (D9). | The summary is stored so that the next CSR on the account can see what happened before. |
 
@@ -108,7 +108,8 @@ The case, as GET returns it (absent parts are null):
     "contact_authentication": { "kind": "Knowledge", "method": "SecurityQuestion", "authenticated_by": "iac_…",
                                 "authenticated_at": "…", "expires_at": "…" },
   A part the CSR may not read now: { "account_id": "acc_…", "readable": false } (D15).
-  holds are reason codes (account.operational-suspension, …); roles_in_subject is empty without a subject.
+  holds are reason codes (account.operational-suspension, …); roles_in_subject is null without a subject, or
+  when the subject is not readable (D15).
     "opened_at": "…", "closed_at": null, "close_reason": null, "summary": null
   }
 
@@ -362,8 +363,9 @@ D4); no audit record; nothing changes.
 
 **Level:** `[http]`
 
-**Given:** iac_alex's assignment of support-case-handling ended at 14:55:00, so iac_alex holds neither
-`case.open` nor `account.read`; cse_alex_1 is still assigned to iac_alex.
+**Given:** at 14:55:00 emp_alex moved to finance as an analyst, which ends the birthright role
+support-case-handling, so iac_alex holds neither `case.open` nor `account.read`; cse_alex_1 is still assigned
+to iac_alex.
 
 **Case A — An action on a subject account**
 
@@ -695,7 +697,7 @@ reading it.
     "readable": true,
     "display_name": "Jane Doe",
     "holds": [],
-    "roles_in_subject": ["admin", "billing"]
+    "roles_in_subject": null
   },
   "contact_authentication": null,
   "opened_at": "2026-10-22T14:00:00.000Z",

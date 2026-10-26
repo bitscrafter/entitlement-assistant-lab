@@ -244,7 +244,7 @@ subject is set, the read tools act on it only (case-lifecycle D6).
 
 | Tool | Use case | Arguments | Result | Feature |
 | --- | --- | --- | --- | --- |
-| `find_customer_account` | `FindCustomerAccount` | `query` (at least 3 characters) | `Found`, `Ambiguous` (at most 10, with `more_matches`), `NotFound`, `Denied` | explain-access |
+| `find_customer_account` | `FindCustomerAccount` | `query` (at least 3 characters) | `found`, `ambiguous` (at most 10, with `more_matches`), or a refusal (`not_found`, `access_denied`) | explain-access |
 | `check_entitlement` | `CheckEntitlement` | `account_id`, `feature_key` | entitled, quota, sources, reasons, facts | explain-access |
 | `list_entitlements` | `ListEntitlements` | `account_id` | entries, or reasons and facts | explain-access |
 | `explain_access` | `ExplainAccess` | `person_email`, `account_id`, `feature_key`, `operation` | outcome, findings, remedy | explain-access |

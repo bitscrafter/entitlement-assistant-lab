@@ -7,6 +7,7 @@ import { shownToolError, turnErrorLogOf } from "./agent/agent-tools.ts";
 import { CASE_AGENT_INSTRUCTIONS, finalStepAnswersInWords } from "./agent/instructions.ts";
 import { CLOSES, type ConnectionSession } from "./agent/websocket-message-guard.ts";
 import type { Application, CaseAgentParts } from "./application.ts";
+import type { CaseWebSocketConnections } from "./case-websocket-connections.ts";
 
 /** How many model steps one message may cause: the model sometimes repeats a tool call (spike K3). */
 const MAXIMUM_MODEL_STEPS = 5;
@@ -46,6 +47,23 @@ export async function forwardToCaseAgent(
   headers.set(SESSION_HEADER, JSON.stringify(session));
   const agent = await getAgentByName(namespace as never, caseId);
   return agent.fetch(new Request(request.url, { headers }));
+}
+
+/**
+ * The case WebSocket connections adapter of the Worker (case-lifecycle D7): a Durable Object RPC method on the
+ * case's agent, which no route reaches (spike K1).
+ */
+export class DurableObjectCaseWebSocketConnections implements CaseWebSocketConnections {
+  readonly #namespace: DurableObjectNamespace;
+
+  constructor(namespace: DurableObjectNamespace) {
+    this.#namespace = namespace;
+  }
+
+  async closeAll(caseId: Uuid): Promise<void> {
+    const agent = await getAgentByName(this.#namespace as never, caseId);
+    await (agent as unknown as { closeCaseConnections(): Promise<void> }).closeCaseConnections();
+  }
 }
 
 /** The rate limiter adapter of the Worker: one Durable Object per employee account (D13). */
@@ -169,6 +187,16 @@ export function caseAgentObject<Environment extends CaseAgentEnvironment>(runtim
         (new Date(session.expiresAt).getTime() - parts.clock.now().getTime()) / 1000,
       );
       await this.schedule(Math.ceil(seconds), "closeExpiredConnections");
+    }
+
+    /** Closes every connection: the case was closed (case-lifecycle D7). Called over RPC by the Worker only. */
+    async closeCaseConnections(): Promise<void> {
+      let closed = 0;
+      for (const connection of this.getConnections() as Iterable<AgentConnection>) {
+        connection.close(CLOSES.caseUnavailable.code, CLOSES.caseUnavailable.reason);
+        closed += 1;
+      }
+      console.log(JSON.stringify({ log: "case-connections-closed", connections: closed }));
     }
 
     /** Closes every connection whose session token has expired (D6). */

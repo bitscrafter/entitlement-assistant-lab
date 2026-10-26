@@ -158,7 +158,16 @@ function SignedInPage({
       {caseId === null ? (
         <p className="hint">Open a case to ask the assistant about a customer's entitlements.</p>
       ) : (
-        <CaseChat key={caseId} caseId={caseId} onSessionEnded={onSessionEnded} />
+        <CaseChat
+          key={caseId}
+          caseId={caseId}
+          onSessionEnded={onSessionEnded}
+          onCaseClosed={() => {
+            sessionStorage.removeItem(CASE_KEY);
+            setCaseId(null);
+            setMessage("The case is closed.");
+          }}
+        />
       )}
     </main>
   );

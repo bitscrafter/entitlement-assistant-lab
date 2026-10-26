@@ -206,6 +206,7 @@
 | **Decision** | Every case action (set subject or contact, authenticate the contact, prepare, confirm, cancel, close) requires the actor to be the case's current assignee:<br>• Support's PEP template supplies `context.actor_is_assignee`<br>• otherwise `Deny` with `support.not-case-assignee`<br>• lifecycle action keys are governed by permissions: `case.*` by `case.open` (and assignee); confirm and cancel by the change kind's employee permission; `case.reassign` by `case.reassign`; `approval.expire` by `change-request.apply` |
 | **Status** | Accepted · 2026-10-25 · decided by the owner |
 | **Context** | The assignee was checked only when connecting; lifecycle keys had no governing permission and could never pass default deny. |
+| **Amendments** | 2026-10-26 — a caller who is not the case's assignee is answered as for a missing case, with a `CaseNotAssigned` security event and no audit record (explain-access D1, case-lifecycle D10); `support.not-case-assignee` is kept for a decision that does involve the assignee rule. |
 | **Related** | • [SU-9](#su-9-case-lifecycle-steps-are-use-cases-confirmed-outside-the-llm)<br>• [AU-3](authorization.md#au-3-default-deny-lives-in-the-access-step) |
 
 ---

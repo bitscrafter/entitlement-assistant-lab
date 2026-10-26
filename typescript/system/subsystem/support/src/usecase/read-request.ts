@@ -16,6 +16,11 @@ export interface ReadRequest {
   readonly traceId: string;
 }
 
+/** A read of another account than the case's subject (case-lifecycle D6): refused before anything is decided. */
+export interface NotCaseSubject {
+  readonly kind: "NotCaseSubject";
+}
+
 /** Refusals of a read (AU-6, explain-access D3). */
 export type ReadRefusal =
   | { readonly kind: "NotFound" }
