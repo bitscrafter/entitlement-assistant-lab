@@ -38,7 +38,10 @@ import {
 import { CheckEntitlement } from "../../../subsystem/support/src/usecase/check-entitlement.ts";
 import { CloseCase } from "../../../subsystem/support/src/usecase/close-case.ts";
 import { ExplainAccess } from "../../../subsystem/support/src/usecase/explain-access.ts";
-import { FindCustomerAccount } from "../../../subsystem/support/src/usecase/find-customer-account.ts";
+import {
+  FindCustomerAccount,
+  MINIMUM_QUERY_LENGTH,
+} from "../../../subsystem/support/src/usecase/find-customer-account.ts";
 import { type CaseView, GetCase } from "../../../subsystem/support/src/usecase/get-case.ts";
 import { ListClosedCases } from "../../../subsystem/support/src/usecase/list-closed-cases.ts";
 import { ListEntitlements } from "../../../subsystem/support/src/usecase/list-entitlements.ts";
@@ -49,6 +52,7 @@ import { SetCaseContact } from "../../../subsystem/support/src/usecase/set-case-
 import { SetCaseSubject } from "../../../subsystem/support/src/usecase/set-case-subject.ts";
 import { agentTools } from "./agent/agent-tools.ts";
 import { REASON_DESCRIPTIONS } from "./agent/reason-descriptions.ts";
+import { lookupOutputOf } from "./agent/tools.ts";
 import { type ConnectionSession, WebSocketMessageGuard } from "./agent/websocket-message-guard.ts";
 import type { CaseWebSocketConnections } from "./case-websocket-connections.ts";
 import type { CaseWorkUseCases } from "./case-work-use-cases.ts";
@@ -87,6 +91,8 @@ export interface ApplicationDependencies {
   ) => Promise<Response>;
   /** Closes a case agent's WebSocket connections when the case closes (case-lifecycle D7). */
   readonly caseWebSocketConnections: CaseWebSocketConnections;
+  /** Bounds the case panel's account search per employee, as chat messages are (case-lifecycle D18; review R3-1). */
+  readonly searchRateLimiter: MessageRateLimiter;
 }
 
 export type { CaseWorkUseCases };
@@ -271,6 +277,7 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     "POST /api/authentication/sign-out": signOutHandler,
     "POST /api/cases": openCaseHandler,
     "GET /api/cases": closedCasesHandler,
+    "GET /api/accounts": accountSearchHandler,
   };
 
   /** The handlers under `/api/cases/{case_id}` (api.md §5), by method and action. */
@@ -658,6 +665,53 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     const caseId = parsed.request.caseId;
     context.afterCommit(() => dependencies.caseWebSocketConnections.closeAll(caseId));
     return noContent();
+  }
+
+  /**
+   * The case panel's account search (case-lifecycle D18): `GET /api/accounts?query=…`, the assistant's lookup for
+   * the session's principal, answered as the tool answers it.
+   */
+  async function accountSearchHandler(context: RequestContext): Promise<Response> {
+    const authenticated = await authenticatePrincipal(
+      context.request,
+      tokens,
+      context.useCases.loadPrincipal,
+      dependencies.clock.now(),
+    );
+    if (!authenticated.ok) return context.reject(authenticated.failure);
+    // Before any work: each search may decide and audit up to 50 accounts (explain-access D14).
+    const attempt = await dependencies.searchRateLimiter.attempt(
+      authenticated.value.principal.accountId,
+      dependencies.clock.now(),
+    );
+    if (attempt === "Refused") return errorResponse("rate_limited");
+    const query = new URL(context.request.url).searchParams.get("query") ?? "";
+    if (query.length > 320)
+      return detailedErrorResponse("invalid_request", [
+        { error: "query", error_description: "The query is too long." },
+      ]);
+    const result = await context.useCases.findCustomerAccount.execute({
+      principalAccountId: authenticated.value.principal.accountId,
+      sessionId: authenticated.value.claims.sessionId,
+      caseId: null,
+      toolCallId: null,
+      traceId: context.traceId,
+      query,
+    });
+    switch (result.kind) {
+      case "Found":
+      case "Ambiguous":
+        return jsonResponse(200, lookupOutputOf(result));
+      case "QueryTooShort":
+        return detailedErrorResponse("invalid_request", [
+          {
+            error: "query",
+            error_description: `The query needs at least ${MINIMUM_QUERY_LENGTH} characters.`,
+          },
+        ]);
+      default:
+        return refusalResponse(context, result);
+    }
   }
 
   /** The closed cases of an account (case-lifecycle D17): `GET /api/cases?subject=…&status=closed`. */

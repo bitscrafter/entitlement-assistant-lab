@@ -16,5 +16,5 @@
 | P5 agent tools | coder | ✅ | `propose_case_subject`, `draft_case_summary`; snake_case results (D13) with the reply view following; 472 tests pass |
 | P6 case panel | coder | ✅ | left of the chat: subject, contact (holds, roles), authentication (method, expiry; passed or failed), close form with the assistant's draft, past cases; **Set as case subject** and **Set as contact** on cards (discovery 7); the model's instructions name the two new tools |
 | P7 deploy | coder | ✅ | Neon migrated (`support/002`); deployed `f7a75e73`; live smoke test of every endpoint passed, the close frame `4404` received (discovery 6) |
-| GREEN gate | assistant | 🔄 | every check passes on the working tree; the formal gate needs a clean tree (commit) |
-| Adversarial review | review agent | ✅ | round 1: REJECT, 2 major (races), 7 minor, all fixed or ruled (8); round 2: ACCEPT, 4 minor, 2 fixed, 2 kept (9) |
+| GREEN gate | assistant | ✅ | 494 passed @ c3a218b; after the amendment, 511 pass on the working tree (formal gate at the next commit) |
+| Adversarial review | review agent | ✅ | round 1: REJECT, 2 major (races), 7 minor, all fixed or ruled (8); round 2: ACCEPT, 4 minor, 2 fixed, 2 kept (9); amendment (10) reviewed in round 3: ACCEPT, 4 minor, all fixed (11) |

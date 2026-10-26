@@ -9,6 +9,7 @@ import { type Application, createApplication } from "./application.ts";
 import {
   caseAgentObject,
   DurableObjectCaseWebSocketConnections,
+  DurableObjectMessageRateLimiter,
   type DurableObjectNamespace,
   forwardToCaseAgent,
   MessageRateLimiterObject,
@@ -87,6 +88,10 @@ async function build(environment: Environment): Promise<Application> {
     forwardToCaseAgent: (request, caseId, session) =>
       forwardToCaseAgent(environment.CASE_AGENT, request, caseId, session),
     caseWebSocketConnections: new DurableObjectCaseWebSocketConnections(environment.CASE_AGENT),
+    searchRateLimiter: new DurableObjectMessageRateLimiter(
+      environment.MESSAGE_RATE_LIMITER,
+      "account-search:",
+    ),
   });
 }
 

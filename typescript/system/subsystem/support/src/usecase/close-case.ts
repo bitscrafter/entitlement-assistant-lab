@@ -30,7 +30,8 @@ export class CloseCase {
   }
 
   /**
-   * @ensures Only the case's assignee; `case.close` decided with `account.read` on the subject when there is one.
+   * @ensures Only the case's current assignee; `case.close` decided alone, without `account.read` on the subject
+   *          (D19): closing reads nothing about the account. The records name the subject.
    * @ensures Allowed: closing fields and the summary as given, and the assignment ended, in the caller's transaction.
    *          Nothing else is pending before grants-and-approvals. The caller closes the case's WebSocket
    *          connections once the transaction commits.
@@ -43,20 +44,25 @@ export class CloseCase {
     if (assigned.kind !== "Assigned") return assigned;
     const acted = await this.#enforcement.act<
       { readonly kind: "Closed" } | { readonly kind: "CaseNotAssigned" }
-    >(request, "case.close", assigned.supportCase.subjectAccountId, async () =>
-      (await this.#cases.close(request.caseId, {
-        at: this.#clock.now(),
-        by: request.principalAccountId,
-        reason: request.reason,
-        summary: request.summary,
-      }))
-        ? { outcome: "Succeeded", result: { kind: "Closed" } as const }
-        : // Closed meanwhile by a concurrent request: no longer this CSR's case (D9).
-          {
-            outcome: "Failed",
-            reasonCode: "support.case-closed",
-            result: { kind: "CaseNotAssigned" } as const,
-          },
+    >(
+      request,
+      "case.close",
+      assigned.supportCase.subjectAccountId,
+      async () =>
+        (await this.#cases.close(request.caseId, {
+          at: this.#clock.now(),
+          by: request.principalAccountId,
+          reason: request.reason,
+          summary: request.summary,
+        }))
+          ? { outcome: "Succeeded", result: { kind: "Closed" } as const }
+          : // Closed meanwhile by a concurrent request: no longer this CSR's case (D9).
+            {
+              outcome: "Failed",
+              reasonCode: "support.case-closed",
+              result: { kind: "CaseNotAssigned" } as const,
+            },
+      { readsAccount: false },
     );
     return acted.kind === "Acted" ? acted.outcome.result : acted;
   }

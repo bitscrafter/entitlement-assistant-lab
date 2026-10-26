@@ -14,6 +14,7 @@ export const ERRORS = {
   absolute_lifetime_reached: { status: 403, description: "The session reached its maximum lifetime." },
   not_found: { status: 404, description: "The resource was not found." },
   conflict: { status: 409, description: "The resource is not in a state that allows this request." },
+  rate_limited: { status: 429, description: "Too many requests. Wait a moment, then try again." },
   server_error: { status: 500, description: "An unexpected error occurred." },
 } as const;
 

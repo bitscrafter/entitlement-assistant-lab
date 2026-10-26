@@ -4,6 +4,7 @@ import { decodeIdentifier, encodeIdentifier, type Uuid } from "../../../../kerne
 import type { Remedy } from "../../../../subsystem/product/src/usecase/find-lowest-plan-including.ts";
 import {
   type AccountSummary,
+  type FindCustomerAccountResult,
   MINIMUM_QUERY_LENGTH,
 } from "../../../../subsystem/support/src/usecase/find-customer-account.ts";
 import type {
@@ -126,6 +127,26 @@ const summaryOf = (account: AccountSummary) => ({
   owners_and_admins: account.ownersAndAdmins,
 });
 
+/**
+ * A lookup's answer as the model and the case panel both receive it (explain-access §3, case-lifecycle D18): one
+ * shape, so the panel's search and the tool cannot drift apart.
+ */
+export function lookupOutputOf(
+  result: Extract<FindCustomerAccountResult, { readonly kind: "Found" | "Ambiguous" }>,
+): unknown {
+  if (result.kind === "Found") return { result: "found", account: summaryOf(result.account) };
+  return {
+    result: "ambiguous",
+    candidates: result.candidates.map((candidate) => ({
+      account_id: encodeIdentifier("acc", candidate.accountId),
+      display_name: candidate.displayName,
+      own_account: candidate.ownAccount,
+      roles: candidate.roles,
+    })),
+    more_matches: result.moreMatches,
+  };
+}
+
 /** The first unknown or invalid field, as the model is told (an identity claim such as `acting_as` included). */
 function argumentError(error: z.ZodError): string {
   return error.issues.map((issue) => issue.message).join("; ");
@@ -187,21 +208,7 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
       );
       if (result.kind === "QueryTooShort")
         return { errorText: `The query needs at least ${MINIMUM_QUERY_LENGTH} characters.` };
-      if (result.kind === "Found") return { output: { result: "found", account: summaryOf(result.account) } };
-      if (result.kind === "Ambiguous") {
-        return {
-          output: {
-            result: "ambiguous",
-            candidates: result.candidates.map((candidate) => ({
-              account_id: encodeIdentifier("acc", candidate.accountId),
-              display_name: candidate.displayName,
-              own_account: candidate.ownAccount,
-              roles: candidate.roles,
-            })),
-            more_matches: result.moreMatches,
-          },
-        };
-      }
+      if (result.kind === "Found" || result.kind === "Ambiguous") return { output: lookupOutputOf(result) };
       return refused(result, context.describeReason);
     },
   },

@@ -3,8 +3,8 @@
 | | |
 | :--- | :--- |
 | **Purpose** | States what the feature must do: in a case, the assistant proposes the account the case is about and drafts its summary; the CSR sets the subject and the contact, records how the contact was authenticated, and closes the case, each by a click outside the chat. Each scenario becomes exactly one verification test (`AI_AS_TESTER.md`). |
-| **Status** | Approved by the owner (2026-10-26) |
-| **Feature** | case-lifecycle · scenarios S33a–S33k, S27a–S27k, S34a–S34g |
+| **Status** | Approved by the owner (2026-10-26); amended the same day after the adversarial review and the owner's rulings: D7 and D19 (closing without `account.read`), D18 (the case panel's account search), D20 (guidance in the case panel), S34g, S36a–S36e |
+| **Feature** | case-lifecycle · scenarios S33a–S33k, S27a–S27k, S34a–S34g, S36a–S36e |
 | **Mode** | feature; writes cases, case assignments, and audit records; changes no customer data |
 | **Depends on** | feature explain-access (cases, the case agent, the read tools) |
 | **References** | • Proposal: [`../../entitlement-assistant-proposal.md`](../../entitlement-assistant-proposal.md) §7<br>• The life of a case: [`../../diagrams/case-lifecycle.activity.puml`](../../diagrams/case-lifecycle.activity.puml)<br>• Support decisions: SU-1, SU-2, SU-7, SU-9, SU-10, SU-14 in [`../../adr/support.md`](../../adr/support.md); data model [`../../data-model/support.md`](../../data-model/support.md) §2–§3<br>• Disclosure of refusals: AU-6 in [`../../adr/authorization.md`](../../adr/authorization.md); the `account.read` finding: AU-4<br>• API: [`../../api/api.md`](../../api/api.md) §3 (errors), §5 (case endpoints), §8 (agent connection), §9 (tools)<br>• Fixture and conventions: [`../explain-access/explain-access.verification-spec.md`](../explain-access/explain-access.verification-spec.md) §2, D7, D8 |
@@ -43,6 +43,12 @@
    - [S34d — Closing needs a reason and a summary](#s34d--closing-needs-a-reason-and-a-summary)
    - [S34e — The closed cases of an account show their summaries](#s34e--the-closed-cases-of-an-account-show-their-summaries)
    - [S34f — Closed cases of an account the CSR may not read are refused as any read](#s34f--closed-cases-of-an-account-the-csr-may-not-read-are-refused-as-any-read)
+   - [S34g — The assignee closes a case whose subject they may no longer read](#s34g--the-assignee-closes-a-case-whose-subject-they-may-no-longer-read)
+   - [S36a — The case panel finds an account by id](#s36a--the-case-panel-finds-an-account-by-id)
+   - [S36b — The case panel finds a person's accounts by email](#s36b--the-case-panel-finds-a-persons-accounts-by-email)
+   - [S36c — The case panel's search by name is bounded](#s36c--the-case-panels-search-by-name-is-bounded)
+   - [S36d — The case panel's search refuses as any read](#s36d--the-case-panels-search-refuses-as-any-read)
+   - [S36e — The case panel's search is rate-limited](#s36e--the-case-panels-search-is-rate-limited)
 5. [Not in this feature](#5-not-in-this-feature)
 
 ## 1. Decisions this spec relies on
@@ -57,7 +63,7 @@ Approving this spec also approves these values:
 | D4 | **The CSR records a contact authentication as a kind and a method; the system does not perform it.** Kinds are factor categories: `Knowledge` (something the person knows) and `Possession` (something the person has). Methods: `SecurityQuestion` and `AccountDetails` (`Knowledge`, accepted in the demo), `SupportPasscode` (`Knowledge`, production: passcodes would be stored and checked), `OneTimeCode` (`Possession`, production). A password is never a method: support never asks for it. A method not accepted, or not of its kind, answers `400 invalid_request`. A passed check records kind, method, CSR, and instant; a failed one answers `409 conflict` with `contact_authentication_failed`, is audited (`support.contact-authentication-failed`), and clears any earlier authentication. Without a contact: `409 conflict` with `contact_not_set`. | How sure we are that the contact is who they claim to be, before anything they ask for can change the account. Kind and method let a policy require a minimum (a cancellation needs `Possession`). A server-verified one-time code is listed in production-readiness. |
 | D5 | **A contact authentication is valid for 30 minutes.** The case shows `expires_at`; policy `contact-is-authenticated` enforces it from grants-and-approvals, where changes first exist. | A long case does not carry an old check into a sensitive change. |
 | D6 | **Once the subject is set, `check_entitlement`, `list_entitlements`, and `explain_access` act on the subject only.** Another `account_id` is refused as an argument ("This case is about another account; open a new case for this one."), before any use case runs. `find_customer_account` still searches every account. | A case stays about one account (SU-2, amended 2026-10-25). |
-| D7 | **Closing (`case.close`) takes a reason (`Resolved`, `Abandoned`) and a summary (plain text, 1 to 4,000 characters), and in one transaction:** sets `closed_at`, `closed_by`, `close_reason`, and `case_summary`; ends the assignment (`CaseClosed`); cancels what is pending (nothing before grants-and-approvals). Then the case agent closes every open connection with `4404 case_unavailable`. | Nothing stays pending; the database keeps what the case was about and how it ended (SU-7). |
+| D7 | **Closing (`case.close`, decided as D19 states) takes a reason (`Resolved`, `Abandoned`) and a summary (plain text, 1 to 4,000 characters), and in one transaction:** sets `closed_at`, `closed_by`, `close_reason`, and `case_summary`; ends the assignment (`CaseClosed`); cancels what is pending (nothing before grants-and-approvals). Then the case agent closes every open connection with `4404 case_unavailable`. | Nothing stays pending; the database keeps what the case was about and how it ended (SU-7). |
 | D8 | **The summary is drafted by the assistant and stored only as the CSR submits it.** The tool `draft_case_summary` returns `{ "result": "drafted", "summary": … }` and stores nothing; the case panel offers it in an editable box. | The stored summary is the CSR's, reviewed; the audit records stay the facts. |
 | D9 | **A closed case has no assignee, so it answers `404 not_found` to everyone**, on every endpoint and every connection, as a case of another CSR does (explain-access D1). | No new rule, and nothing new revealed. |
 | D10 | **Every case action by anyone but the current assignee answers `404 not_found`** and records security event `CaseNotAssigned`, with no audit record, as connecting does (explain-access D1). | The case's existence is not revealed (AU-6). |
@@ -68,6 +74,9 @@ Approving this spec also approves these values:
 | D15 | **Each part of the case shows only what the CSR may read now.** Reading the case runs one `account.read` decision on the subject and one on the contact (`detail.use_case` `GetCase`); a part the CSR may not read shows its `account_id` (which they set) and `"readable": false`, nothing else; the contact's `roles_in_subject` is `null` unless the subject is readable too (amended 2026-10-26, discovery 1). | The case view is a read like any other (AU-4, AU-6). |
 | D16 | **The four actions answer `204 No Content`; the case panel then reads the case with `GET`.** | One read path: what the case shows is always decided by D15's reads, and an action's audit records are only its own (D12). |
 | D17 | **The closed cases of an account are readable by anyone who may read the account:** `GET /api/cases?subject={account_id}&status=closed` answers its closed cases, newest first, at most 20, each with its reason, who closed it and when, and its summary. One audited `account.read` decision on the account (`detail.use_case` `ListClosedCases`); refusals as any read (AU-6). Open cases and cases of other accounts are never listed. Acting on a closed case stays `404` (D9). | The summary is stored so that the next CSR on the account can see what happened before. |
+| D18 | **The case panel searches accounts without the assistant:** `GET /api/accounts?query=…` runs `FindCustomerAccount` for the session's principal and answers as the tool does: `200` with `{ "result": "found", "account": … }` or `{ "result": "ambiguous", "candidates": [ … ], "more_matches": … }`; a refusal as any read (`404`, or `403 access_denied` with reasons); a query shorter than 3 characters `400` with detail `query`. Its audit records are the lookup's (explain-access D12, D14), with no case. Each employee may search at most 20 times in any 60 seconds, counted apart from chat messages (D13's rule); past it, `429 rate_limited`, before anything is read or audited (review R3-1). The panel offers **Set as case subject** on every account found, and **Set as contact** on a person's own account (`own_account`, or the one account found by email). | A case can be run without the assistant (the AI unavailable, or a CSR who prefers to search); it is the assistant's lookup behind another door, so it adds no rule. |
+| D19 | **Closing is decided on `case.close` alone, without `account.read` on the subject** (amends D7, review R5): only the case's current assignee closes it (D10), whoever opened it; the audit records still name the subject. | Closing reads nothing about the account and reveals nothing; an assignee who may no longer read the subject can still close the case. A reassignment would hand it to someone who may read it. |
+| D20 | **The case panel guides the CSR, from what the case view already shows:** when the subject is not readable, "You may no longer read this account. Ask a supervisor to reassign the case."; when a subject is set and the contact is not authenticated, or the authentication has expired, "Authenticate the contact before sharing anything about {subject}."; when the contact holds no role in the subject, "{contact} holds no role in {subject}: share nothing about it." | The CSR sees the account; the contact hears what the CSR says. The warnings reveal nothing new: both facts are in the case view (D14, D15). A disclosure policy by role is listed in production-readiness. |
 
 ## 2. Fixture
 
@@ -98,6 +107,7 @@ Endpoints (api.md §5); every one answers 404 unless the caller is the case's cu
   POST /api/cases/{case_id}/contact-authentication  { kind, method, passed }     → 204
   POST /api/cases/{case_id}/closure                 { close_reason, summary }    → 204
   GET  /api/cases?subject={account_id}&status=closed                             → 200 { cases } (D17)
+  GET  /api/accounts?query={query}                                               → 200 lookup result (D18)
 
 The case, as GET returns it (absent parts are null):
   {
@@ -875,6 +885,79 @@ audit_records:                            # exactly one
 | A | `GET /api/cases?subject=<acc_umbrella>&status=closed` | `403 access_denied` with `policy.enterprise-accounts-need-level-2`; one `Deny` record, `ListClosedCases` |
 | B | `GET /api/cases?subject=<acc_missing>&status=closed` | `404 not_found`; no audit record |
 | C | `GET /api/cases?subject=<acc_acme>` (no `status`) | `400 invalid_request` with detail `status`; no audit record |
+
+### S34g — The assignee closes a case whose subject they may no longer read
+
+**Level:** `[http]`
+
+**Given:** cse_alex_1 has subject acc_acme. Since 14:55:00 acc_acme's current term is enterprise (straight in
+the tables), so policy enterprise-accounts-need-level-2 denies iac_alex (level 1) reading it.
+
+**When:** `POST …/closure` as iac_alex with `{ "close_reason": "Abandoned", "summary": "Handed over: the
+account became Enterprise." }`.
+
+**Then:** `204`; the case is closed with that reason and summary, and the assignment ended.
+
+```yaml
+audit_records:                            # exactly two, in this order: no account.read finding (D19)
+  - action_key: case.close
+    actor: iac_alex
+    subject: acc_acme
+    audit_outcome: Allow
+  - action_key: case.close
+    actor: iac_alex
+    subject: acc_acme
+    audit_outcome: Succeeded
+```
+
+### S36a — The case panel finds an account by id
+
+**Level:** `[http]`
+
+**When:** `GET /api/accounts?query=<acc_acme>` as iac_alex.
+
+**Then:** `200` with `{ "result": "found", "account": … }`, the account as `find_customer_account` shows it
+(explain-access S07a's summary); one `account.read` record, `Allow`, `detail.use_case`
+`FindCustomerAccount`, no case.
+
+### S36b — The case panel finds a person's accounts by email
+
+**Level:** `[http]`
+
+**When:** `GET /api/accounts?query=jane@acme.com` as iac_alex.
+
+**Then:** `200` with `{ "result": "ambiguous", "candidates": [acc_jane (own_account true, roles owner),
+acc_acme (own_account false, roles admin, billing)], "more_matches": false }`; two `account.read` records,
+`Allow`, `FindCustomerAccount`.
+
+### S36c — The case panel's search by name is bounded
+
+**Level:** `[http]`
+
+| Case | Query | Then |
+| --- | --- | --- |
+| A | `acme` | `200` · `ambiguous` · Acme Corp, Acme Labs · `more_matches` false · two `Allow` records |
+| B | ` a ` | `400 invalid_request` with detail `query` ("The query needs at least 3 characters."); no audit record |
+
+### S36d — The case panel's search refuses as any read
+
+**Level:** `[http]`
+
+| Case | Request | Then |
+| --- | --- | --- |
+| A | iac_alex, `query=Umbrella` (the only match is Enterprise) | `403 access_denied` with `policy.enterprise-accounts-need-level-2`; one `Deny` record |
+| B | iac_alex, `query=Massive Dynamic` (no match) | `404 not_found`; one `Failed` record, `support.no-matching-account` |
+| C | iac_drew (no `account.read`), `query=Acme` | `404 not_found`; one `Deny` record, `access.permission-not-held` |
+| D | no session | `401 invalid_session`; no audit record |
+
+### S36e — The case panel's search is rate-limited
+
+**Level:** `[http]`
+
+**When:** iac_alex sends 21 searches for `acme` within the same minute.
+
+**Then:** the first 20 answer `200`; the 21st answers `429` with `{ "error": "rate_limited", "error_description":
+"Too many requests. Wait a moment, then try again." }` and writes no audit record (40 `Allow` records in all).
 
 ## 5. Not in this feature
 

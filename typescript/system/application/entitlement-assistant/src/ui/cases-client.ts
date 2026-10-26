@@ -112,3 +112,41 @@ export async function closedCases(accountId: string): Promise<readonly PastCase[
   if (response.status !== 200) return [];
   return ((await response.json()) as { cases: readonly PastCase[] }).cases;
 }
+
+/** A lookup's answer, as the assistant's tool receives it (case-lifecycle D18). */
+export type AccountSearch =
+  | {
+      readonly result: "found";
+      readonly account: {
+        readonly account_id: string;
+        readonly display_name: string;
+        readonly plan_key: string | null;
+      };
+    }
+  | {
+      readonly result: "ambiguous";
+      readonly candidates: readonly {
+        readonly account_id: string;
+        readonly display_name: string;
+        readonly own_account: boolean;
+        readonly roles: readonly string[];
+      }[];
+      readonly more_matches: boolean;
+    };
+
+/** The case panel's account search: the answer, or the server's message for the CSR. */
+export async function searchAccounts(
+  query: string,
+): Promise<
+  { readonly ok: true; readonly search: AccountSearch } | { readonly ok: false; readonly message: string }
+> {
+  const response = await fetch(`/api/accounts?query=${encodeURIComponent(query)}`);
+  if (response.status === 200) return { ok: true, search: (await response.json()) as AccountSearch };
+  return {
+    ok: false,
+    message:
+      response.status === 404
+        ? "No account matched, or it is not one you may read."
+        : await messageOf(response, "The search failed."),
+  };
+}

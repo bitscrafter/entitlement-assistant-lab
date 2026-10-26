@@ -316,3 +316,24 @@ button.inline {
     position: static;
   }
 }
+
+.guidance {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid #f38020;
+  background: #fff7ed;
+}
+
+.finder {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.finder input {
+  flex: 1;
+}
+
+.finder-results {
+  margin: 0;
+  padding-left: 1rem;
+}

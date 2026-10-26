@@ -1,5 +1,7 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import { caseGuidance } from "./case-guidance.ts";
 import {
+  type AccountSearch,
   authenticateContact,
   type CaseAccount,
   type CaseState,
@@ -7,7 +9,11 @@ import {
   closedCases,
   getCase,
   type PastCase,
+  searchAccounts,
+  setCaseContact,
+  setCaseSubject,
 } from "./cases-client.ts";
+import { NAME_SEARCH_NOTICE } from "./reply-details.ts";
 
 /** The methods the CSR may record in this deployment, by kind (case-lifecycle D4). */
 const METHODS = [
@@ -48,6 +54,16 @@ export function CasePanel({
   }, [caseId, version, reads]);
 
   const reread = () => setReads((count) => count + 1);
+  const [, setNow] = useState(0);
+  // The guidance depends on the time: re-render when the authentication expires (D20; review R3-2).
+  const expiresAt = state?.contact_authentication?.expires_at ?? null;
+  useEffect(() => {
+    if (expiresAt === null) return;
+    const delay = new Date(expiresAt).getTime() - Date.now();
+    if (delay <= 0) return;
+    const timer = setTimeout(() => setNow(Date.now()), delay + 500);
+    return () => clearTimeout(timer);
+  }, [expiresAt]);
   const outcome = (result: { ok: true } | { ok: false; message: string }) => {
     setMessage(result.ok ? null : result.message);
     reread();
@@ -65,6 +81,16 @@ export function CasePanel({
           {message}
         </p>
       )}
+      {caseGuidance(state, new Date()).map((line) => (
+        <p key={line} className="guidance" role="note">
+          {line}
+        </p>
+      ))}
+      <AccountFinder
+        onSetSubject={async (accountId) => outcome(await setCaseSubject(caseId, accountId))}
+        onSetContact={async (accountId) => outcome(await setCaseContact(caseId, accountId))}
+        subjectSet={state.subject !== null}
+      />
       <section>
         <h3>Subject</h3>
         {state.subject === null ? (
@@ -253,6 +279,105 @@ function PastCases({ accountId, name }: { readonly accountId: string; readonly n
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/**
+ * The case panel's account search (case-lifecycle D18): the assistant's lookup, without the assistant. Every
+ * button calls an endpoint, which decides; a contact must be a person's own account (D3).
+ */
+function AccountFinder({
+  onSetSubject,
+  onSetContact,
+  subjectSet,
+}: {
+  readonly onSetSubject: (accountId: string) => Promise<void>;
+  readonly onSetContact: (accountId: string) => Promise<void>;
+  readonly subjectSet: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [searched, setSearched] = useState<string | null>(null);
+  const [search, setSearch] = useState<AccountSearch | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const latest = useRef(0);
+
+  async function find(event: FormEvent) {
+    event.preventDefault();
+    const submission = ++latest.current;
+    const outcome = await searchAccounts(query.trim());
+    // An answer to an older search arriving late is ignored (review R3-4).
+    if (submission !== latest.current) return;
+    setSearched(query.trim());
+    setSearch(outcome.ok ? outcome.search : null);
+    setMessage(outcome.ok ? null : outcome.message);
+  }
+
+  const byEmail = searched?.includes("@") === true;
+  const byName = searched !== null && !byEmail && !searched.startsWith("acc_");
+  const rows =
+    search === null
+      ? []
+      : search.result === "found"
+        ? [
+            {
+              account_id: search.account.account_id,
+              display_name: search.account.display_name,
+              own: byEmail,
+              roles: [],
+            },
+          ]
+        : search.candidates.map((candidate) => ({
+            account_id: candidate.account_id,
+            display_name: candidate.display_name,
+            own: candidate.own_account,
+            roles: candidate.roles,
+          }));
+  return (
+    <section>
+      <h3>Find an account</h3>
+      <form className="finder" onSubmit={find}>
+        <input
+          aria-label="Account id, email, or part of a name"
+          placeholder="Account id, email, or part of a name"
+          maxLength={320}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <button type="submit" disabled={query.trim().length < 3}>
+          Find
+        </button>
+      </form>
+      {message !== null && <p className="refusal">{message}</p>}
+      {rows.length > 0 && (
+        <ul className="finder-results">
+          {rows.map((row) => (
+            <li key={row.account_id}>
+              {row.display_name} <code>{row.account_id}</code>
+              {row.roles.length > 0 ? ` · ${row.roles.join(", ")}` : ""}
+              {!subjectSet && (
+                <button type="button" className="inline" onClick={() => void onSetSubject(row.account_id)}>
+                  Set as case subject
+                </button>
+              )}
+              {row.own && (
+                <button
+                  type="button"
+                  className="secondary inline"
+                  onClick={() => void onSetContact(row.account_id)}
+                >
+                  Set as contact
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {search?.result === "ambiguous" && search.more_matches && (
+        <p className="refusal">More accounts match; refine the query.</p>
+      )}
+      {byName && search !== null && <p className="notice">{NAME_SEARCH_NOTICE}</p>}
     </section>
   );
 }

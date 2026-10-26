@@ -81,6 +81,7 @@ appears only when the caller's authentication context allows what it says (AU-6)
 | 403 | `absolute_lifetime_reached` | The session reached its maximum lifetime. | session renewal at the 8-hour cap | never |
 | 404 | `not_found` | The resource was not found. | the resource does not exist, **or** the caller may not know it exists: not the case's assignee, no `account.read`, any refusal not covered by `access_denied` | never; byte-identical to a missing resource |
 | 409 | `conflict` | The resource is not in a state that allows this request. | change request not awaiting confirmation, approval not `Pending` or past its deadline, case closed, stale change request, subject already set | the state: `stale_change_request`, `case_closed`, `approval_not_pending`, `subject_already_set`, `contact_authentication_failed` |
+| 429 | `rate_limited` | Too many requests. Wait a moment, then try again. | the case panel's account search past 20 a minute per employee (case-lifecycle D18) | never |
 | 500 | `server_error` | An unexpected error occurred. | anything unexpected, including an audit record that could not be written (fail closed) | never; the trace id in a response header |
 
 **The rule behind the table** (AU-6): a caller learns that a customer account, case, change request, or
@@ -122,13 +123,14 @@ Every endpoint under `/api/cases/{case_id}` answers `404` unless the caller is t
 | --- | --- | --- | --- |
 | `POST /api/cases` | `OpenCase` · `case.open` | `{}` | 201 `{ case_id }` |
 | `GET /api/cases` | `ListMyCases` · none (own assignments only) | — | 200 open cases assigned to the caller |
+| `GET /api/accounts?query={query}` | `FindCustomerAccount` · `account.read` per candidate | — | 200 the lookup's answer, as `find_customer_account` gives it (`found`, `ambiguous`); refusals as any read; 400 `query` under 3 or over 320 characters; 429 past 20 a minute (case-lifecycle D18) |
 | `GET /api/cases?subject={account_id}&status=closed` | `ListClosedCases` · `account.read` on the account | — | 200 `{ cases }`: the account's closed cases, newest first, at most 20, with reason, closer, and summary (case-lifecycle D17) |
 | `GET /api/cases/{case_id}` | `GetCase` · `account.read` on the subject and on the contact, when set | — | 200 case: subject (holds), contact (holds, roles in the subject), authentication (kind, method, expiry); a part the caller may not read shows only its id and `readable: false` |
 | `PUT /api/cases/{case_id}/subject` | `SetCaseSubject` · `case.set-subject` | `{ account_id }` | 204 |
 | `PUT /api/cases/{case_id}/contact` | `SetCaseContact` · `case.set-contact` | `{ account_id }` | 204 (contact authentication cleared) |
 | `POST /api/cases/{case_id}/contact-authentication` | `AuthenticateContact` · `case.authenticate-contact` | `{ kind, method, passed }` | 204, or 409 `contact_authentication_failed` (audited) |
 | `POST /api/cases/{case_id}/reassignment` | `ReassignCase` · `case.reassign` | `{ assignee_account_id }` | 200 case |
-| `POST /api/cases/{case_id}/closure` | `CloseCase` · `case.close` | `{ close_reason, summary }` | 204 (pending changes and approvals canceled; open connections closed with `4404`) |
+| `POST /api/cases/{case_id}/closure` | `CloseCase` · `case.close` (without `account.read` on the subject, case-lifecycle D19) | `{ close_reason, summary }` | 204 (pending changes and approvals canceled; open connections closed with `4404`) |
 
 `PUT …/subject` takes the account the assistant proposed (the result of `propose_case_subject`, §9) or one the
 CSR picked; the subject is set once, so a second `PUT` answers `409` with `subject_already_set`. A contact

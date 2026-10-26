@@ -62,6 +62,10 @@ function applicationFor(environment: Environment): Promise<Application> {
         return forwardToCaseAgent(environment.CASE_AGENT, request, caseId, session);
       },
       caseWebSocketConnections: new DurableObjectCaseWebSocketConnections(environment.CASE_AGENT),
+      searchRateLimiter: new DurableObjectMessageRateLimiter(
+        environment.MESSAGE_RATE_LIMITER,
+        "account-search:",
+      ),
     }))();
   return application;
 }

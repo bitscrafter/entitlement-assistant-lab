@@ -33,6 +33,8 @@ export type WorkOutcome<Result> =
 
 const READ = "account.read";
 
+type AuditOutcomeOf = "Allow" | "Deny" | "Conditional" | "Succeeded" | "Failed";
+
 /**
  * The case assignee check (SU-14, case-lifecycle D9, D10): only the current assignee acts in a case. A closed case
  * has no assignee, so it is refused like another CSR's.
@@ -84,6 +86,8 @@ export class CaseActionEnforcement {
   }
 
   /**
+   * @ensures With `readsAccount` false (closing, D19), the account is named in the records, but `account.read` is
+   *          neither gated nor decided, and a refusal is `Forbidden`.
    * @ensures Without the governing permission (or `account.read`, when an account is involved), refused before any
    *          customer data is read, with one `Deny` record (D12 of explain-access): `NotFound` with an account,
    *          `Forbidden` without.
@@ -97,50 +101,40 @@ export class CaseActionEnforcement {
     actionKey: string,
     accountId: Uuid | null,
     work: (account: CustomerAccountView | null, decision: Decision) => Promise<WorkOutcome<Result>>,
+    options: { readonly readsAccount: boolean } = { readsAccount: true },
   ): Promise<{ readonly kind: "Acted"; readonly outcome: WorkOutcome<Result> } | ActionRefusal> {
     const principal = { kind: "Employee", accountId: request.principalAccountId } as const;
+    // The account this action reads, so decides `account.read` on: none for closing (D19), which only names it.
+    const readAccountId = options.readsAccount ? accountId : null;
+    const record = (outcome: AuditOutcomeOf, reasons: readonly string[], policySetVersion: string) =>
+      this.#record(request, actionKey, accountId, outcome, reasons, policySetVersion);
     const gate = combineDecisions(
       await this.#decider.decidePermission({ principal, actionKey }),
-      ...(accountId === null ? [] : [await this.#decider.decidePermission({ principal, actionKey: READ })]),
+      ...(readAccountId === null
+        ? []
+        : [await this.#decider.decidePermission({ principal, actionKey: READ })]),
     );
     if (gate.outcome !== "Allow") {
-      await this.#record(
-        request,
-        actionKey,
-        accountId,
-        gate.outcome,
-        gate.reasonCodes,
-        gate.policySetVersion,
-      );
-      return accountId === null ? { kind: "Forbidden" } : { kind: "NotFound" };
+      await record(gate.outcome, gate.reasonCodes, gate.policySetVersion);
+      return readAccountId === null ? { kind: "Forbidden" } : { kind: "NotFound" };
     }
-    const account = accountId === null ? null : await this.#getCustomerAccount.execute(accountId);
-    if (accountId !== null && account === null) return { kind: "NotFound" };
+    const account = readAccountId === null ? null : await this.#getCustomerAccount.execute(readAccountId);
+    if (readAccountId !== null && account === null) return { kind: "NotFound" };
 
     const decision = combineDecisions(
       await this.#decider.decide({ principal, actionKey, subjectAccountId: accountId }),
-      ...(accountId === null
+      ...(readAccountId === null
         ? []
-        : [await this.#decider.decide({ principal, actionKey: READ, subjectAccountId: accountId })]),
+        : [await this.#decider.decide({ principal, actionKey: READ, subjectAccountId: readAccountId })]),
     );
-    await this.#record(
-      request,
-      actionKey,
-      accountId,
-      decision.outcome,
-      decision.reasonCodes,
-      decision.policySetVersion,
-    );
+    await record(decision.outcome, decision.reasonCodes, decision.policySetVersion);
     if (decision.outcome !== "Allow") {
-      if (accountId === null) return { kind: "Forbidden" };
+      if (readAccountId === null) return { kind: "Forbidden" };
       const disclosure = disclose(decision, true);
       return disclosure.kind === "Denied" ? disclosure : { kind: "NotFound" };
     }
     const outcome = await work(account, decision);
-    await this.#record(
-      request,
-      actionKey,
-      accountId,
+    await record(
       outcome.outcome,
       outcome.outcome === "Failed" ? [outcome.reasonCode] : [],
       decision.policySetVersion,

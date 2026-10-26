@@ -69,18 +69,23 @@ export class DurableObjectCaseWebSocketConnections implements CaseWebSocketConne
 /** The rate limiter adapter of the Worker: one Durable Object per employee account (D13). */
 export class DurableObjectMessageRateLimiter implements MessageRateLimiter {
   readonly #namespace: DurableObjectNamespace;
+  readonly #scope: string;
 
-  constructor(namespace: DurableObjectNamespace) {
+  /** `scope` keeps separate counters per use (chat messages; the case panel's account search, D18). */
+  constructor(namespace: DurableObjectNamespace, scope = "") {
     this.#namespace = namespace;
+    this.#scope = scope;
   }
 
   async attempt(accountId: Uuid, at: Date): Promise<"Allowed" | "Refused"> {
-    const response = await this.#namespace.get(this.#namespace.idFromName(accountId)).fetch(
-      new Request("https://message-rate-limiter.internal/attempt", {
-        method: "POST",
-        body: String(at.getTime()),
-      }),
-    );
+    const response = await this.#namespace
+      .get(this.#namespace.idFromName(`${this.#scope}${accountId}`))
+      .fetch(
+        new Request("https://message-rate-limiter.internal/attempt", {
+          method: "POST",
+          body: String(at.getTime()),
+        }),
+      );
     return (await response.text()) === "Allowed" ? "Allowed" : "Refused";
   }
 }

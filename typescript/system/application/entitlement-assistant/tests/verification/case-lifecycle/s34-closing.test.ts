@@ -163,6 +163,59 @@ describe("case-lifecycle closing a case", () => {
   });
 });
 
+describe("case-lifecycle closing without reading the subject (D19)", () => {
+  let harness: Harness;
+  beforeEach(async () => {
+    harness = await createHarness();
+    await insertCase(harness.owner, "cse_alex_1", "iac_alex", at("14:00:00"));
+  });
+  afterEach(async () => {
+    await harness.close();
+  });
+
+  test("scenario 34g ensures the assignee closes a case whose subject they may no longer read", async () => {
+    await givenCase(harness.owner, "cse_alex_1", { subject: "acc_acme" });
+    await harness.owner.query(
+      `UPDATE subscription_term SET plan_key = 'enterprise'
+        WHERE ended_at IS NULL AND subscription_id IN (SELECT subscription_id FROM subscription WHERE account_id = $1)`,
+      [uuidOf("acc_acme")],
+    );
+
+    const response = await caseRequest(harness, "POST", casePath("cse_alex_1", "closure"), "iac_alex", {
+      close_reason: "Abandoned",
+      summary: "Handed over: the account became Enterprise.",
+    });
+
+    expect(response.status).toBe(204);
+    const { row, assignments } = await caseState(harness.owner, "cse_alex_1");
+    expect(row).toMatchObject({
+      close_reason: "Abandoned",
+      case_summary: "Handed over: the account became Enterprise.",
+    });
+    expect(assignments).toEqual([
+      expect.objectContaining({ ended_at: at("15:00:00"), end_reason: "CaseClosed" }),
+    ]);
+    expect(stated(await lifecycleRecords(harness))).toEqual([
+      {
+        action_key: "case.close",
+        actor: "iac_alex",
+        subject: "acc_acme",
+        audit_outcome: "Allow",
+        reasons: [],
+        case: "cse_alex_1",
+      },
+      {
+        action_key: "case.close",
+        actor: "iac_alex",
+        subject: "acc_acme",
+        audit_outcome: "Succeeded",
+        reasons: [],
+        case: "cse_alex_1",
+      },
+    ]);
+  });
+});
+
 describe("case-lifecycle past cases of an account", () => {
   let harness: Harness;
   beforeEach(async () => {
