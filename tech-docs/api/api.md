@@ -30,7 +30,7 @@
 | A2 | **Anything that changes state and that the language model must not trigger is an HTTP endpoint, never a tool or a chat frame:** confirming or canceling a change request, setting the subject, the contact, and contact authentication, reassigning, closing, deciding an approval. | CM-5: the model proposes; only a person's own click acts. |
 | A3 | **Tools only read, or prepare.** A preparing tool stores a change request awaiting confirmation (or proposes a subject) and returns a card; it never applies anything. Every effect on a customer traces back to a person's click: the CSR's confirmation, and a supervisor's approval where a policy requires one. | SU-4, SU-9, CM-5. |
 | A4 | **Two visible domains: authentication, and the case.** `/api/authentication/…` for who the caller is; every piece of customer work under `/api/cases/{case_id}/…`; approvals on their own, because supervisors decide without being the case's assignee. Entitlements, policies, and subscriptions are not endpoints: the CSR reaches them only within a case. | The CSR's two real contexts. A case in the path makes the assignee check (SU-14) the first check, and every read references its case in the audit record. |
-| A5 | **State-changing requests require the application's `Origin`, `Content-Type: application/json`, and the session cookie.** No CORS: no other origin is ever allowed. | CSRF defense in depth with `SameSite=Strict`. |
+| A5 | **State-changing requests require the application's `Origin`, `Content-Type: application/json`, and the session cookie; every WebSocket upgrade requires the application's `Origin`.** No CORS: no other origin is ever allowed. CORS does not cover WebSockets, so the upgrade is checked by the server. | CSRF and cross-site WebSocket hijacking defense in depth with `SameSite=Strict`. |
 | A6 | **Idempotency.** Confirming a change request is idempotent by its id: a repeated confirmation returns the first result. Other actions are guarded by state (closing a closed case answers `409`). | Retries after a dropped response are safe (S17). |
 | A7 | **JSON field names, tool names and arguments, and frame payloads are snake_case; ids are prefixed** (`cse_…`, `chg_…`, `apr_…`, CM-14); instants are RFC 3339 UTC. The TypeScript code stays camelCase; adapters convert at the boundary. | OAuth 2 conventions; one wire format. |
 | A8 | **Errors follow the OAuth 2 format** (`error`, `error_description`), with optional `error_details`. The top level is always safe to show to anyone; details appear only when the caller's authentication context allows them (AU-6). | A familiar format whose two levels match the two disclosure levels. |
@@ -41,7 +41,7 @@
 Base URL           https://app.entitlement-assistant.example
 Media type         application/json; charset=utf-8 (requests and responses); no body on 204
 Authentication     __Host-session cookie (feature employee-sign-in); no Authorization header
-Origin             required on every non-GET request; must equal the base URL
+Origin             required on every non-GET request and every WebSocket upgrade; must equal the base URL
 Request bodies     at most 16 KiB, read whole before any work; strictly validated: unknown fields, wrong types,
                    and malformed ids are rejected (400)
 Ids                kind prefix + 22 base64url characters; a well-formed id of the wrong kind is malformed
@@ -218,6 +218,8 @@ One agent instance (Durable Object) per case; the conversation lives in its stor
 | `change_request_card` | `{ change_request_id, change_kind, diff, status }`, rendered from the stored diff, never from model text (SU-9); the UI offers Confirm and Cancel, calling §6 |
 | `case_event` | something happened outside the chat: change applied, approval decided or expired, case reassigned or closed |
 | close `4401 session_expired` | the token the connection was opened with expired |
+| close `4401 invalid_session` | the principal, re-loaded at a message, is no longer active (identity inactive or account suspended) |
+| close `1009 message_too_big` | a frame from the browser was larger than 16 KiB; the model was not called |
 | close `4404 case_unavailable` | the case was closed or reassigned away from the caller |
 
 Cards and buttons are rendered by the UI from the server's frames; the model can neither send a frame

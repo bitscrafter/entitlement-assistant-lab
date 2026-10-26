@@ -18,13 +18,14 @@
   disabled; production secrets in `.env.production-secrets.json`. All three files are git-ignored, mode 600, and never
   shown in chat. Smoke test passed: sign-in, session, identical refusals (demo password, unknown email, suspended),
   foreign origin 403, `__Host-` cookie with HttpOnly, Secure, SameSite=Strict, CSP and HSTS headers.
-- **Feature explain-access:** its spec exists but predates what employee-sign-in established; it is updated
-  just before it is built (owner rule: specs just in time).
+- **Feature explain-access:** spec updated and approved (2026-10-25) on branch `feature/explain-access`, with the
+  agent connection sequence (`tech-docs/diagrams/agent-connection.sequence.puml`). Next: the architect plan.
 
 ## Next session
 
 1. Owner: keep the production secrets in a password manager.
-2. Update the explain-access spec, owner approval, build.
+2. Explain-access architect plan (ports, adapters, schema, seed data, automated end-to-end test), owner review, then
+   RED tests and build (demo mode).
 
 ## Decisions (owner, 2026-10-22)
 
@@ -52,6 +53,11 @@
 - Prompt history and the GitHub remote come at the end; transcripts published redacted under `tech-docs/`.
 - A database that is not local is seeded with generated, easy-to-type passwords (`alex-k7m2-x9qp-4hdr`), never the
   published demo passwords (option A). `neonctl` installed globally.
+- Explain-access spec rulings: D9 WebSocket upgrades need the application's Origin; D10 every message re-loads the
+  principal (close 4401 invalid_session); D11 messages over 16 KiB close with 1009; D12 a principal without
+  account.read is refused before any customer data is read, and a lookup matching nothing is audited
+  (support.no-matching-account, query HMAC only); D13 20 messages per minute per employee, a Durable Object counter
+  behind a rate-limiter port, close 4429 rate_limited; security-event causes CaseNotFound and CaseNotAssigned.
 - Plain HTTP is redirected (308) to the configured HTTPS origin by the Worker, which runs first for every request;
   owner tried the live deployment and approved merging `feature/deploy`.
 

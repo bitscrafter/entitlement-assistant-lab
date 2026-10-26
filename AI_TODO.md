@@ -4,9 +4,11 @@
 
 1. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
 2. At the end: GitHub remote (owner, 2026-10-25).
-3. Feature explain-access: update its spec to what employee-sign-in established, owner approval, then build (demo mode).
+3. Feature explain-access: architect plan, owner review, RED tests, build (demo mode); update production-readiness "Insider enumeration" with the code.
 
 ## Completed
+
+- Explain-access spec updated and approved (2026-10-25): D9–D13, S05k–S05m, agent connection sequence diagram.
 
 - Deployed (2026-10-25) to `entitlement-assistant.jose-luis-rios.workers.dev`: generated seed passwords (GREEN 104 passed @ 55c77ce), Neon migrated and seeded, worker login role, Hyperdrive with caching disabled, secrets, smoke test passed; plain HTTP redirected to HTTPS by the Worker; `feature/deploy` merged @ c8a9886.
 - `AI_WORKFLOW.md` GREEN gate runs `depcruise .` (the package has no root `src`).

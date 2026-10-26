@@ -3,11 +3,11 @@
 | | |
 | :--- | :--- |
 | **Purpose** | States what the feature must do: a signed-in employee opens a case, connects to it, and asks the assistant to find customer accounts, check and list their entitlements, and explain why a person can or cannot use a feature in an account. Each scenario becomes exactly one verification test (`AI_AS_TESTER.md`). |
-| **Status** | Draft — for owner approval |
-| **Feature** | explain-access · scenarios S05a–S05j, S06a–S06b, S07a–S07d, S08a–S08e, S09a–S09b, S10a–S10b, S11, S12, S13 |
+| **Status** | Approved by the owner (2026-10-25) |
+| **Feature** | explain-access · scenarios S05a–S05m, S06a–S06b, S07a–S07d, S08a–S08e, S09a–S09b, S10a–S10b, S11, S12, S13 |
 | **Mode** | feature; reads customer data; writes only cases, case assignments, and audit records |
 | **Depends on** | feature employee-sign-in (a valid session) |
-| **References** | • Proposal: [`../../entitlement-assistant-proposal.md`](../../entitlement-assistant-proposal.md) §7<br>• Authorization decision: AU-1 to AU-6 in [`../../adr/authorization.md`](../../adr/authorization.md); [`../../diagrams/authorization-decision.activity.puml`](../../diagrams/authorization-decision.activity.puml)<br>• Disclosure of refusals: AU-6; the `account.read` finding: AU-4; one record per decision: AT-3 in [`../../adr/attribution.md`](../../adr/attribution.md)<br>• Case assignee: SU-14 in [`../../adr/support.md`](../../adr/support.md); shared ports: CM-17 in [`../../adr/common.md`](../../adr/common.md)<br>• Data model: [`../../data-model/README.md`](../../data-model/README.md) (Access, Entitlement, Product, Policy, Support, Attribution)<br>• Reason codes: [`../../data-model/attribution.md`](../../data-model/attribution.md) §4a |
+| **References** | • Proposal: [`../../entitlement-assistant-proposal.md`](../../entitlement-assistant-proposal.md) §7<br>• Authorization decision: AU-1 to AU-6 in [`../../adr/authorization.md`](../../adr/authorization.md); [`../../diagrams/authorization-decision.activity.puml`](../../diagrams/authorization-decision.activity.puml)<br>• Disclosure of refusals: AU-6; the `account.read` finding: AU-4; one record per decision: AT-3 in [`../../adr/attribution.md`](../../adr/attribution.md)<br>• Case assignee: SU-14 in [`../../adr/support.md`](../../adr/support.md); shared ports: CM-17 in [`../../adr/common.md`](../../adr/common.md)<br>• Data model: [`../../data-model/README.md`](../../data-model/README.md) (Access, Entitlement, Product, Policy, Support, Attribution)<br>• Reason codes: [`../../data-model/attribution.md`](../../data-model/attribution.md) §4a<br>• Sequence: [`../../diagrams/agent-connection.sequence.puml`](../../diagrams/agent-connection.sequence.puml) |
 
 ## Contents
 
@@ -25,6 +25,9 @@
    - [S05h — A connection without a valid session is refused](#s05h--a-connection-without-a-valid-session-is-refused)
    - [S05i — The server closes an agent connection when its session token expires](#s05i--the-server-closes-an-agent-connection-when-its-session-token-expires)
    - [S05j — Renewing the cookie does not extend an open connection](#s05j--renewing-the-cookie-does-not-extend-an-open-connection)
+   - [S05k — A principal suspended during a connection is disconnected at its next message](#s05k--a-principal-suspended-during-a-connection-is-disconnected-at-its-next-message)
+   - [S05l — An oversized message closes the connection before the model sees it](#s05l--an-oversized-message-closes-the-connection-before-the-model-sees-it)
+   - [S05m — Messages past the rate limit close the connection before the model sees them](#s05m--messages-past-the-rate-limit-close-the-connection-before-the-model-sees-them)
    - [S06a — An identity claim in the message carries no authority](#s06a--an-identity-claim-in-the-message-carries-no-authority)
    - [S06b — An identity claim in tool arguments is rejected](#s06b--an-identity-claim-in-tool-arguments-is-rejected)
    - [S07a — An account is found by id or by name](#s07a--an-account-is-found-by-id-or-by-name)
@@ -55,17 +58,24 @@ Approving this spec also approves these values:
 | # | Decision | Reason |
 | --- | --- | --- |
 | D1 | **A case that does not exist and a case assigned to another account get the same answer: `404`.** Only the current assignee acts in a case, supervisors included until they reassign it (SU-14). | No oracle for which case ids exist. |
-| D2 | **Every employee-initiated use case that touches a subject account includes `account.read` on that account as a finding of its own decision (AU-4).** Lookups decide once per candidate; checks, lists, and explanations decide once per call. Each decision writes exactly one audit record, with action key `account.read` and the use case in `detail` (AT-3). | One rule for the whole read path; nothing read unaudited. |
+| D2 | **Every employee-initiated use case that touches a subject account includes `account.read` on that account as a finding of its own decision (AU-4).** For a principal who holds `account.read`, lookups decide once per candidate; checks, lists, and explanations decide once per call. A principal without it is refused before any customer data is read (D12). Each decision writes exactly one audit record, with action key `account.read` and the use case in `detail` (AT-3). | One rule for the whole read path; nothing read unaudited. |
 | D3 | **A refusal reveals nothing beyond what the caller may know (AU-6).** A request without a valid session gets `401` and reaches no use case. An authenticated principal who holds `account.read` but is stopped by a policy gets `Denied` with the reason codes. Any other principal gets `NotFound`, byte-identical to the answer for an account that does not exist. A lookup leaves denied candidates out; when every candidate is denied, it answers `Denied` only under the rule above, otherwise `NotFound`. | Only a proven legitimate principal learns that an account exists. |
 | D4 | **An action without a subject account** (opening a case) refused to an authenticated principal answers `403 forbidden`, top level only, with no reason codes. | There is no account whose existence could leak; the reason stays in the audit record. |
 | D5 | **An explanation evaluates the person's account as principal**, through the same decision chain (AU-1), for `feature.<feature_key>.<operation>` in the subject account. It is not that person's action, so it is not audited as theirs; the employee's decision is. | One algorithm for real and explained decisions. |
 | D6 | **The server closes an agent connection when the session token it was opened with expires:** close code `4401`, reason `session_expired`. Renewing the cookie does not extend an open connection; the UI reconnects with the renewed token. | A connection never outlives its credential. |
 | D7 | **The fixed instant of every test is `2026-10-22T15:00:00Z`** unless a scenario says otherwise. | Terms and grants must not depend on when the tests run. |
-| D8 | **Fixture ids are readable aliases** for seeded UUIDv7 values (CM-14). Generated ids are written `<cse_ id>`: `cse_` plus 22 characters. The host is `app.entitlement-assistant.example`. | Readable scenarios; exact `Content-Length` values. |
+| D8 | **Fixture ids are readable aliases** for seeded UUIDv7 values (CM-14). Generated ids are written `<cse_ id>`: `cse_` plus 22 characters. The host is `app.entitlement-assistant.example`. A `Content-Length` is computed with ids as written; tests compute it from the body actually sent. | Readable scenarios; exact `Content-Length` values. |
+| D9 | **Every WebSocket upgrade carries the application's `Origin`** (api.md A5), or it gets `403 forbidden` before the session is read. A browser sets `Origin` itself and page scripts cannot change it. CORS does not cover WebSockets, so this check and `SameSite=Strict` are the two defenses against cross-site WebSocket hijacking. | A page on another site cannot drive a signed-in CSR's connection. |
+| D10 | **Every message re-loads the principal**, as every HTTP request does (employee-sign-in D4; CM-16). An inactive identity or a suspended account closes the connection with `4401 invalid_session` before the message reaches the language model. The close says no more than an invalid token's `401` (AU-6). | A suspension takes effect at the next message, not at the token's expiry. |
+| D11 | **A message frame larger than 16 KiB (16,384 bytes, the HTTP body limit) closes the connection with `1009 message_too_big`**, before the principal is re-loaded or the language model is called. | Bounds the work and the model cost one frame can cause. |
+| D12 | **A principal without `account.read` is refused before any customer data is read:** one decision, one audit record, no search and no account load. Without the permission the answer is `Deny` whatever the account (deny by default; policies only add requirements), so no policy is evaluated. A lookup's record names no subject and carries the query's HMAC; a check, list, or explanation names the requested account id as its subject, whether or not it exists (audit records reference accounts softly). A lookup that matches nothing writes one record too: `Failed`, no subject, `support.no-matching-account`. | Nothing in the answer, its timing, or its record depends on which accounts exist (AU-6); probing leaves a trail. |
+| D13 | **Each employee may send at most 20 chat messages per minute, across all their connections and cases.** One counter per employee (a Durable Object behind a rate-limiter port, on the `Clock` port) is asked after the size check (D11) and before anything else is done with a message; the 21st message within a minute closes its connection with `4429 rate_limited` before the principal is re-loaded or the language model is called. | Bounds the model work and audit writes one employee can cause. |
 
 ## 2. Fixture
 
-Every customer and internal identity is `Active`; no account has a hold unless stated.
+Every customer and internal identity is `Active`; no account has a hold unless stated. This feature adds the
+customer data below to the seed (`typescript/system/application/entitlement-assistant/resource/seed/`), so a
+deployed database holds it too; every name and email in it is fictional.
 
 **Catalog** (one product, ladder `standard`):
 
@@ -384,6 +394,8 @@ employee_roles:
 cases:
   - case: cse_alex_1
     assignee: iac_alex
+  - case: cse_alex_2
+    assignee: iac_alex
   - case: cse_blair_1
     assignee: iac_blair
 missing: no case has the id cse_missing
@@ -410,8 +422,15 @@ POST /api/cases                        session cookie; same-origin; body {}
                                        → 201 { case_id } (assigned to the session's account) | 401 | 403
 GET  /agents/case-agent/<case_id>      WebSocket upgrade; session cookie; same-origin
                                        → 101 | 401 | 403 (foreign origin) | 404 (no such case, or not the assignee)
-                                       closed by the server with 4401 session_expired at the token's exp
+                                       closed by the server with 4401 session_expired at the token's exp (D6),
+                                       4401 invalid_session for an inactive principal (D10),
+                                       1009 message_too_big for a frame over 16 KiB (D11),
+                                       4429 rate_limited past 20 messages per minute per employee (D13)
+Frames from the browser: user message and cancel (Agents SDK chat protocol, api.md §8). A client frame that
+                                       writes agent state is rejected and changes nothing.
 
+Every response carries the headers of api.md §2 (Cache-Control: no-store, Strict-Transport-Security); the
+expected responses below leave them out.
 Error bodies: OAuth 2 format (api.md §3). 401 invalid_session · 403 forbidden · 404 not_found, top level only;
 error_details only with access_denied, for a principal who holds account.read (D3).
 JSON bodies are shown formatted for reading; Content-Length is the length of the compact form the server sends.
@@ -586,7 +605,7 @@ Content-Length: 71
 ```yaml
 state: no case, no assignment
 audit_records: none                       # rejected before any use case
-security_event_log: one entry, cause foreign origin
+security_event_log: one entry, cause ForeignOrigin
 ```
 
 ### S05d — Opening a case without a session is refused
@@ -631,7 +650,7 @@ Content-Length: 78
 ```yaml
 state: no case, no assignment
 audit_records: none                       # rejected before any use case
-security_event_log: one entry, cause no session
+security_event_log: one entry, cause NoSession
 ```
 
 ### S05e — The assignee connects to their case
@@ -724,7 +743,7 @@ Content-Length: 71
 response: byte-identical in every case of S05f
 agent: not instantiated; the language model receives no call
 audit_records: none                       # connecting is not an action
-security_event_log: one entry
+security_event_log: one entry, cause CaseNotAssigned
 ```
 
 **Case B — A supervisor who is not the assignee**
@@ -759,7 +778,7 @@ Content-Length: 71
 response: byte-identical in every case of S05f
 agent: not instantiated; the language model receives no call
 audit_records: none                       # connecting is not an action
-security_event_log: one entry
+security_event_log: one entry, cause CaseNotAssigned
 ```
 
 **Case C — A case that does not exist**
@@ -794,7 +813,7 @@ Content-Length: 71
 response: byte-identical in every case of S05f
 agent: not instantiated; the language model receives no call
 audit_records: none                       # connecting is not an action
-security_event_log: one entry
+security_event_log: one entry, cause CaseNotFound
 ```
 
 ### S05g — A connection from a foreign origin is refused
@@ -842,7 +861,7 @@ Content-Length: 71
 ```yaml
 agent: not instantiated; the language model receives no call
 audit_records: none
-security_event_log: one entry, cause foreign origin
+security_event_log: one entry, cause ForeignOrigin
 ```
 
 ### S05h — A connection without a valid session is refused
@@ -892,7 +911,7 @@ Content-Length: 78
 response: byte-identical in every case of S05h
 agent: not instantiated; the language model receives no call
 audit_records: none
-security_event_log: one entry
+security_event_log: one entry, cause NoSession
 ```
 
 **Case B — Expired session**
@@ -927,7 +946,7 @@ Content-Length: 78
 response: byte-identical in every case of S05h
 agent: not instantiated; the language model receives no call
 audit_records: none
-security_event_log: one entry
+security_event_log: one entry, cause Expired
 ```
 
 ### S05i — The server closes an agent connection when its session token expires
@@ -985,6 +1004,96 @@ steps:
 at_15_20_00: the first connection is closed · code 4401 · reason session_expired (T expired)
 new_connection: HTTP/1.1 101 Switching Protocols (T2 is valid until 15:40:00)
 audit_records: none                       # neither the close nor the connection is an action
+```
+
+### S05k — A principal suspended during a connection is disconnected at its next message
+
+**Level:** `[agent]`
+
+**Given:**
+
+```text
+iac_alex is connected to cse_alex_1 with token T: iat 14:50:00, exp 15:20:00.
+At 15:05:00, iac_alex got the hold OperationalSuspension, placed by iac_sam; iac_alex is Suspended.
+The language model is the scripted double.
+The instant is 2026-10-22T15:10:00Z.
+```
+
+**When:**
+
+```yaml
+steps:
+  - the client sends the message "Does Acme have SSO?"
+```
+
+**Then:**
+
+```yaml
+connection: the server sends a close frame · code 4401 · reason invalid_session
+language_model: receives no call
+audit_records: none                       # no use case was reached
+security_event_log: one entry, cause PrincipalInactive
+```
+
+### S05l — An oversized message closes the connection before the model sees it
+
+**Level:** `[agent]`
+
+**Given:**
+
+```text
+iac_alex is connected to cse_alex_1 with token T: iat 14:50:00, exp 15:20:00.
+The language model is the scripted double.
+The instant is 2026-10-22T15:00:00Z.
+```
+
+**When:**
+
+```yaml
+steps:
+  - the client sends a user message frame of 16,385 bytes   # one byte over 16 KiB
+```
+
+**Then:**
+
+```yaml
+connection: the server sends a close frame · code 1009 · reason message_too_big
+principal: not re-loaded                  # the size is checked first (D11)
+language_model: receives no call
+audit_records: none
+```
+
+### S05m — Messages past the rate limit close the connection before the model sees them
+
+**Level:** `[agent]`
+
+**Given:**
+
+```text
+iac_alex is connected to cse_alex_1 with token T: iat 14:50:00, exp 15:20:00.
+iac_alex is also connected to cse_alex_2 (assigned to iac_alex) with the same token.
+iac_alex has sent no message since 14:59:00.
+The language model is the scripted double; it answers every message with the reply "Noted." and no tool call.
+The instant is 2026-10-22T15:00:00Z.
+```
+
+**When:**
+
+```yaml
+steps:
+  - between 15:00:00 and 15:00:30, the client sends 10 messages on cse_alex_1 and 10 on cse_alex_2
+  - at 15:00:40, the client sends one more message on cse_alex_1
+```
+
+**Then:**
+
+```yaml
+first_20_messages: each handed to the language model and answered "Noted."
+message_21: the server closes the cse_alex_1 connection · code 4429 · reason rate_limited
+principal: not re-loaded for message 21    # the limit is checked before the principal (D13)
+language_model: received exactly 20 calls
+cse_alex_2_connection: stays open
+audit_records: none                        # no tool was called
 ```
 
 ### S06a — An identity claim in the message carries no authority
@@ -1322,12 +1431,15 @@ Then:
 
 ```yaml
 result: NotFound                          # byte-identical to Case B (D3)
-audit_records:                            # exactly one
+audit_records:                            # exactly one; no search ran (D12)
   - actor: iac_drew
-    subject: acc_initech
+    subject: absent
     audit_outcome: Deny
     reasons:
       - access.permission-not-held
+    detail:
+      query_hmac: present
+      query: absent
 ```
 
 **Case B — Nothing matches**
@@ -1345,7 +1457,15 @@ Then:
 
 ```yaml
 result: NotFound
-audit_records: none                       # no candidate, no decision
+audit_records:                            # exactly one: a lookup is audited even when nothing matches
+  - actor: iac_blair
+    subject: absent
+    audit_outcome: Failed
+    reasons:
+      - support.no-matching-account
+    detail:
+      query_hmac: present                 # repeated queries can be matched without storing them
+      query: absent                       # the query text appears nowhere in the record
 ```
 
 ### S08a — A level-1 representative is denied an Enterprise account
@@ -1515,16 +1635,17 @@ Then:
 
 ```yaml
 result: NotFound                          # byte-identical to Case B (D3)
-audit_records:                            # exactly one
+audit_records:                            # exactly one; no search ran, no policy evaluated (D12)
   - action_key: account.read
     actor: iac_drew
-    subject: acc_umbrella
+    subject: absent
     audit_outcome: Deny
     detail:
       use_case: FindCustomerAccount
+      query_hmac: present
+      query: absent
     reasons:
       - access.permission-not-held
-      - policy.enterprise-accounts-need-level-2
 ```
 
 **Case B — An account that does not exist**
@@ -1542,7 +1663,17 @@ Then:
 
 ```yaml
 result: NotFound
-audit_records: none                       # no account, no decision
+audit_records:                            # exactly one: a lookup that matches nothing (D12)
+  - action_key: account.read
+    actor: iac_blair
+    subject: absent
+    audit_outcome: Failed
+    detail:
+      use_case: FindCustomerAccount
+      query_hmac: present
+      query: absent
+    reasons:
+      - support.no-matching-account
 ```
 
 ### S08d — Checks, lists, and explanations include the same account.read finding
@@ -1687,7 +1818,7 @@ result: NotFound                          # byte-identical to Case C
 audit_records:                            # exactly one
   - action_key: account.read
     actor: iac_drew
-    subject: acc_initech
+    subject: acc_initech                  # the requested id; no account was loaded (D12)
     audit_outcome: Deny
     detail:
       use_case: CheckEntitlement
@@ -1713,13 +1844,12 @@ result: NotFound                          # byte-identical to ListEntitlements o
 audit_records:                            # exactly one
   - action_key: account.read
     actor: iac_drew
-    subject: acc_umbrella
+    subject: acc_umbrella                 # the requested id; no account was loaded (D12)
     audit_outcome: Deny
     detail:
       use_case: ListEntitlements
     reasons:
-      - access.permission-not-held
-      - policy.enterprise-accounts-need-level-2
+      - access.permission-not-held        # no policy is evaluated without the permission
 ```
 
 **Case C — A check of an account that does not exist**

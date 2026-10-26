@@ -108,6 +108,7 @@ decision (Alex confirmed); record 3 is SU-15's re-run of that decision; record 4
 | `entitlement.plan-unchanged` | Entitlement | the target plan is the current plan |
 | `support.stale-change-request` | Support | the subject account or its entitlements changed after the request was prepared |
 | `support.not-case-assignee` | Support | the actor is not the case's current assignee (SU-14) |
+| `support.no-matching-account` | Support | an account lookup matched no account |
 | `support.case-closed` | Support | the case is closed |
 | `support.contact-authentication-failed` | Support | the contact did not pass authentication |
 | `support.approval-denied` | Support | an approver denied the change |

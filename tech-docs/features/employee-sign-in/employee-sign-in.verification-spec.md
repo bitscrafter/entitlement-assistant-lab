@@ -40,7 +40,7 @@ Approving this spec also approves these values:
 | D4 | **A valid token is not enough:** every request re-loads the principal; an inactive identity or a suspended account gets `401`, like an invalid token. | The principal is loaded fresh (CM-16). |
 | D5 | **The fixed instant of every test is `2026-10-22T15:00:00Z`** unless a scenario says otherwise. | Token times must not depend on when the tests run. |
 | D6 | **Fixture ids are readable aliases** (`emp_alex`, `iac_alex`) for seeded UUIDv7 values (CM-14). The host is `app.entitlement-assistant.example`. A `Content-Length` is computed with the aliases as written; with real ids, each alias is 18 bytes longer. | Readable scenarios. |
-| D7 | **The session cookie is `__Host-session`, `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`, no `Domain`, `Max-Age` equal to the token's remaining lifetime.** Every response carries `Strict-Transport-Security: max-age=31536000; includeSubDomains`; plain HTTP is redirected to HTTPS at Cloudflare's edge (zone setting) before the Worker runs. | Scripts cannot read the token; it never travels over HTTP or to another site or host. |
+| D7 | **The session cookie is `__Host-session`, `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`, no `Domain`, `Max-Age` equal to the token's remaining lifetime.** Every response carries `Strict-Transport-Security: max-age=31536000; includeSubDomains`; plain HTTP is redirected (308) to the application's HTTPS origin by the Worker, which runs first for every request. | Scripts cannot read the token; it never travels over HTTP or to another site or host. |
 
 ## 2. Fixture
 
