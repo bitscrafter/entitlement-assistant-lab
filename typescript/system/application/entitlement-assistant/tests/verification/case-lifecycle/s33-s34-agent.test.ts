@@ -103,6 +103,7 @@ describe("case-lifecycle in the case agent", () => {
     });
     expect(
       (await lifecycleRecords(running))
+        .filter((entry) => entry.detail.use_case !== "GetCase")
         .map((entry) => [entry.action_key, entry.subject, entry.audit_outcome, entry.detail.use_case])
         .sort(),
     ).toEqual([
@@ -168,7 +169,10 @@ describe("case-lifecycle in the case agent", () => {
       { toolCallId: "call_1", output: { result: "drafted", summary: SUMMARY } },
     ]);
     expect((await caseState(running.owner, "cse_alex_1")).row?.case_summary).toBeNull();
-    expect(await lifecycleRecords(running)).toEqual([]);
+    // Only the turn's case view reads (D22).
+    expect((await lifecycleRecords(running)).filter((entry) => entry.detail.use_case !== "GetCase")).toEqual(
+      [],
+    );
   });
 
   test("scenario 34b ensures closing the case closes every open connection", async () => {

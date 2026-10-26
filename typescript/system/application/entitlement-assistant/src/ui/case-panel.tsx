@@ -354,21 +354,31 @@ function AccountFinder({
         <ul className="finder-results">
           {rows.map((row) => (
             <li key={row.account_id}>
-              {row.display_name} <code>{row.account_id}</code>
-              {row.roles.length > 0 ? ` · ${row.roles.join(", ")}` : ""}
-              {!subjectSet && (
-                <button type="button" className="inline" onClick={() => void onSetSubject(row.account_id)}>
-                  Set as case subject
-                </button>
-              )}
-              {row.own && (
-                <button
-                  type="button"
-                  className="secondary inline"
-                  onClick={() => void onSetContact(row.account_id)}
-                >
-                  Set as contact
-                </button>
+              <span>
+                {row.display_name} <code>{row.account_id}</code>
+                {row.roles.length > 0 ? ` · ${row.roles.join(", ")}` : ""}
+              </span>
+              {(!subjectSet || row.own) && (
+                <span className="row-actions">
+                  {!subjectSet && (
+                    <button
+                      type="button"
+                      className="inline"
+                      onClick={() => void onSetSubject(row.account_id)}
+                    >
+                      Set as case subject
+                    </button>
+                  )}
+                  {row.own && (
+                    <button
+                      type="button"
+                      className="secondary inline"
+                      onClick={() => void onSetContact(row.account_id)}
+                    >
+                      Set as contact
+                    </button>
+                  )}
+                </span>
               )}
             </li>
           ))}

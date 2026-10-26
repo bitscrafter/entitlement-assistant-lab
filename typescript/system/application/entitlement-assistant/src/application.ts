@@ -21,6 +21,8 @@ import { RenewSession } from "../../../subsystem/account/src/usecase/renew-sessi
 import { SignIn } from "../../../subsystem/account/src/usecase/sign-in.ts";
 import { SignOut } from "../../../subsystem/account/src/usecase/sign-out.ts";
 import { PostgresAuditRecorder } from "../../../subsystem/attribution/src/infra/postgres-audit-recorder.ts";
+import { PostgresCaseRecordRepository } from "../../../subsystem/attribution/src/infra/postgres-case-record-repository.ts";
+import { ListCaseRecords } from "../../../subsystem/attribution/src/usecase/list-case-records.ts";
 import { PostgresEmployeeRepository } from "../../../subsystem/internal-identity/src/infra/postgres-employee-repository.ts";
 import { WebCryptoPasswordHasher } from "../../../subsystem/internal-identity/src/infra/web-crypto-password-hasher.ts";
 import { GetEmployeeProfile } from "../../../subsystem/internal-identity/src/usecase/get-employee-profile.ts";
@@ -43,6 +45,7 @@ import {
   MINIMUM_QUERY_LENGTH,
 } from "../../../subsystem/support/src/usecase/find-customer-account.ts";
 import { type CaseView, GetCase } from "../../../subsystem/support/src/usecase/get-case.ts";
+import { type CaseEvent, ListCaseEvents } from "../../../subsystem/support/src/usecase/list-case-events.ts";
 import { ListClosedCases } from "../../../subsystem/support/src/usecase/list-closed-cases.ts";
 import { ListEntitlements } from "../../../subsystem/support/src/usecase/list-entitlements.ts";
 import { OpenCase } from "../../../subsystem/support/src/usecase/open-case.ts";
@@ -51,9 +54,11 @@ import { ReadEnforcement } from "../../../subsystem/support/src/usecase/read-enf
 import { SetCaseContact } from "../../../subsystem/support/src/usecase/set-case-contact.ts";
 import { SetCaseSubject } from "../../../subsystem/support/src/usecase/set-case-subject.ts";
 import { agentTools } from "./agent/agent-tools.ts";
+import { caseStateLine } from "./agent/case-state.ts";
 import { REASON_DESCRIPTIONS } from "./agent/reason-descriptions.ts";
 import { lookupOutputOf } from "./agent/tools.ts";
 import { type ConnectionSession, WebSocketMessageGuard } from "./agent/websocket-message-guard.ts";
+import type { CaseEventsDelivery } from "./case-events-delivery.ts";
 import type { CaseWebSocketConnections } from "./case-websocket-connections.ts";
 import type { CaseWorkUseCases } from "./case-work-use-cases.ts";
 import { type CaseWork, composeCaseWork } from "./compose-case-work.ts";
@@ -93,6 +98,8 @@ export interface ApplicationDependencies {
   readonly caseWebSocketConnections: CaseWebSocketConnections;
   /** Bounds the case panel's account search per employee, as chat messages are (case-lifecycle D18; review R3-1). */
   readonly searchRateLimiter: MessageRateLimiter;
+  /** Hands a case's new events to its agent after an action commits (case-lifecycle D21). */
+  readonly caseEventsDelivery: CaseEventsDelivery;
 }
 
 export type { CaseWorkUseCases };
@@ -119,6 +126,13 @@ export interface CaseAgentParts {
   }) => Record<string, Tool>;
   readonly clock: Clock;
   readonly newTraceId: () => string;
+  /** The case's events, derived from its audit records (case-lifecycle D21). */
+  readonly caseEvents: () => Promise<readonly CaseEvent[]>;
+  /** A turn's events (D21) and the case line (D22), as the actor may read the case, in one transaction. */
+  readonly turnContext: (actor: {
+    readonly principalAccountId: Uuid;
+    readonly sessionId: Uuid;
+  }) => Promise<{ readonly events: readonly CaseEvent[]; readonly state: string }>;
 }
 
 const signInBody = z.strictObject({
@@ -368,6 +382,26 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
 
     caseAgentParts(caseId, adapters): CaseAgentParts {
       const newTraceId = () => traceIdOf(new Request(dependencies.applicationOrigin));
+      /** The case line of D22, as the actor may read the case now. */
+      const caseStateIn = async (
+        useCases: UseCases,
+        actor: { readonly principalAccountId: Uuid; readonly sessionId: Uuid },
+      ): Promise<string> => {
+        const view = await useCases.getCase.execute({
+          principalAccountId: actor.principalAccountId,
+          sessionId: actor.sessionId,
+          traceId: newTraceId(),
+          caseId,
+        });
+        if ("kind" in view) return "The case is no longer yours.";
+        let email: string | null = null;
+        if (view.contact?.readable === true) {
+          const account = await useCases.caseWork.getCustomerAccount.execute(view.contact.accountId);
+          if (account !== null)
+            email = (await useCases.caseWork.getIndividuals.execute([account.customerId]))[0]?.email ?? null;
+        }
+        return caseStateLine(view, email, dependencies.clock.now());
+      };
       const caseAssignedTo = async (accountId: Uuid) =>
         (await withAllUseCases((useCases) => useCases.cases.currentAssignee(caseId))).assigneeAccountId ===
         accountId;
@@ -394,6 +428,13 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
           caseStillAssigned: (accountId) => caseAssignedTo(accountId),
           newMessageId: () => dependencies.idGenerator.newId(),
         }),
+        caseEvents: () => withAllUseCases((useCases) => useCases.listCaseEvents.execute(caseId)),
+        turnContext: (actor) =>
+          // One transaction for what a turn needs to know (review R4-3).
+          withAllUseCases(async (useCases) => ({
+            events: await useCases.listCaseEvents.execute(caseId),
+            state: await caseStateIn(useCases, actor),
+          })),
         tools: (actor) =>
           agentTools({
             caseId,
@@ -538,6 +579,11 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     };
   }
 
+  /** Once the action commits, the case's agent appends its new events (case-lifecycle D21). */
+  function deliverEvents(context: RequestContext, caseId: Uuid): void {
+    context.afterCommit(() => dependencies.caseEventsDelivery.deliver(caseId));
+  }
+
   /** The answer to a case or decision refusal (case-lifecycle D2, D9, D10; AU-6). */
   function refusalResponse(context: RequestContext, refusal: CaseRefusal | ActionRefusal): Response {
     switch (refusal.kind) {
@@ -588,6 +634,7 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     });
     switch (result.kind) {
       case "SubjectSet":
+        deliverEvents(context, parsed.request.caseId);
         return noContent();
       case "SubjectAlreadySet":
         return detailedErrorResponse("conflict", [
@@ -609,6 +656,7 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     });
     switch (result.kind) {
       case "ContactSet":
+        deliverEvents(context, parsed.request.caseId);
         return noContent();
       case "NotAPerson":
         return detailedErrorResponse("invalid_request", [
@@ -628,8 +676,10 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     const result = await context.useCases.authenticateContact.execute({ ...parsed.request, ...parsed.body });
     switch (result.kind) {
       case "Authenticated":
+        deliverEvents(context, parsed.request.caseId);
         return noContent();
       case "AuthenticationFailed":
+        deliverEvents(context, parsed.request.caseId);
         return detailedErrorResponse("conflict", [
           {
             error: "contact_authentication_failed",
@@ -795,6 +845,7 @@ interface UseCases extends CaseWorkUseCases {
   readonly authenticateContact: AuthenticateContact;
   readonly closeCase: CloseCase;
   readonly listClosedCases: ListClosedCases;
+  readonly listCaseEvents: ListCaseEvents;
   readonly unitOfWork: PostgresUnitOfWork;
   readonly caseWork: CaseWork;
   readonly cases: PostgresCaseRepository;
@@ -849,10 +900,15 @@ function buildUseCases(
   });
   return {
     getCase: new GetCase({ check, enforcement, listAccountRoles: caseWork.listAccountRoles }),
-    setCaseSubject: new SetCaseSubject({ check, enforcement: actions, cases }),
-    setCaseContact: new SetCaseContact({ check, enforcement: actions, cases }),
+    setCaseSubject: new SetCaseSubject({ check, enforcement: actions, cases, ids, clock }),
+    setCaseContact: new SetCaseContact({ check, enforcement: actions, cases, ids, clock }),
     authenticateContact: new AuthenticateContact({ check, enforcement: actions, cases, clock }),
     closeCase: new CloseCase({ check, enforcement: actions, cases, clock }),
+    listCaseEvents: new ListCaseEvents({
+      listCaseRecords: new ListCaseRecords({ records: new PostgresCaseRecordRepository(connection) }),
+      getInternalAccountNames: new GetInternalAccountNames({ accounts }),
+      cases,
+    }),
     listClosedCases: new ListClosedCases({
       enforcement,
       cases,

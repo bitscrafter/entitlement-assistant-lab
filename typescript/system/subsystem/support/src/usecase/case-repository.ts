@@ -82,6 +82,20 @@ export interface CaseRepository {
     closing: { readonly at: Date; readonly by: Uuid; readonly reason: CloseReason; readonly summary: string },
   ): Promise<boolean>;
 
+  /** @ensures The account's name as stored now, kept for the case's events under `nameId` (D21; review R5-1). */
+  recordAccountName(
+    nameId: Uuid,
+    name: {
+      readonly caseId: Uuid;
+      readonly accountId: Uuid;
+      readonly displayName: string;
+      readonly at: Date;
+    },
+  ): Promise<void>;
+
+  /** @ensures The kept names among `nameIds`, by id. */
+  accountNames(nameIds: readonly Uuid[]): Promise<ReadonlyMap<Uuid, string>>;
+
   /** @ensures At most `limit` closed cases of the subject, newest first (D17). */
   closedCasesOf(subjectAccountId: Uuid, limit: number): Promise<readonly ClosedCase[]>;
 }

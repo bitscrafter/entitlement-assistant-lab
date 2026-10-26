@@ -7,6 +7,7 @@ import { importHashKey } from "../../../../subsystem/attribution/src/infra/audit
 import { type Application, createApplication } from "../../src/application.ts";
 import {
   caseAgentObject,
+  DurableObjectCaseEventsDelivery,
   DurableObjectCaseWebSocketConnections,
   DurableObjectMessageRateLimiter,
   type DurableObjectNamespace,
@@ -41,6 +42,8 @@ let model: ScriptedLanguageModel | undefined;
 let application: Promise<Application> | undefined;
 /** The case whose agent the model-call route asks when no case is named: the last one connected to. */
 let lastConnectedCase: string | undefined;
+/** Set by the `drop-event-deliveries` control: the next deliveries are lost (S37b case B). */
+let dropEventDeliveries = false;
 
 function applicationFor(environment: Environment): Promise<Application> {
   application ??= (async () =>
@@ -66,6 +69,13 @@ function applicationFor(environment: Environment): Promise<Application> {
         environment.MESSAGE_RATE_LIMITER,
         "account-search:",
       ),
+      // A delivery the test drops, so the agent must repair it on the next connection (S37b case B).
+      caseEventsDelivery: {
+        deliver: (caseId) =>
+          dropEventDeliveries
+            ? Promise.resolve()
+            : new DurableObjectCaseEventsDelivery(environment.CASE_AGENT).deliver(caseId),
+      },
     }))();
   return application;
 }
@@ -92,6 +102,8 @@ export class CaseAgentObject extends BaseCaseAgentObject {
         return new Response(String(scriptedModel(this.env).calls));
       case "offered-tools":
         return Response.json(scriptedModel(this.env).offeredTools);
+      case "last-instructions":
+        return new Response(scriptedModel(this.env).lastInstructions);
       case "script":
         scriptedModel(this.env).script(...((await request.json()) as ScriptedStep[]));
         return new Response(null, { status: 204 });
@@ -140,6 +152,10 @@ export default {
     if (url.pathname.startsWith("/__test/")) {
       const action = url.pathname.split("/")[2];
       if (action === "clock") clock.setTo(new Date(await request.clone().text()));
+      if (action === "drop-event-deliveries") {
+        dropEventDeliveries = (await request.text()) === "true";
+        return new Response(null, { status: 204 });
+      }
       const caseId = url.searchParams.get("case") ?? lastConnectedCase;
       if (caseId === undefined) return new Response(action === "language-model-calls" ? "0" : null);
       const agent = environment.CASE_AGENT.get(environment.CASE_AGENT.idFromName(caseId));

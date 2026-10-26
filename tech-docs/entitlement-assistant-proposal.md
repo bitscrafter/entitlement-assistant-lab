@@ -113,6 +113,10 @@ glossary in the change that first uses it.
 | **Case panel** | The part of the UI left of the chat that shows the case (subject, contact, contact authentication, past cases) and holds every button that changes it; the model can propose, never click (api.md A2). |
 | **Case assignee check** | Support's check, before any case action, that the caller is the case's current assignee; otherwise the case answers as a missing one. The WebSocket upgrade applies the same rule. |
 | **Case WebSocket connections** | The open WebSocket connections of a case's agent, one per browser tab with the case open; closed together, with `4404 case_unavailable`, when the case closes. |
+| **Case event** | One line in a case's conversation that records a lifecycle action taken in the case panel or from a card ("Subject set: «Acme Corp» (Alex, at 15:02)."), written by the server from the action's audit record, never from the browser or the model; the CSR sees it in the timeline, the assistant is told it as a fact (case-lifecycle D21). |
+| **Case events delivery** | The port (`CaseEventsDelivery`) through which the application, once an action commits, has the case's agent append the case's events it does not hold yet; a lost delivery is repaired when a connection opens or a turn starts (case-lifecycle D21). |
+| **Case line** | The one-line state of a case the assistant is told at each turn: case number, subject, contact and their roles, contact authentication; accounts the CSR may not read are never named (case-lifecycle D22). |
+| **Case account name** | The name of an account as stored when a lifecycle action named it, kept by Support for the case's events, outside the audit chain, which names accounts by id only (AT-7; case-lifecycle D21). |
 | **MCP (Model Context Protocol)** | An open protocol through which an AI client discovers and calls tools exposed by a separate server. |
 | **JWT (JSON Web Token)** | A compact, signed token carrying claims; verifiable without a database lookup. |
 | **CEL (Common Expression Language)** | A side-effect-free, type-checked expression language; used for policy predicates. |

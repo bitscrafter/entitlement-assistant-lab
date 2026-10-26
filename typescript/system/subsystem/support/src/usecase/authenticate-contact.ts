@@ -72,6 +72,7 @@ export class AuthenticateContact {
           outcome: "Failed",
           reasonCode: "support.contact-authentication-failed",
           result: { kind: "AuthenticationFailed" } as const,
+          detail: { kind: method.authenticationKind, method: method.method },
         };
       }
       await this.#cases.recordAuthentication(request.caseId, {
@@ -80,7 +81,11 @@ export class AuthenticateContact {
         method: method.method,
         authenticatedBy: request.principalAccountId,
       });
-      return { outcome: "Succeeded", result: { kind: "Authenticated" } as const };
+      return {
+        outcome: "Succeeded",
+        result: { kind: "Authenticated" } as const,
+        detail: { kind: method.authenticationKind, method: method.method },
+      };
     });
     return acted.kind === "Acted" ? acted.outcome.result : acted;
   }

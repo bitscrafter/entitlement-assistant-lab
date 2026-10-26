@@ -45,6 +45,8 @@ export interface Harness {
   readonly closedCaseConnections: readonly Uuid[];
   /** The case panel's account search counter (case-lifecycle D18). */
   readonly searchRateLimiter: InMemoryMessageRateLimiter;
+  /** Every case whose events the application delivered after an action (case-lifecycle D21). */
+  readonly deliveredCaseEvents: readonly Uuid[];
   readonly close: () => Promise<void>;
 }
 
@@ -56,6 +58,7 @@ export async function createHarness(): Promise<Harness> {
   const forwardedUpgrades: { caseId: Uuid; session: ConnectionSession }[] = [];
   const closedCaseConnections: Uuid[] = [];
   const searchRateLimiter = new InMemoryMessageRateLimiter();
+  const deliveredCaseEvents: Uuid[] = [];
   const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
   const owner = await PostgresConnection.open(database.connectionString);
   const application = createApplication({
@@ -74,6 +77,7 @@ export async function createHarness(): Promise<Harness> {
     },
     caseWebSocketConnections: { closeAll: async (caseId) => void closedCaseConnections.push(caseId) },
     searchRateLimiter,
+    caseEventsDelivery: { deliver: async (caseId) => void deliveredCaseEvents.push(caseId) },
   });
   return {
     application,
@@ -85,6 +89,7 @@ export async function createHarness(): Promise<Harness> {
     forwardedUpgrades,
     closedCaseConnections,
     searchRateLimiter,
+    deliveredCaseEvents,
     close: async () => {
       await owner.close();
       await database.drop();

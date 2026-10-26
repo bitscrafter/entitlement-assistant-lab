@@ -337,3 +337,30 @@ button.inline {
   margin: 0;
   padding-left: 1rem;
 }
+
+/* A result's buttons: on their own line, indented under the account, side by side. */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.35rem 0 0.6rem 1rem;
+}
+
+.row-actions button.inline {
+  margin: 0;
+}
+
+/* A case event in the conversation: a timeline line, not a message (case-lifecycle D21). */
+.message.system {
+  background: none;
+  border: none;
+  padding: 0.1rem 0.5rem;
+}
+
+.event {
+  margin: 0;
+  color: #52606d;
+  font-size: 0.85rem;
+  border-left: 2px solid #bcccdc;
+  padding-left: 0.5rem;
+}

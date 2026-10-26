@@ -1,4 +1,5 @@
 import type { Uuid } from "../../../../kernel/identifier.ts";
+import type { JsonObject } from "../../../../kernel/json.ts";
 import type { AuditRecorder } from "../../../../port/audit-recorder.ts";
 import type { AuthorizationDecider, Decision } from "../../../../port/authorization-decider.ts";
 import type {
@@ -27,9 +28,13 @@ export type ActionRefusal =
   | { readonly kind: "Forbidden" };
 
 /** What an allowed action's work did: its result, recorded as `Succeeded`, or `Failed` with its reason (D12). */
-export type WorkOutcome<Result> =
+export type WorkOutcome<Result> = (
   | { readonly outcome: "Succeeded"; readonly result: Result }
-  | { readonly outcome: "Failed"; readonly reasonCode: string; readonly result: Result };
+  | { readonly outcome: "Failed"; readonly reasonCode: string; readonly result: Result }
+) & {
+  /** What the outcome's record keeps beyond its reasons (an authentication's kind and method, D21). */
+  readonly detail?: JsonObject;
+};
 
 const READ = "account.read";
 
@@ -106,8 +111,12 @@ export class CaseActionEnforcement {
     const principal = { kind: "Employee", accountId: request.principalAccountId } as const;
     // The account this action reads, so decides `account.read` on: none for closing (D19), which only names it.
     const readAccountId = options.readsAccount ? accountId : null;
-    const record = (outcome: AuditOutcomeOf, reasons: readonly string[], policySetVersion: string) =>
-      this.#record(request, actionKey, accountId, outcome, reasons, policySetVersion);
+    const record = (
+      outcome: AuditOutcomeOf,
+      reasons: readonly string[],
+      policySetVersion: string,
+      detail: JsonObject = {},
+    ) => this.#record(request, actionKey, accountId, outcome, reasons, policySetVersion, detail);
     const gate = combineDecisions(
       await this.#decider.decidePermission({ principal, actionKey }),
       ...(readAccountId === null
@@ -138,6 +147,7 @@ export class CaseActionEnforcement {
       outcome.outcome,
       outcome.outcome === "Failed" ? [outcome.reasonCode] : [],
       decision.policySetVersion,
+      outcome.detail,
     );
     return { kind: "Acted", outcome };
   }
@@ -149,6 +159,7 @@ export class CaseActionEnforcement {
     outcome: "Allow" | "Deny" | "Conditional" | "Succeeded" | "Failed",
     reasons: readonly string[],
     policySetVersion: string,
+    detail: JsonObject,
   ): Promise<void> {
     return this.#audit.record({
       actorAccountId: request.principalAccountId,
@@ -160,7 +171,7 @@ export class CaseActionEnforcement {
       subjectAccountId: accountId,
       caseId: request.caseId,
       changeRequestId: null,
-      detail: {},
+      detail,
       participants: [],
       reasons,
     });

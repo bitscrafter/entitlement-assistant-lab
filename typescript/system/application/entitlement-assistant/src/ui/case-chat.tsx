@@ -80,7 +80,7 @@ export function CaseChat({
 
   const busy = status === "streaming" || status === "submitted";
   const replies = messages.map((message) =>
-    message.role === "user" ? null : replyViewOf(message.parts as readonly ReplyPart[]),
+    message.role === "assistant" ? replyViewOf(message.parts as readonly ReplyPart[]) : null,
   );
   const draftedSummary = replies.reduce<string | null>(
     (latest, view) => view?.draftedSummary ?? latest,
@@ -112,7 +112,10 @@ export function CaseChat({
             const view = replies[index];
             return (
               <li key={message.id} className={`message ${message.role}`}>
-                {view === null || view === undefined ? (
+                {message.role === "system" ? (
+                  // A case event, written by the server from the audit trail (case-lifecycle D21).
+                  <p className="event">{textOf(message.parts as readonly ReplyPart[])}</p>
+                ) : view === null || view === undefined ? (
                   <p className="text">{textOf(message.parts as readonly ReplyPart[])}</p>
                 ) : (
                   <Reply view={view} actions={caseActions} />
@@ -224,10 +227,14 @@ function Reply({ view, actions }: { readonly view: ReplyView; readonly actions: 
               <ul>
                 {view.choices.map((choice) => (
                   <li key={choice.accountId}>
-                    {choice.displayName} <code>{choice.accountId}</code>
-                    {choice.roles.length > 0 ? ` · ${choice.roles.join(", ")}` : ""}
+                    <span>
+                      {choice.displayName} <code>{choice.accountId}</code>
+                      {choice.roles.length > 0 ? ` · ${choice.roles.join(", ")}` : ""}
+                    </span>
                     {view.ownAccounts.includes(choice.accountId) && (
-                      <ContactButton accountId={choice.accountId} actions={actions} />
+                      <span className="row-actions">
+                        <ContactButton accountId={choice.accountId} actions={actions} />
+                      </span>
                     )}
                   </li>
                 ))}

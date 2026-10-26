@@ -149,6 +149,31 @@ export class PostgresCaseRepository implements CaseRepository {
     return true;
   }
 
+  async recordAccountName(
+    nameId: Uuid,
+    name: {
+      readonly caseId: Uuid;
+      readonly accountId: Uuid;
+      readonly displayName: string;
+      readonly at: Date;
+    },
+  ): Promise<void> {
+    await this.#connection.query(
+      `INSERT INTO case_account_name (name_id, case_id, account_id, display_name, recorded_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [nameId, name.caseId, name.accountId, name.displayName, name.at],
+    );
+  }
+
+  async accountNames(nameIds: readonly Uuid[]): Promise<ReadonlyMap<Uuid, string>> {
+    if (nameIds.length === 0) return new Map();
+    const rows = await this.#connection.query<{ name_id: Uuid; display_name: string }>(
+      "SELECT name_id, display_name FROM case_account_name WHERE name_id = ANY($1)",
+      [nameIds],
+    );
+    return new Map(rows.map((row) => [row.name_id, row.display_name]));
+  }
+
   /** @relies-on db: support_case_closed_by_subject */
   async closedCasesOf(subjectAccountId: Uuid, limit: number): Promise<readonly ClosedCase[]> {
     const rows = await this.#connection.query<{

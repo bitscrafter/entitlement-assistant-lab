@@ -1,4 +1,6 @@
 import type { Uuid } from "../../../../kernel/identifier.ts";
+import type { Clock } from "../../../../port/clock.ts";
+import type { IdGenerator } from "../../../../port/id-generator.ts";
 import type {
   ActionRefusal,
   CaseActionEnforcement,
@@ -19,15 +21,35 @@ export class SetCaseContact {
   readonly #check: CaseAssigneeCheck;
   readonly #enforcement: CaseActionEnforcement;
   readonly #cases: CaseRepository;
+  readonly #ids: IdGenerator;
+  readonly #clock: Clock;
 
   constructor(dependencies: {
     readonly check: CaseAssigneeCheck;
     readonly enforcement: CaseActionEnforcement;
     readonly cases: CaseRepository;
+    readonly ids: IdGenerator;
+    readonly clock: Clock;
   }) {
     this.#check = dependencies.check;
     this.#enforcement = dependencies.enforcement;
     this.#cases = dependencies.cases;
+    this.#ids = dependencies.ids;
+    this.#clock = dependencies.clock;
+  }
+
+  /** Keeps the account's name for the case's events, out of the audit chain (D21; review R5-1): its id goes there. */
+  async #keepName(caseId: Uuid, accountId: Uuid, displayName: string): Promise<{ readonly name_id: string }> {
+    const nameId = this.#ids.newId();
+    // Cut by code point to the table's bound: a stored name has no maximum, and must never block the action (R6-1).
+    const kept = Array.from(displayName).slice(0, 500).join("");
+    await this.#cases.recordAccountName(nameId, {
+      caseId,
+      accountId,
+      displayName: kept,
+      at: this.#clock.now(),
+    });
+    return { name_id: nameId };
   }
 
   /**
@@ -50,7 +72,12 @@ export class SetCaseContact {
         };
       }
       await this.#cases.setContact(request.caseId, request.accountId);
-      return { outcome: "Succeeded", result: { kind: "ContactSet" } as const };
+      return {
+        outcome: "Succeeded",
+        result: { kind: "ContactSet" } as const,
+        // The name as stored now, which this decision let the CSR read: the case event shows it (D21).
+        detail: await this.#keepName(request.caseId, request.accountId, account.displayName),
+      };
     });
     return acted.kind === "Acted" ? acted.outcome.result : acted;
   }

@@ -7,7 +7,21 @@ import { shownToolError, turnErrorLogOf } from "./agent/agent-tools.ts";
 import { CASE_AGENT_INSTRUCTIONS, finalStepAnswersInWords } from "./agent/instructions.ts";
 import { CLOSES, type ConnectionSession } from "./agent/websocket-message-guard.ts";
 import type { Application, CaseAgentParts } from "./application.ts";
+import type { CaseEventsDelivery } from "./case-events-delivery.ts";
 import type { CaseWebSocketConnections } from "./case-websocket-connections.ts";
+
+/** At most this many of the case's latest events are given to the model (D21). */
+const MAXIMUM_EVENTS_TOLD = 30;
+
+/** The instructions of one turn: the standing instructions, the case's events, oldest first, and the case line (D22). */
+export function turnInstructions(events: readonly { readonly text: string }[], state: string): string {
+  const told = events.slice(-MAXIMUM_EVENTS_TOLD);
+  const eventLines =
+    told.length === 0
+      ? "Case events: none yet."
+      : `Case events, oldest first:\n${told.map((event) => `- ${event.text}`).join("\n")}`;
+  return `${CASE_AGENT_INSTRUCTIONS}\n\n${eventLines}\n\n${state}`;
+}
 
 /** How many model steps one message may cause: the model sometimes repeats a tool call (spike K3). */
 const MAXIMUM_MODEL_STEPS = 5;
@@ -63,6 +77,20 @@ export class DurableObjectCaseWebSocketConnections implements CaseWebSocketConne
   async closeAll(caseId: Uuid): Promise<void> {
     const agent = await getAgentByName(this.#namespace as never, caseId);
     await (agent as unknown as { closeCaseConnections(): Promise<void> }).closeCaseConnections();
+  }
+}
+
+/** The case events delivery adapter of the Worker (case-lifecycle D21): an RPC method on the case's agent. */
+export class DurableObjectCaseEventsDelivery implements CaseEventsDelivery {
+  readonly #namespace: DurableObjectNamespace;
+
+  constructor(namespace: DurableObjectNamespace) {
+    this.#namespace = namespace;
+  }
+
+  async deliver(caseId: Uuid): Promise<void> {
+    const agent = await getAgentByName(this.#namespace as never, caseId);
+    await (agent as unknown as { appendCaseEvents(): Promise<void> }).appendCaseEvents();
   }
 }
 
@@ -141,6 +169,9 @@ export function caseAgentObject<Environment extends CaseAgentEnvironment>(runtim
 }) {
   return class CaseAgentObject extends AIChatAgent<Environment> {
     #parts: Promise<CaseAgentParts> | undefined;
+    /** A reply is streaming: events delivered now wait for it to end (review R4-4). */
+    #turnInProgress = false;
+    #eventsPending = false;
 
     constructor(...parameters: ConstructorParameters<typeof AIChatAgent<Environment>>) {
       super(...parameters);
@@ -184,6 +215,11 @@ export function caseAgentObject<Environment extends CaseAgentEnvironment>(runtim
       if (header === null) return connection.close(CLOSES.invalidSession.code, CLOSES.invalidSession.reason);
       const session = JSON.parse(header) as { principalAccountId: Uuid; sessionId: Uuid; expiresAt: string };
       connection.setState({ session });
+      // Events a lost delivery missed are appended before the conversation is sent (D21); a failure here is logged
+      // and repaired at the next turn, never a refused connection (review R4-3).
+      await this.appendCaseEvents().catch((error: unknown) =>
+        console.error(JSON.stringify({ log: "case-events-append-failed", message: String(error) })),
+      );
       // The stored conversation, in the SDK's own frame, so a reconnecting browser shows it at once (S13).
       connection.send(JSON.stringify({ type: "cf_agent_chat_messages", messages: this.messages }));
       const parts = await this.#caseAgentParts();
@@ -192,6 +228,36 @@ export function caseAgentObject<Environment extends CaseAgentEnvironment>(runtim
         (new Date(session.expiresAt).getTime() - parts.clock.now().getTime()) / 1000,
       );
       await this.schedule(Math.ceil(seconds), "closeExpiredConnections");
+    }
+
+    /**
+     * Appends the case's events this conversation does not hold yet, each once, by its audit record's id, and
+     * broadcasts them (case-lifecycle D21). Called over RPC by the Worker after an action, and by the agent itself on
+     * connect and before each turn, so a lost delivery is repaired.
+     */
+    async appendCaseEvents(): Promise<void> {
+      // During a reply, the conversation's broadcast would reset the reply streaming to the browser: the events wait
+      // for the reply to end (review R4-4).
+      if (this.#turnInProgress) {
+        this.#eventsPending = true;
+        return;
+      }
+      await this.#append(await (await this.#caseAgentParts()).caseEvents());
+    }
+
+    /** Appends the events this conversation does not hold yet, each once, by id. */
+    async #append(events: readonly { readonly id: string; readonly text: string }[]): Promise<void> {
+      const held = new Set(this.messages.map((message) => message.id));
+      const missing = events.filter((event) => !held.has(event.id));
+      if (missing.length === 0) return;
+      await this.persistMessages([
+        ...this.messages,
+        ...missing.map((event) => ({
+          id: event.id,
+          role: "system" as const,
+          parts: [{ type: "text" as const, text: event.text }],
+        })),
+      ]);
     }
 
     /** Closes every connection: the case was closed (case-lifecycle D7). Called over RPC by the Worker only. */
@@ -222,17 +288,47 @@ export function caseAgentObject<Environment extends CaseAgentEnvironment>(runtim
       const session = sessionOf(getCurrentAgent().connection as AgentConnection | undefined);
       if (session === null) throw new Error("A chat turn ran without a connection session.");
       const traceId = parts.newTraceId();
-      const result = streamText({
-        model: runtime.languageModelFor(this.env),
-        system: CASE_AGENT_INSTRUCTIONS,
-        messages: await convertToModelMessages(this.messages),
-        tools: parts.tools({ principalAccountId: session.principalAccountId, sessionId: session.sessionId }),
-        stopWhen: stepCountIs(MAXIMUM_MODEL_STEPS),
-        prepareStep: ({ stepNumber }) => finalStepAnswersInWords(stepNumber, MAXIMUM_MODEL_STEPS),
-        onFinish: onFinish as never,
-      });
+      const actor = { principalAccountId: session.principalAccountId, sessionId: session.sessionId };
+      // The case's events (D21) and the case as it is now (D22), read fresh in one transaction, audited like any read.
+      const { events, state } = await parts.turnContext(actor);
+      await this.#append(events);
+      this.#turnInProgress = true;
+      const turnEnded = () => {
+        this.#turnInProgress = false;
+        if (this.#eventsPending) {
+          this.#eventsPending = false;
+          void this.appendCaseEvents().catch((error: unknown) =>
+            console.error(JSON.stringify({ log: "case-events-append-failed", message: String(error) })),
+          );
+        }
+      };
+      let result: { toUIMessageStreamResponse: ReturnType<typeof streamText>["toUIMessageStreamResponse"] };
+      try {
+        result = streamText({
+          model: runtime.languageModelFor(this.env),
+          // Events reach the model in its instructions, not as system messages amid the conversation (review R4-4).
+          system: turnInstructions(events, state),
+          messages: await convertToModelMessages(
+            this.messages.filter((message) => message.role !== "system"),
+          ),
+          tools: parts.tools(actor),
+          stopWhen: stepCountIs(MAXIMUM_MODEL_STEPS),
+          prepareStep: ({ stepNumber }) => finalStepAnswersInWords(stepNumber, MAXIMUM_MODEL_STEPS),
+          onFinish: (async (...finished: unknown[]) => {
+            turnEnded();
+            return (onFinish as (...args: unknown[]) => unknown)(...finished);
+          }) as never,
+          // A turn canceled by the browser ends here, not in onFinish (review R5-3).
+          onAbort: () => turnEnded(),
+        });
+      } catch (error) {
+        // A turn that fails before it streams must not hold the events back (review R5-3).
+        turnEnded();
+        throw error;
+      }
       return result.toUIMessageStreamResponse({
         onError: (error) => {
+          turnEnded();
           console.error(JSON.stringify(turnErrorLogOf(error, traceId)));
           return shownToolError(error, traceId);
         },

@@ -8,6 +8,7 @@ import { importHashKey } from "../../../subsystem/attribution/src/infra/audit-re
 import { type Application, createApplication } from "./application.ts";
 import {
   caseAgentObject,
+  DurableObjectCaseEventsDelivery,
   DurableObjectCaseWebSocketConnections,
   DurableObjectMessageRateLimiter,
   type DurableObjectNamespace,
@@ -92,6 +93,7 @@ async function build(environment: Environment): Promise<Application> {
       environment.MESSAGE_RATE_LIMITER,
       "account-search:",
     ),
+    caseEventsDelivery: new DurableObjectCaseEventsDelivery(environment.CASE_AGENT),
   });
 }
 

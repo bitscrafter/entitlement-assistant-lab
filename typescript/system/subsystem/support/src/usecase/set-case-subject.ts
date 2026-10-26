@@ -1,4 +1,6 @@
 import type { Uuid } from "../../../../kernel/identifier.ts";
+import type { Clock } from "../../../../port/clock.ts";
+import type { IdGenerator } from "../../../../port/id-generator.ts";
 import type {
   ActionRefusal,
   CaseActionEnforcement,
@@ -19,15 +21,35 @@ export class SetCaseSubject {
   readonly #check: CaseAssigneeCheck;
   readonly #enforcement: CaseActionEnforcement;
   readonly #cases: CaseRepository;
+  readonly #ids: IdGenerator;
+  readonly #clock: Clock;
 
   constructor(dependencies: {
     readonly check: CaseAssigneeCheck;
     readonly enforcement: CaseActionEnforcement;
     readonly cases: CaseRepository;
+    readonly ids: IdGenerator;
+    readonly clock: Clock;
   }) {
     this.#check = dependencies.check;
     this.#enforcement = dependencies.enforcement;
     this.#cases = dependencies.cases;
+    this.#ids = dependencies.ids;
+    this.#clock = dependencies.clock;
+  }
+
+  /** Keeps the account's name for the case's events, out of the audit chain (D21; review R5-1): its id goes there. */
+  async #keepName(caseId: Uuid, accountId: Uuid, displayName: string): Promise<{ readonly name_id: string }> {
+    const nameId = this.#ids.newId();
+    // Cut by code point to the table's bound: a stored name has no maximum, and must never block the action (R6-1).
+    const kept = Array.from(displayName).slice(0, 500).join("");
+    await this.#cases.recordAccountName(nameId, {
+      caseId,
+      accountId,
+      displayName: kept,
+      at: this.#clock.now(),
+    });
+    return { name_id: nameId };
   }
 
   /**
@@ -40,9 +62,14 @@ export class SetCaseSubject {
     if (assigned.kind !== "Assigned") return assigned;
     const acted = await this.#enforcement.act<
       { readonly kind: "SubjectSet" } | { readonly kind: "SubjectAlreadySet" }
-    >(request, "case.set-subject", request.accountId, async () =>
+    >(request, "case.set-subject", request.accountId, async (account) =>
       (await this.#cases.setSubjectIfUnset(request.caseId, request.accountId))
-        ? { outcome: "Succeeded", result: { kind: "SubjectSet" } as const }
+        ? {
+            outcome: "Succeeded",
+            result: { kind: "SubjectSet" } as const,
+            // The name as stored now, which this decision let the CSR read: the case event shows it (D21).
+            detail: await this.#keepName(request.caseId, request.accountId, account?.displayName ?? ""),
+          }
         : {
             outcome: "Failed",
             reasonCode: "support.subject-already-set",
