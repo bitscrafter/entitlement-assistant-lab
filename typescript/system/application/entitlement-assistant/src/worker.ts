@@ -3,8 +3,15 @@ import { SystemClock } from "../../../adapter/clock/system-clock.ts";
 import { UuidVersion7Generator } from "../../../adapter/identifier/uuid-version7-generator.ts";
 import { PostgresConnection } from "../../../adapter/postgres/postgres-connection.ts";
 import { ConsoleSecurityEventLog } from "../../../adapter/security-event-log/console-security-event-log.ts";
+import { createWorkersAI } from "../../../external/ai.ts";
 import { importHashKey } from "../../../subsystem/attribution/src/infra/audit-record-hash.ts";
 import { type Application, createApplication } from "./application.ts";
+import {
+  caseAgentObject,
+  type DurableObjectNamespace,
+  forwardToCaseAgent,
+  MessageRateLimiterObject,
+} from "./durable-objects.ts";
 import { httpsRedirect, servedByApplication } from "./http/request-guard.ts";
 import { errorResponse } from "./http/responses.ts";
 import { loadBundledPolicySet } from "./policy-set.ts";
@@ -19,9 +26,22 @@ interface Environment {
   readonly AUDIT_HASH_KEY: string;
   readonly AUDIT_HASH_KEY_ID: string;
   readonly IDENTIFIER_HASH_KEY: string;
+  readonly AI: unknown;
+  readonly CASE_AGENT: DurableObjectNamespace;
+  readonly MESSAGE_RATE_LIMITER: DurableObjectNamespace;
 }
 
 let application: Promise<Application> | undefined;
+
+/** The application of this isolate, shared by the fetch handler and the Durable Objects. */
+function applicationFor(environment: Environment): Promise<Application> {
+  application ??= build(environment).catch((error: unknown) => {
+    // A failed start is not cached: the next request builds again.
+    application = undefined;
+    throw error;
+  });
+  return application;
+}
 
 /**
  * Imports the session signing key pair from the private JWK in the Worker secret.
@@ -63,7 +83,8 @@ async function build(environment: Environment): Promise<Application> {
     },
     identifierHashKey: await importHashKey(environment.IDENTIFIER_HASH_KEY),
     policySet: await loadBundledPolicySet(),
-    forwardToCaseAgent: async () => errorResponse("not_found"),
+    forwardToCaseAgent: (request, caseId, session) =>
+      forwardToCaseAgent(environment.CASE_AGENT, request, caseId, session),
   });
 }
 
@@ -73,14 +94,26 @@ export default {
     const redirect = httpsRedirect(request, environment.APPLICATION_ORIGIN);
     if (redirect !== undefined) return redirect;
     if (!servedByApplication(new URL(request.url).pathname)) return environment.ASSETS.fetch(request);
-    application ??= build(environment);
+    let running: Application;
     try {
-      return await (await application).fetch(request);
+      running = await applicationFor(environment);
     } catch (error) {
-      // A failed start is not cached: the next request builds again. Nothing about the failure is returned.
-      application = undefined;
+      // Nothing about the failure is returned.
       console.error(JSON.stringify({ log: "application-start-failed", message: String(error) }));
       return errorResponse("server_error");
     }
+    return running.fetch(request);
   },
 };
+
+/** The model behind the case agent (AI_AS_DEVELOPER.md §1: Llama 3.3 70B Instruct on Workers AI). */
+const WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+
+/** The case agent of each case (a Durable Object per case), answering with Workers AI. */
+export const CaseAgentObject = caseAgentObject<Environment>({
+  applicationFor,
+  // The binding's type comes from the Workers runtime; the provider checks it on first use.
+  languageModelFor: (environment) => createWorkersAI({ binding: environment.AI as never })(WORKERS_AI_MODEL),
+});
+
+export { MessageRateLimiterObject };

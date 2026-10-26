@@ -42,7 +42,7 @@ function framesUntil(
   });
 }
 
-describe.skip("explain-access in the Workers runtime", () => {
+describe("explain-access in the Workers runtime", () => {
   let harness: WorkerHarness;
   beforeEach(async () => {
     harness = await createWorkerHarness();
@@ -120,7 +120,10 @@ describe.skip("explain-access in the Workers runtime", () => {
       toolCallId: "call_1",
       state: "output-available",
     });
-    expect(replyPart).toEqual({ type: "text", text: "Yes. Acme Corp has SSO through its Business plan." });
+    expect(replyPart).toMatchObject({
+      type: "text",
+      text: "Yes. Acme Corp has SSO through its Business plan.",
+    });
     secondSocket.close(1000, "done");
     expect(await recordsOfCase()).toEqual(prior);
     expect(Number(await (await harness.fetch("/__test/language-model-calls")).text())).toBe(callsBefore);

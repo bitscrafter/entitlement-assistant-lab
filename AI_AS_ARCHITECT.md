@@ -11,7 +11,7 @@ entitlement-assistant/
   typescript/
     system/
       kernel/                    shared pure types and functions: Result, branded ids, the id codec (CM-14)
-      port/                      shared ports: Clock, IdGenerator, UnitOfWork, LanguageModel, …
+      port/                      shared ports: Clock, IdGenerator, UnitOfWork, AuthorizationDecider, …
       adapter/                   shared adapters: wrap external libraries, or our own implementations, to satisfy ports
       external/                  third-party libraries
       subsystem/
@@ -65,7 +65,7 @@ entitlement-assistant/
 ## 2. Principles
 
 1. **Every side effect is a port.** Time (`Clock`), randomness (`IdGenerator`), persistence, the
-   language model, token signing, and workflow scheduling are ports. This is what makes the domain
+   language model (the AI SDK's model interface, CM-18), token signing, and workflow scheduling are ports. This is what makes the domain
    testable and the verification tests deterministic.
 2. **Ports are named for the role they play, not the technology.** `CustomerAccountRepository`,
    `LanguageModel`, `SessionTokenVerifier`. No `Adapter`, `Manager`, or `Helper` suffixes.

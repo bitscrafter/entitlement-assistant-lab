@@ -8,12 +8,10 @@ import { generateKeyPair, SignJWT } from "../../../../external/jose.ts";
 import { encodeIdentifier, type IdentifierPrefix, type Uuid } from "../../../../kernel/identifier.ts";
 import { importHashKey } from "../../../../subsystem/attribution/src/infra/audit-record-hash.ts";
 import type { ReadRequest } from "../../../../subsystem/support/src/usecase/read-request.ts";
-import type { CaseAgent, ConnectionSession } from "../../src/agent/case-agent.ts";
+import type { ConnectionSession } from "../../src/agent/websocket-message-guard.ts";
 import { type Application, createApplication } from "../../src/application.ts";
 import { seededUuid } from "../../src/database/seed.ts";
 import { loadBundledPolicySet } from "../../src/policy-set.ts";
-import { TestConnection } from "./agent-connection.ts";
-import type { ScriptedLanguageModel } from "./scripted-language-model.ts";
 
 export const HOST = "app.entitlement-assistant.example";
 export const ORIGIN = `https://${HOST}`;
@@ -229,28 +227,4 @@ export async function insertCase(
      VALUES (gen_random_uuid(), $1, $2, $3, $2)`,
     [uuidOf(caseAlias), uuidOf(assigneeAlias), at],
   );
-}
-
-/** A case agent for one case, with the scripted model and an in-process rate limiter. */
-export function caseAgentFor(harness: Harness, caseAlias: string, model: ScriptedLanguageModel): CaseAgent {
-  return harness.application.createCaseAgent(uuidOf(caseAlias), {
-    languageModel: model,
-    rateLimiter: harness.rateLimiter,
-  });
-}
-
-/** Connects to a case agent with a verified session of `principalAlias` expiring at `expiresAt`. */
-export async function connectAs(
-  agent: CaseAgent,
-  principalAlias: string,
-  expiresAt: Date,
-  connectionId = `connection-${principalAlias}`,
-): Promise<TestConnection> {
-  const connection = new TestConnection(connectionId);
-  await agent.connect(connection, {
-    principalAccountId: uuidOf(principalAlias),
-    sessionId: seededUuid(`session-${connectionId}`),
-    expiresAt,
-  });
-  return connection;
 }

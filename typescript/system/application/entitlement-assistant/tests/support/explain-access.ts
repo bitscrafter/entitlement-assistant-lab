@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import type { PostgresConnection } from "../../../../adapter/postgres/postgres-connection.ts";
 import type { Uuid } from "../../../../kernel/identifier.ts";
 import type { EntitlementSource } from "../../../../subsystem/support/src/usecase/read-request.ts";
 import { seededUuid } from "../../src/database/seed.ts";
-import { type AuditRecordView, at, auditRecords, external, type Harness, mintToken } from "./harness.ts";
+import { type AuditRecordView, at, auditRecords, external, mintToken } from "./harness.ts";
 
 const FIXTURES = fileURLToPath(new URL("../../resource/seed/fixtures.yaml", import.meta.url));
 
@@ -30,7 +31,9 @@ export interface SpecAuditRecord {
   readonly policy_set_version: string | null;
 }
 
-export async function specAuditRecords(harness: Harness): Promise<readonly SpecAuditRecord[]> {
+export async function specAuditRecords(harness: {
+  readonly owner: PostgresConnection;
+}): Promise<readonly SpecAuditRecord[]> {
   return (await auditRecords(harness.owner)).map((record: AuditRecordView) => ({
     action_key: record.action_key,
     actor: aliasOf(record.actor_account_id),
@@ -53,7 +56,11 @@ export function source(written: string): EntitlementSource {
 }
 
 /** A session token of `alias`, issued at 14:50:00 and expiring at 15:20:00 (the specs' valid token). */
-export function validToken(harness: Harness, alias: string, exp = at("15:20:00")): Promise<string> {
+export function validToken(
+  harness: { readonly signingKey: CryptoKey },
+  alias: string,
+  exp = at("15:20:00"),
+): Promise<string> {
   return mintToken(harness.signingKey, {
     sub: external(alias),
     authTime: at("14:50:00"),

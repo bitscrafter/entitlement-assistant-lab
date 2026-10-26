@@ -28,6 +28,7 @@
 | [CM-15](#cm-15-foreign-keys-point-down-the-layer-order) | Foreign keys point down the layer order |
 | [CM-16](#cm-16-the-session-token-carries-identity-only) | The session token carries identity only |
 | [CM-17](#cm-17-authorization-and-attribution-are-reached-through-shared-ports) | Authorization and attribution are reached through shared ports |
+| [CM-18](#cm-18-the-case-agent-is-a-hardened-aichatagent) | The case agent is a hardened `AIChatAgent` |
 
 ---
 
@@ -262,3 +263,17 @@
 | **Status** | Accepted · 2026-10-25 · decided by the owner |
 | **Context** | Lower-layer use cases (grant expiry, holds, membership end, sign-in) needed higher subsystems, creating code cycles. |
 | **Related** | • [CM-15](#cm-15-foreign-keys-point-down-the-layer-order)<br>• [AU-5](authorization.md#au-5-the-pdp-and-pip-live-in-authorization-peps-are-use-cases) |
+
+---
+
+### CM-18. The case agent is a hardened `AIChatAgent`
+
+|  |  |
+| :--- | :--- |
+| **Decision** | The case agent is a Durable Object that extends the Agents SDK's `AIChatAgent`, with a WebSocket message guard in front of the SDK:<br>• the subclass wraps the `onMessage` handler that `AIChatAgent` installs in its constructor, so every WebSocket message from the browser reaches the guard first<br>• the guard checks size, message kind, rate, the token's expiry, and the principal, in that order (explain-access D6, D10, D11, D13)<br>• a chat request is rebuilt from the stored conversation and the newest user message's text; messages that could write the conversation, a tool result, a tool approval, or the agent's state are dropped<br>• the connection session comes only from the header the Worker sets after its own checks, and is kept in the SDK's server-side connection state<br>• tools are AI SDK tools over the use cases; the model is Workers AI through `workers-ai-provider` |
+| **Status** | Accepted · 2026-10-25 · decided by the owner |
+| **Context** | • The application is built on Cloudflare's platform, where the Agents SDK is the expected way to build an agent.<br>• Unchanged, `AIChatAgent` stores the history a browser sends with every chat request, and accepts messages that clear the chat or submit tool results and approvals (spike K2): a page could forge earlier assistant replies or tool results.<br>• Spike K4 showed the wrapper closes this: forged history never reached storage, and the other messages changed nothing. |
+| **Rationale** | • Keeps what the SDK does well: the chat protocol, message storage, resumable streams, live updates across a CSR's tabs, and the `useAgentChat` client.<br>• The guarantees that matter (the server's conversation, the session's principal) are enforced in one plain class, unit-tested in Node and proven in the Workers runtime. |
+| **Consequences** | • The hardening depends on how `AIChatAgent` installs its handler; an SDK upgrade is checked by the runtime tests of the hardening before it is taken.<br>• The agent runs only in the Workers runtime, so its scenarios are tested there, with test controls inside the agent. |
+| **Alternatives** | • A plain Durable Object without the Agents SDK, on the WebSocket hibernation API: no client-supplied history by construction and no SDK dependency, at the cost of resumable streams, live multi-tab updates, the SDK client, and maintaining the protocol ourselves. Built and tested during explain-access before this decision; described in full in [`../design/case-agent-without-agents-sdk.md`](../design/case-agent-without-agents-sdk.md).<br>• The SDK's base `Agent` class without `AIChatAgent`: the SDK's routing, connections, and scheduling, with our own chat handling; still needs the SDK's state sync blocked. |
+| **Related** | • [AU-6](authorization.md#au-6-refusals-reveal-nothing-beyond-what-a-legitimate-principal-may-know)<br>• [CM-16](#cm-16-the-session-token-carries-identity-only) |

@@ -106,6 +106,9 @@ glossary in the change that first uses it.
 | **Static assets** | Files (HTML, JavaScript, CSS) that a Worker serves directly. |
 | **Wrangler** | Cloudflare's CLI for local development and deployment. |
 | **Tool calling** | The LLM's ability to answer with a structured request to call a named function with JSON arguments. |
+| **WebSocket** | A long-lived, two-way connection between the browser and the server, opened by one HTTP request (the *upgrade*) and kept open afterwards. The case agent's chat runs over one. |
+| **WebSocket message** | One message sent over an open WebSocket, in either direction (RFC 6455). With the Agents SDK each message is a small JSON text, such as `{"type":"cf_agent_use_chat_request", …}`. It is not an HTTP request: it carries no headers and no cookie. |
+| **WebSocket frame** | The unit a WebSocket message travels in on the wire (RFC 6455): a message is one or more frames. |
 | **MCP (Model Context Protocol)** | An open protocol through which an AI client discovers and calls tools exposed by a separate server. |
 | **JWT (JSON Web Token)** | A compact, signed token carrying claims; verifiable without a database lookup. |
 | **CEL (Common Expression Language)** | A side-effect-free, type-checked expression language; used for policy predicates. |
@@ -120,6 +123,16 @@ glossary in the change that first uses it.
 | **Tool** | A typed function the assistant may call. Each tool maps to one use case, which asks the authorization decision chain before acting. |
 | **Access explanation** | The answer to "why can or can't this person do this with feature F in this account": the decision for that action, with every reason code and the facts behind it. |
 | **Remedy** | For a feature an account lacks: the lowest-ranked plan of its plan ladder that includes it, and the eligible add-ons that do. |
+| **Case agent** | The Durable Object of one case, built on the Agents SDK's `AIChatAgent` with a WebSocket message guard in front of it (CM-18): it serves every WebSocket connection to the case, runs the language model and the tools, and keeps the case conversation. The alternative without the Agents SDK is described in [`design/case-agent-without-agents-sdk.md`](design/case-agent-without-agents-sdk.md). |
+| **Case conversation store** | Where a case agent keeps its conversation: the Agents SDK's message storage, written only with what the WebSocket message guard builds, never with a client's messages. |
+| **Connection session** | What the server keeps for one case agent connection: the principal's account, the session id, and the expiry of the token it was opened with; never writable by the client. |
+| **Inbound guard** | A check an inbound adapter runs on input before any use case is reached: it decides only whether the input may enter (origin, session, size, rate, shape), never what a principal may do, which is the authorization decision's. There are two: the HTTP request guard and the WebSocket message guard. |
+| **HTTP request guard** | The inbound guard of every HTTP request, the WebSocket upgrade that opens a case agent connection included: the HTTPS redirect, the application's origin, the session token, and the principal loaded fresh (`application/…/src/http/request-guard.ts`). |
+| **WebSocket message guard** | The inbound guard of every WebSocket message a browser sends to a case agent once the connection is open, before the Agents SDK sees it: size, kind, rate, the token's expiry, and the principal; a chat request is rebuilt from the stored conversation and the newest message's text, and every other message that could write the conversation, a tool result, or the agent's state is dropped (`application/…/src/agent/websocket-message-guard.ts`). |
+| **Message rate limiter** | Counts an employee's chat messages over a sliding minute and refuses past the limit (port `MessageRateLimiter`). |
+| **Permission gate** | The first step of every read: a decision on the principal's permission alone, before any customer data is read. |
+| **Policy expression evaluator** | Parses, type-checks, and evaluates a policy's predicates (port `PolicyExpressionEvaluator`). |
+| **Scripted language model** | The test double of the language model: the AI SDK's mock model, answering with scripted text and tool calls. |
 
 ### 4.3 Terms defined with their subsystem
 

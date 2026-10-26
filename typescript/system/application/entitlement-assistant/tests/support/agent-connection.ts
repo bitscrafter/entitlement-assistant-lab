@@ -1,4 +1,4 @@
-import type { AgentConnection } from "../../src/agent/case-agent.ts";
+import type { RawWebSocket } from "./raw-websocket.ts";
 
 /** Builds the Agents SDK chat request frame a browser sends for one user message. */
 export function userMessageFrame(text: string, requestId = "request-1"): string {
@@ -17,23 +17,46 @@ export function userMessageFrame(text: string, requestId = "request-1"): string 
 /** One parsed chunk of an assistant response (AI SDK UI message stream). */
 type ResponseChunk = Readonly<Record<string, unknown>> & { readonly type: string };
 
-/** A connection to a case agent that records every frame the agent sends and how it closed. */
-export class TestConnection implements AgentConnection {
+/** One connection to a case agent, recording every frame the agent sends. */
+export class AgentConversation {
   readonly frames: string[] = [];
-  closedWith: { readonly code: number; readonly reason: string } | null = null;
+  readonly socket: RawWebSocket;
 
-  readonly connectionId: string;
+  constructor(socket: RawWebSocket) {
+    this.socket = socket;
+    socket.addEventListener("message", (event) => this.frames.push(event.data));
+  }
 
-  constructor(connectionId: string) {
-    this.connectionId = connectionId;
+  get closedWith(): { readonly code: number; readonly reason: string } | null {
+    return this.socket.closedWith;
   }
 
   send(frame: string): void {
-    this.frames.push(frame);
+    this.socket.send(frame);
   }
 
-  close(code: number, reason: string): void {
-    this.closedWith ??= { code, reason };
+  /** Waits until the agent ends the turn of `requestId`, or closes the connection. */
+  turnEnded(requestId: string): Promise<void> {
+    return this.#until(
+      () =>
+        this.closedWith !== null ||
+        this.frames.some((frame) => {
+          const parsed = JSON.parse(frame) as { type?: string; id?: string; done?: boolean };
+          return (
+            parsed.type === "cf_agent_use_chat_response" && parsed.id === requestId && parsed.done === true
+          );
+        }),
+    );
+  }
+
+  /** Waits until the agent closes the connection. */
+  closed(): Promise<void> {
+    return this.#until(() => this.closedWith !== null);
+  }
+
+  /** Waits a little, for what must not happen (no close, no reply). */
+  settle(milliseconds = 300): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds));
   }
 
   #chunks(): readonly ResponseChunk[] {
@@ -46,26 +69,12 @@ export class TestConnection implements AgentConnection {
       .map((frame) => JSON.parse(frame.body ?? "{}") as ResponseChunk);
   }
 
-  /** The assistant's text, concatenated across the stream. */
+  /** The assistant's text, concatenated across every reply. */
   replyText(): string {
     return this.#chunks()
       .filter((chunk) => chunk.type === "text-delta")
       .map((chunk) => String(chunk.delta ?? ""))
       .join("");
-  }
-
-  toolCalls(): readonly {
-    readonly toolCallId: string;
-    readonly toolName: string;
-    readonly input: unknown;
-  }[] {
-    return this.#chunks()
-      .filter((chunk) => chunk.type === "tool-input-available")
-      .map((chunk) => ({
-        toolCallId: String(chunk.toolCallId),
-        toolName: String(chunk.toolName),
-        input: chunk.input,
-      }));
   }
 
   toolOutputs(): readonly {
@@ -80,5 +89,13 @@ export class TestConnection implements AgentConnection {
           ? { toolCallId: String(chunk.toolCallId), output: chunk.output }
           : { toolCallId: String(chunk.toolCallId), errorText: String(chunk.errorText) },
       );
+  }
+
+  async #until(condition: () => boolean, timeoutMilliseconds = 10_000): Promise<void> {
+    const deadline = Date.now() + timeoutMilliseconds;
+    while (!condition()) {
+      if (Date.now() > deadline) throw new Error(`timed out after ${this.frames.length} frames`);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
   }
 }

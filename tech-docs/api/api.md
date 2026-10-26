@@ -198,7 +198,8 @@ the case is notified through its agent (§8).
 ```text
 GET /agents/case-agent/{case_id}    WebSocket upgrade; session cookie; same Origin
                                     101 · 401 · 403 (origin) · 404 (no such case, or not the assignee)
-One agent instance (Durable Object) per case; the conversation lives in its storage.
+One agent instance (Durable Object) per case, a hardened AIChatAgent (CM-18); the conversation lives in its
+storage. The alternative without the Agents SDK: design/case-agent-without-agents-sdk.md.
 ```
 
 **Frames from the browser** (chat protocol of the Agents SDK):

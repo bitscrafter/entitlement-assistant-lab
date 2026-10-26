@@ -18,13 +18,20 @@
     "ui:build": "vite build --config application/entitlement-assistant/vite.config.ts"
   },
   "dependencies": {
+    "@cloudflare/ai-chat": "0.12.2",
     "@marcbachmann/cel-js": "8.0.0",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/server": "2.3.1",
+    "agents": "0.30.1",
+    "ai": "7.0.153",
     "canonicalize": "5.1.0",
     "jose": "6.2.13",
     "pg": "8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "uuid": "14.0.3",
+    "workers-ai-provider": "4.0.1",
     "yaml": "2.9.1",
     "zod": "4.6.7"
   },

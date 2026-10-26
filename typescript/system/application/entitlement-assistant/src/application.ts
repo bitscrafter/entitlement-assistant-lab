@@ -5,11 +5,11 @@ import {
 } from "../../../adapter/postgres/postgres-connection.ts";
 import { PostgresUnitOfWork } from "../../../adapter/postgres/postgres-unit-of-work.ts";
 import { JoseSessionToken } from "../../../adapter/session-token/jose-session-token.ts";
+import type { Tool } from "../../../external/ai.ts";
 import { z } from "../../../external/zod.ts";
 import { decodeIdentifier, encodeIdentifier, type Uuid } from "../../../kernel/identifier.ts";
 import type { Clock } from "../../../port/clock.ts";
 import type { IdGenerator } from "../../../port/id-generator.ts";
-import type { LanguageModel } from "../../../port/language-model.ts";
 import type { MessageRateLimiter } from "../../../port/message-rate-limiter.ts";
 import type { SecurityEventCause, SecurityEventLog } from "../../../port/security-event-log.ts";
 import { PostgresRoleRepository } from "../../../subsystem/access/src/infra/postgres-role-repository.ts";
@@ -33,7 +33,9 @@ import { FindCustomerAccount } from "../../../subsystem/support/src/usecase/find
 import { ListEntitlements } from "../../../subsystem/support/src/usecase/list-entitlements.ts";
 import { OpenCase } from "../../../subsystem/support/src/usecase/open-case.ts";
 import { ReadEnforcement } from "../../../subsystem/support/src/usecase/read-enforcement.ts";
-import { CaseAgent, type ConnectionSession } from "./agent/case-agent.ts";
+import { agentTools } from "./agent/agent-tools.ts";
+import { type ConnectionSession, WebSocketMessageGuard } from "./agent/websocket-message-guard.ts";
+import type { CaseWorkUseCases } from "./case-work-use-cases.ts";
 import { type CaseWork, composeCaseWork } from "./compose-case-work.ts";
 import {
   authenticatePrincipal,
@@ -69,14 +71,7 @@ export interface ApplicationDependencies {
   ) => Promise<Response>;
 }
 
-/** The use cases a case agent's tools and the verification tests call (api.md §10). */
-export interface CaseWorkUseCases {
-  readonly openCase: OpenCase;
-  readonly findCustomerAccount: FindCustomerAccount;
-  readonly checkEntitlement: CheckEntitlement;
-  readonly listEntitlements: ListEntitlements;
-  readonly explainAccess: ExplainAccess;
-}
+export type { CaseWorkUseCases };
 
 export interface Application {
   fetch(request: Request): Promise<Response>;
@@ -86,11 +81,20 @@ export interface Application {
    * @ensures What `work` writes commits together, or not at all when it rejects.
    */
   withUseCases<Value>(work: (useCases: CaseWorkUseCases) => Promise<Value>): Promise<Value>;
-  /** The case agent of one case, with the adapters only its runtime can supply. */
-  createCaseAgent(
-    caseId: Uuid,
-    adapters: { readonly languageModel: LanguageModel; readonly rateLimiter: MessageRateLimiter },
-  ): CaseAgent;
+  /** What the case agent of one case needs from the application, with the adapter only its runtime supplies. */
+  caseAgentParts(caseId: Uuid, adapters: { readonly rateLimiter: MessageRateLimiter }): CaseAgentParts;
+}
+
+export interface CaseAgentParts {
+  /** Decides every WebSocket message before the Agents SDK sees it. */
+  readonly messageGuard: WebSocketMessageGuard;
+  /** The tools of a chat turn, acting for the connection's principal. */
+  readonly tools: (actor: {
+    readonly principalAccountId: Uuid;
+    readonly sessionId: Uuid;
+  }) => Record<string, Tool>;
+  readonly clock: Clock;
+  readonly newTraceId: () => string;
 }
 
 const signInBody = z.strictObject({
@@ -146,6 +150,24 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
   const identifierHasher = new HmacIdentifierHasher(dependencies.identifierHashKey);
   const policySetActivation = new PolicySetActivationCheck();
 
+  /** One database connection and one transaction around `work`, the way every request runs. */
+  async function withAllUseCases<Value>(work: (useCases: UseCases) => Promise<Value>): Promise<Value> {
+    const connection = await dependencies.openDatabase();
+    try {
+      const useCases = buildUseCases(
+        connection,
+        dependencies,
+        tokens,
+        passwordHasher,
+        identifierHasher,
+        policySetActivation,
+      );
+      return await useCases.unitOfWork.run(() => work(useCases));
+    } finally {
+      await connection.close().catch(() => undefined);
+    }
+  }
+
   const routes: Readonly<Record<string, Handler>> = {
     "POST /api/authentication/sign-in": signInHandler,
     "POST /api/authentication/session/renewal": renewalHandler,
@@ -194,25 +216,47 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
       }
     },
 
-    async withUseCases<Value>(work: (useCases: CaseWorkUseCases) => Promise<Value>): Promise<Value> {
-      const connection = await dependencies.openDatabase();
-      try {
-        const useCases = buildUseCases(
-          connection,
-          dependencies,
-          tokens,
-          passwordHasher,
-          identifierHasher,
-          policySetActivation,
-        );
-        return await useCases.unitOfWork.run(() => work(useCases));
-      } finally {
-        await connection.close().catch(() => undefined);
-      }
+    withUseCases<Value>(work: (useCases: CaseWorkUseCases) => Promise<Value>): Promise<Value> {
+      return withAllUseCases(work);
     },
 
-    createCaseAgent(): CaseAgent {
-      return new CaseAgent();
+    caseAgentParts(caseId, adapters): CaseAgentParts {
+      const policyDescriptions = new Map(
+        dependencies.policySet.policies.map((policy) => [`policy.${policy.policyKey}`, policy.description]),
+      );
+      const newTraceId = () => traceIdOf(new Request(dependencies.applicationOrigin));
+      return {
+        clock: dependencies.clock,
+        newTraceId,
+        messageGuard: new WebSocketMessageGuard({
+          rateLimiter: adapters.rateLimiter,
+          clock: dependencies.clock,
+          principalMayAct: async (accountId) => {
+            const mayAct = await withAllUseCases(
+              async (useCases) => (await useCases.loadPrincipal.execute(accountId)).ok,
+            );
+            if (!mayAct) {
+              dependencies.securityEventLog.record({
+                cause: "PrincipalInactive",
+                method: "MESSAGE",
+                path: CASE_AGENT_PATH,
+                traceId: newTraceId(),
+              });
+            }
+            return mayAct;
+          },
+          newMessageId: () => dependencies.idGenerator.newId(),
+        }),
+        tools: (actor) =>
+          agentTools({
+            caseId,
+            actor: () => actor,
+            runUseCases: withAllUseCases,
+            describeReason: (reasonCode) => policyDescriptions.get(reasonCode) ?? reasonCode,
+            newTraceId,
+            logFailure: (failure) => console.error(JSON.stringify({ log: "case-tool-failed", ...failure })),
+          }),
+      };
     },
   };
 

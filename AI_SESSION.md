@@ -24,8 +24,8 @@
 ## Next session
 
 1. Owner: keep the production secrets in a password manager.
-2. Explain-access P6 (case agent): enable the nine skipped case-agent scenarios as they are built; then P7 (chat
-   UI) and P8 (end to end, deploy). State in `tech-docs/features/explain-access/workflow/progress.md`.
+2. Explain-access P7 (chat UI with `useAgentChat`), then P8 (end to end, deploy). State in
+   `tech-docs/features/explain-access/workflow/progress.md`.
 
 ## Decisions (owner, 2026-10-22)
 
@@ -64,6 +64,10 @@
   connection session, permission gate, policy expression evaluator, scripted language model.
 - RED gate kept with mutations owed for S05c and S08e case C (both proven in P5); S05j and S09a amended; failing
   tests not yet built are skipped and committed, then enabled in the phase that builds them.
+- The case agent is a hardened `AIChatAgent` (CM-18): the Agents SDK is expected for a Cloudflare application; spike
+  K4 proved a WebSocket message guard in front of the SDK closes the client-history risk. The alternative without the
+  SDK is documented in `tech-docs/design/case-agent-without-agents-sdk.md`. Terms ruled: inbound guard, HTTP request
+  guard, WebSocket message guard, WebSocket message, WebSocket frame; case conversation store names the SDK's storage.
 - Plain HTTP is redirected (308) to the configured HTTPS origin by the Worker, which runs first for every request;
   owner tried the live deployment and approved merging `feature/deploy`.
 
