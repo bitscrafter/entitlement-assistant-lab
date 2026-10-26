@@ -1,6 +1,6 @@
 # AI Session — current state
 
-**Updated:** 2026-10-26 (explain-access P8)
+**Updated:** 2026-10-26 (explain-access P8, CM-19)
 
 ## State
 
@@ -28,10 +28,9 @@
 ## Next session
 
 1. Owner: keep the production secrets in a password manager.
-2. Explain-access spike K5 (resume here): other Workers AI models with function calling against the same §5
-   evaluation, tool choice and answers in words, time-boxed to about two hours; first confirm the candidates in the
-   current Workers AI catalog. A switch needs the owner's ruling, a spec amendment (it names Llama 3.3 70B), and an
-   ADR.
+2. Explain-access (resume here): after 00:00 UTC, when the free Workers AI allocation resets, run the amended §5
+   evaluation of CM-19 against version `ae82798a`: `EVALUATION_ORIGIN=https://entitlement-assistant.jose-luis-rios.workers.dev
+   SEED_PASSWORDS_FILE=.env.seed-passwords npm run eval:live` (25 turns, about 5,000 neurons).
 3. Then the GREEN gate on a clean tree, the adversarial review, and the merge into `main` with the owner's approval.
 
 ## Decisions (owner, 2026-10-22)
@@ -87,6 +86,9 @@
 - Neon reset and reseeded for explain-access with the same passwords (1A).
 - Answer wording fixed (look accounts up first, no tool call as text, "No answer was written; see Details."
   fallback); spike K5 to compare other Workers AI models.
+- CM-19: gpt-oss-120b (free on Workers AI like Llama); lookup permissive, display strict: the model writes `[acc_…]`
+  and `[email]` references, the screen writes the stored names, for accounts and people. Spec §5 amended. The live
+  evaluation is a committed command, `npm run eval:live`.
 
 ## Open
 

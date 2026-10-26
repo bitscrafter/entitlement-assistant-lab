@@ -12,6 +12,7 @@
     "db:seed": "node application/entitlement-assistant/src/database/seed-command.ts",
     "check": "biome ci --error-on-warnings && tsc --noEmit && tsc --noEmit -p application/entitlement-assistant/src/ui && depcruise . --config .dependency-cruiser.cjs && vitest run",
     "dev": "npm run ui:build && wrangler dev",
+    "eval:live": "node application/entitlement-assistant/src/tools/live-evaluation-command.ts",
     "seed:passwords": "node application/entitlement-assistant/src/tools/create-seed-passwords-command.ts",
     "policies:build": "node application/entitlement-assistant/src/tools/build-policy-set-command.ts",
     "policies:register": "node application/entitlement-assistant/src/tools/register-policy-set-command.ts",
