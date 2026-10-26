@@ -2,7 +2,7 @@
 
 | | |
 | :--- | :--- |
-| **Purpose** | Every way into the system: the HTTP endpoints the browser calls, the case agent's WebSocket and its frames, the tools the language model may call, and the use cases behind all three. One error format and one disclosure rule apply to all of them. |
+| **Purpose** | Every way into the system: the HTTP endpoints the browser calls, the case agent's WebSocket and its messages, the tools the language model may call, and the use cases behind all three. One error format and one disclosure rule apply to all of them. |
 | **Status** | Ruled by the owner (2026-10-25) |
 | **References** | • Use cases and their decisions: [`../adr/`](../adr/README.md) (AU-1, AU-4, AU-6, SU-9, SU-12, SU-14, SU-15, CM-5, CM-16, CM-17)<br>• Data model: [`../data-model/README.md`](../data-model/README.md)<br>• Feature specs: [`../features/`](../features/)<br>• Proposal: [`../entitlement-assistant-proposal.md`](../entitlement-assistant-proposal.md) §2, §6, §9 |
 
@@ -27,12 +27,12 @@
 | # | Decision | Reason |
 | --- | --- | --- |
 | A1 | **Three inbound adapters, one implementation of each use case.** HTTP endpoints (browser), the case agent's WebSocket (chat), and tools (the language model, in-process) call the same use case code. An adapter turns its credential into a principal, chooses which use cases it exposes, and shapes results; it holds no rule. | Hexagonal architecture; no rule is duplicated. In production each adapter is its own namespace with its own restrictions (see §11); MCP is a fourth adapter (proposal §9). |
-| A2 | **Anything that changes state and that the language model must not trigger is an HTTP endpoint, never a tool or a chat frame:** confirming or canceling a change request, setting the subject, the contact, and contact authentication, reassigning, closing, deciding an approval. | CM-5: the model proposes; only a person's own click acts. |
+| A2 | **Anything that changes state and that the language model must not trigger is an HTTP endpoint, never a tool or a WebSocket message:** confirming or canceling a change request, setting the subject, the contact, and contact authentication, reassigning, closing, deciding an approval. | CM-5: the model proposes; only a person's own click acts. |
 | A3 | **Tools only read, or prepare.** A preparing tool stores a change request awaiting confirmation (or proposes a subject) and returns a card; it never applies anything. Every effect on a customer traces back to a person's click: the CSR's confirmation, and a supervisor's approval where a policy requires one. | SU-4, SU-9, CM-5. |
 | A4 | **Two visible domains: authentication, and the case.** `/api/authentication/…` for who the caller is; every piece of customer work under `/api/cases/{case_id}/…`; approvals on their own, because supervisors decide without being the case's assignee. Entitlements, policies, and subscriptions are not endpoints: the CSR reaches them only within a case. | The CSR's two real contexts. A case in the path makes the assignee check (SU-14) the first check, and every read references its case in the audit record. |
 | A5 | **State-changing requests require the application's `Origin`, `Content-Type: application/json`, and the session cookie; every WebSocket upgrade requires the application's `Origin`.** No CORS: no other origin is ever allowed. CORS does not cover WebSockets, so the upgrade is checked by the server. | CSRF and cross-site WebSocket hijacking defense in depth with `SameSite=Strict`. |
 | A6 | **Idempotency.** Confirming a change request is idempotent by its id: a repeated confirmation returns the first result. Other actions are guarded by state (closing a closed case answers `409`). | Retries after a dropped response are safe (S17). |
-| A7 | **JSON field names, tool names and arguments, and frame payloads are snake_case; ids are prefixed** (`cse_…`, `chg_…`, `apr_…`, CM-14); instants are RFC 3339 UTC. The TypeScript code stays camelCase; adapters convert at the boundary. | OAuth 2 conventions; one wire format. |
+| A7 | **JSON field names, tool names and arguments, WebSocket message payloads, and codes (`error`, a tool's `result`: `found`, `not_entitled`, …) are snake_case; ids are prefixed** (`cse_…`, `chg_…`, `apr_…`, CM-14); instants are RFC 3339 UTC. The TypeScript code stays camelCase; adapters convert at the boundary. | OAuth 2 conventions; one wire format. |
 | A8 | **Errors follow the OAuth 2 format** (`error`, `error_description`), with optional `error_details`. The top level is always safe to show to anyone; details appear only when the caller's authentication context allows them (AU-6). | A familiar format whose two levels match the two disclosure levels. |
 
 ## 2. Conventions
@@ -115,21 +115,25 @@ Set-Cookie: __Host-session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=
 ## 5. Case endpoints
 
 Every endpoint under `/api/cases/{case_id}` answers `404` unless the caller is the case's current assignee
-(SU-14), except `reassignment`, which needs `case.reassign`.
+(SU-14), except `reassignment`, which needs `case.reassign`. A closed case has no assignee, so it answers `404`
+(case-lifecycle D9). Actions answer `204`; the case panel then reads the case (case-lifecycle D16).
 
 | Endpoint | Use case · action key | Body | Success |
 | --- | --- | --- | --- |
 | `POST /api/cases` | `OpenCase` · `case.open` | `{}` | 201 `{ case_id }` |
 | `GET /api/cases` | `ListMyCases` · none (own assignments only) | — | 200 open cases assigned to the caller |
-| `GET /api/cases/{case_id}` | `GetCase` · `account.read` on the subject, when set | — | 200 case: subject, contact, authentication, assignment, open change requests |
-| `PUT /api/cases/{case_id}/subject` | `SetCaseSubject` · `case.set-subject` | `{ account_id }` | 200 case |
-| `PUT /api/cases/{case_id}/contact` | `SetCaseContact` · `case.set-contact` | `{ account_id }` | 200 case (contact authentication cleared) |
-| `POST /api/cases/{case_id}/contact-authentication` | `AuthenticateContact` · `case.authenticate-contact` | `{ kind, passed }` | 200 case, or 409 `contact_authentication_failed` (audited) |
+| `GET /api/cases?subject={account_id}&status=closed` | `ListClosedCases` · `account.read` on the account | — | 200 `{ cases }`: the account's closed cases, newest first, at most 20, with reason, closer, and summary (case-lifecycle D17) |
+| `GET /api/cases/{case_id}` | `GetCase` · `account.read` on the subject and on the contact, when set | — | 200 case: subject (holds), contact (holds, roles in the subject), authentication (kind, method, expiry); a part the caller may not read shows only its id and `readable: false` |
+| `PUT /api/cases/{case_id}/subject` | `SetCaseSubject` · `case.set-subject` | `{ account_id }` | 204 |
+| `PUT /api/cases/{case_id}/contact` | `SetCaseContact` · `case.set-contact` | `{ account_id }` | 204 (contact authentication cleared) |
+| `POST /api/cases/{case_id}/contact-authentication` | `AuthenticateContact` · `case.authenticate-contact` | `{ kind, method, passed }` | 204, or 409 `contact_authentication_failed` (audited) |
 | `POST /api/cases/{case_id}/reassignment` | `ReassignCase` · `case.reassign` | `{ assignee_account_id }` | 200 case |
-| `POST /api/cases/{case_id}/closure` | `CloseCase` · `case.close` | `{ close_reason, summary }` | 200 case (pending changes and approvals canceled) |
+| `POST /api/cases/{case_id}/closure` | `CloseCase` · `case.close` | `{ close_reason, summary }` | 204 (pending changes and approvals canceled; open connections closed with `4404`) |
 
-`PUT …/subject` takes the account the assistant proposed (a subject card, §8) or one the CSR picked; the
-subject is set once, so a second `PUT` answers `409` with `subject_already_set`.
+`PUT …/subject` takes the account the assistant proposed (the result of `propose_case_subject`, §9) or one the
+CSR picked; the subject is set once, so a second `PUT` answers `409` with `subject_already_set`. A contact
+authentication records a `kind` (`Knowledge`, `Possession`) and a `method` (`SecurityQuestion`,
+`AccountDetails`; `SupportPasscode` and `OneTimeCode` in production); a password is never a method.
 
 ```http
 PUT /api/cases/cse_AZK6v3Wr7kq9Yg3hQm2xTA/subject HTTP/1.1
@@ -202,40 +206,41 @@ One agent instance (Durable Object) per case, a hardened AIChatAgent (CM-18); th
 storage. The alternative without the Agents SDK: design/case-agent-without-agents-sdk.md.
 ```
 
-**Frames from the browser** (chat protocol of the Agents SDK):
+**WebSocket messages from the browser** (chat protocol of the Agents SDK):
 
-| Frame | Meaning |
+| Message | Meaning |
 | --- | --- |
 | user message | the CSR's text; untrusted, sanitized at entry (proposal §6.2) |
 | cancel | stop the current model response |
 | stream resume (request, acknowledgement) | resume receiving a response after reconnecting |
 
-Every frame is checked for the token's expiry and re-loads the principal (explain-access D6, D10); a user message
-is also counted against the rate limit (D13). Any other frame is dropped.
+Every message is checked for the token's expiry and re-loads the principal (explain-access D6, D10); a user
+message is also counted against the rate limit (D13). Any other message is dropped.
 
-**Frames from the server:**
+**Server WebSocket messages:**
 
-| Frame | Meaning |
+| Message | Meaning |
 | --- | --- |
 | assistant message (streamed) | the model's text |
 | tool call, tool result | shown in the transcript for transparency; results are structured (reason codes, facts) |
-| `subject_card` | `{ account_id, display_name }` proposed by the assistant; the UI offers a button calling `PUT …/subject` |
 | `change_request_card` | `{ change_request_id, change_kind, diff, status }`, rendered from the stored diff, never from model text (SU-9); the UI offers Confirm and Cancel, calling §6 |
 | `case_event` | something happened outside the chat: change applied, approval decided or expired, case reassigned or closed |
 | close `4401 session_expired` | the token the connection was opened with expired |
 | close `4401 invalid_session` | the principal, re-loaded at a message, is no longer active (identity inactive or account suspended) |
-| close `1009 message_too_big` | a frame from the browser was larger than 16 KiB; the model was not called |
+| close `1009 message_too_big` | a message from the browser was larger than 16 KiB; the model was not called |
 | close `4404 case_unavailable` | the case was closed or reassigned away from the caller |
 
-Cards and buttons are rendered by the UI from the server's frames; the model can neither send a frame
-with a different card id nor click a button.
+Cards and buttons are rendered by the UI from tool results and server WebSocket messages; the model can
+neither send a message with a different card id nor click a button.
 
 ## 9. Tools
 
 Tools are typed functions the model may call; arguments are validated strictly (unknown fields rejected).
 The principal and the case always come from the connection, never from arguments. Change tools act on the
 case's subject only and fail when it is not set (SU-9). A refusal reaches the model in the same two levels
-as §3: details only when the CSR may see them.
+as §3: details only when the CSR may see them. Every result names its kind in `result`, a snake_case code
+(case-lifecycle D13); values that are data (`Allow`, `Payment`) keep their stored spelling. Once a case's
+subject is set, the read tools act on it only (case-lifecycle D6).
 
 | Tool | Use case | Arguments | Result | Feature |
 | --- | --- | --- | --- | --- |
@@ -243,8 +248,8 @@ as §3: details only when the CSR may see them.
 | `check_entitlement` | `CheckEntitlement` | `account_id`, `feature_key` | entitled, quota, sources, reasons, facts | explain-access |
 | `list_entitlements` | `ListEntitlements` | `account_id` | entries, or reasons and facts | explain-access |
 | `explain_access` | `ExplainAccess` | `person_email`, `account_id`, `feature_key`, `operation` | outcome, findings, remedy | explain-access |
-| `proposeCaseSubject` | none (sends a `subject_card`) | `account_id` | card id; nothing is set | case-lifecycle |
-| `draftCaseSummary` | none (stores a draft the CSR edits at closing) | `summary` | draft id | case-lifecycle |
+| `propose_case_subject` | `ProposeCaseSubject` · `account.read` | `account_id` | `proposed` with the account as stored; nothing is set; the UI offers **Set as case subject** | case-lifecycle |
+| `draft_case_summary` | none | `summary` | `drafted` with the summary; nothing is stored; the case panel offers it for review | case-lifecycle |
 | `prepareChangePlan` | `PrepareChangeRequest` (`ChangePlan`) | `target_plan_key`, `coverage_source?`, `duration_days?` | change request id and diff, or refusal | change-subscription |
 | `prepareCancellation` | `PrepareChangeRequest` (`CancelSubscription`) | none | change request id and diff, or refusal | change-subscription |
 | `getAccountHistory` | `GetAccountHistory` · `audit.read` | `limit?` | audit records with actor, participants, outcome, reasons | change-subscription |
