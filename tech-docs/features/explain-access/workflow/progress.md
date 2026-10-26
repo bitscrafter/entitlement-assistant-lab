@@ -3,7 +3,7 @@
 | | |
 | :--- | :--- |
 | **Purpose** | The phase table of explain-access: role, status, outcome. |
-| **Status** | P6 done: every scenario green, none skipped; P7 next |
+| **Status** | P7 done; P8 next |
 | **References** | • Plan: [`architect-plan.md`](architect-plan.md)<br>• Spec: [`../explain-access.verification-spec.md`](../explain-access.verification-spec.md) |
 
 | Phase | Role | Status | Outcome |
@@ -20,7 +20,7 @@
 | P4 authorization | coder | ✅ | `AuthorizationDecider` port; the PDP as five strategy steps with early stop on suspension (AC-6 reads exempt); the per-decision PIP; finding combination; Customer Identity, Account, and Access lookups it needs; deny-by-default, early stop, and AC-6 proven by mutations; fail-closed on an inactive policy set |
 | P5 support use cases, case endpoint | coder | ✅ | disclosure rule (AU-6); the read enforcement template with the permission gate (D12, proven by untouchable doubles and a mutation); `FindCustomerAccount`, `CheckEntitlement`, `ListEntitlements`, `ExplainAccess`, `OpenCase`; `POST /api/cases`; the upgrade route (D1, D9); S05a–S05d, S05f–S05h, S07–S12 green (discovery 18 fixed); S05c and S08e case C proven by mutations |
 | P6 case agent | coder | ✅ | the case agent as a hardened `AIChatAgent` (spike K4): the WebSocket message guard wraps `onMessage` (size, kind, rate, expiry, principal; unit-tested), tools as AI SDK tools over the strict runners, Workers AI through `workers-ai-provider`; Durable Object rate limiter (conformance suite in the runtime); every agent scenario in the Workers runtime; forged history and frames refused, failing model shown generically; nine mutations caught |
-| P7 chat UI | coder | ⬜ | |
+| P7 chat UI | coder | ✅ | open a case, chat through `useAgentChat`; replies as Tools, Result, and Details from the tool results (discovery 32); Cmd/Ctrl+Enter sends; close codes handled; verified end to end locally with Workers AI (discoveries 29–30); accepted by the owner in the browser |
 | P8 end to end and deploy | coder | ⬜ | |
 | GREEN gate | assistant | ⬜ | |
 | Adversarial review | review agent | ⬜ | |

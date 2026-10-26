@@ -34,6 +34,7 @@ import { ListEntitlements } from "../../../subsystem/support/src/usecase/list-en
 import { OpenCase } from "../../../subsystem/support/src/usecase/open-case.ts";
 import { ReadEnforcement } from "../../../subsystem/support/src/usecase/read-enforcement.ts";
 import { agentTools } from "./agent/agent-tools.ts";
+import { REASON_DESCRIPTIONS } from "./agent/reason-descriptions.ts";
 import { type ConnectionSession, WebSocketMessageGuard } from "./agent/websocket-message-guard.ts";
 import type { CaseWorkUseCases } from "./case-work-use-cases.ts";
 import { type CaseWork, composeCaseWork } from "./compose-case-work.ts";
@@ -252,7 +253,8 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
             caseId,
             actor: () => actor,
             runUseCases: withAllUseCases,
-            describeReason: (reasonCode) => policyDescriptions.get(reasonCode) ?? reasonCode,
+            describeReason: (reasonCode) =>
+              policyDescriptions.get(reasonCode) ?? REASON_DESCRIPTIONS[reasonCode] ?? reasonCode,
             newTraceId,
             logFailure: (failure) => console.error(JSON.stringify({ log: "case-tool-failed", ...failure })),
           }),
@@ -459,6 +461,7 @@ function buildUseCases(
     checkEntitlement: new CheckEntitlement({
       enforcement,
       computeEffectiveEntitlements: caseWork.computeEffectiveEntitlements,
+      findLowestPlanIncluding: caseWork.findLowestPlanIncluding,
       clock,
     }),
     listEntitlements: new ListEntitlements({

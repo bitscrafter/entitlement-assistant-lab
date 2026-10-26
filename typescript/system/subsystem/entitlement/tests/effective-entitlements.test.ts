@@ -158,7 +158,7 @@ describe("effectiveEntitlements", () => {
     });
     expect(effectiveEntitlements(snapshot, CATALOG, AT)).toEqual({
       kind: "Effective",
-      coveringTerm: { source: "Payment", endsAt: day("2026-11-15") },
+      coveringTerm: { planKey: "pro", source: "Payment", endsAt: day("2026-11-15") },
       entitlements: [
         {
           featureKey: "advanced-analytics",

@@ -4,7 +4,7 @@ import { convertToModelMessages, type LanguageModel, stepCountIs, streamText } f
 import type { Uuid } from "../../../kernel/identifier.ts";
 import type { MessageRateLimiter } from "../../../port/message-rate-limiter.ts";
 import { shownToolError } from "./agent/agent-tools.ts";
-import { CASE_AGENT_INSTRUCTIONS } from "./agent/instructions.ts";
+import { CASE_AGENT_INSTRUCTIONS, finalStepAnswersInWords } from "./agent/instructions.ts";
 import { CLOSES, type ConnectionSession } from "./agent/websocket-message-guard.ts";
 import type { Application, CaseAgentParts } from "./application.ts";
 
@@ -195,6 +195,7 @@ export function caseAgentObject<Environment extends CaseAgentEnvironment>(runtim
         messages: await convertToModelMessages(this.messages),
         tools: parts.tools({ principalAccountId: session.principalAccountId, sessionId: session.sessionId }),
         stopWhen: stepCountIs(MAXIMUM_MODEL_STEPS),
+        prepareStep: ({ stepNumber }) => finalStepAnswersInWords(stepNumber, MAXIMUM_MODEL_STEPS),
         onFinish: onFinish as never,
       });
       return result.toUIMessageStreamResponse({

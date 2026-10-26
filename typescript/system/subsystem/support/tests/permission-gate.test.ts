@@ -10,6 +10,7 @@ import { GetCustomerAccount } from "../../account/src/usecase/get-customer-accou
 import type { FindIndividualByEmail } from "../../customer-identity/src/usecase/find-individual-by-email.ts";
 import type { GetIndividuals } from "../../customer-identity/src/usecase/get-individuals.ts";
 import type { ComputeEffectiveEntitlements } from "../../entitlement/src/usecase/compute-effective-entitlements.ts";
+import type { FindLowestPlanIncluding } from "../../product/src/usecase/find-lowest-plan-including.ts";
 import { CheckEntitlement } from "../src/usecase/check-entitlement.ts";
 import { FindCustomerAccount } from "../src/usecase/find-customer-account.ts";
 import { ReadEnforcement } from "../src/usecase/read-enforcement.ts";
@@ -57,7 +58,12 @@ function readers() {
   const hasher: IdentifierHasher = { hash: async () => "h".repeat(22) };
   return {
     records,
-    check: new CheckEntitlement({ enforcement, computeEffectiveEntitlements, clock }),
+    check: new CheckEntitlement({
+      enforcement,
+      computeEffectiveEntitlements,
+      findLowestPlanIncluding: untouchable<FindLowestPlanIncluding>("findLowestPlanIncluding"),
+      clock,
+    }),
     find: new FindCustomerAccount({
       enforcement,
       identifierHasher: hasher,

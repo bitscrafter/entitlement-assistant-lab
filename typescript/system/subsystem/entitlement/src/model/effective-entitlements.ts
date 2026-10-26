@@ -67,7 +67,11 @@ export type EffectiveEntitlements =
       readonly kind: "Effective";
       /** Ordered by feature key. */
       readonly entitlements: readonly EffectiveEntitlement[];
-      readonly coveringTerm: { readonly source: TermSource; readonly endsAt: Date | null };
+      readonly coveringTerm: {
+        readonly planKey: string;
+        readonly source: TermSource;
+        readonly endsAt: Date | null;
+      };
     }
   | { readonly kind: "None"; readonly reasonCodes: readonly string[]; readonly facts: ReasonFacts };
 
@@ -86,7 +90,8 @@ const activeAt = (start: Date, end: Date | null, at: Date) => start <= at && (en
  *          otherwise `entitlement.no-subscription`.
  * @ensures Without a term covering `at`, none: `entitlement.no-covering-term`, with the last term's source and end as facts.
  * @ensures Otherwise, the covering term's plan bundles, the current add-ons' bundles, and the active grants (expired
- *          ones ignored), each feature listing all its sources: the plan first, then add-ons by key, then grants by start.
+ *          ones ignored), each feature listing all its sources: the plan first, then add-ons by key, then grants by start;
+ *          the covering term is given with its plan, source, and effective end.
  * @ensures A metered feature's quota is the sum of its sources' quotas, or `unlimited` when any source has none;
  *          an unmetered feature's quota is null.
  */
@@ -161,7 +166,11 @@ export function effectiveEntitlements(
   return {
     kind: "Effective",
     entitlements,
-    coveringTerm: { source: coveringTerm.source, endsAt: effectiveEnd(coveringTerm) },
+    coveringTerm: {
+      planKey: coveringTerm.planKey,
+      source: coveringTerm.source,
+      endsAt: effectiveEnd(coveringTerm),
+    },
   };
 }
 

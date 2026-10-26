@@ -196,7 +196,10 @@ export class FindCustomerAccount {
       accountCategory: account.accountCategory,
       holds: account.holdReasonCodes,
       planKey: computed?.latestPlanKey ?? null,
-      coveringTerm: effective?.kind === "Effective" ? effective.coveringTerm : null,
+      coveringTerm:
+        effective?.kind === "Effective"
+          ? { source: effective.coveringTerm.source, endsAt: effective.coveringTerm.endsAt }
+          : null,
       addonKeys: [...new Set(addonKeys)].sort(),
       ownersAndAdmins: (await this.#getIndividuals.execute(customerIds))
         .map((individual) => individual.email)

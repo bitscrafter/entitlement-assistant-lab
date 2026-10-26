@@ -11,6 +11,14 @@
     "binding": "ASSETS",
     "run_worker_first": true
   },
+  "ai": { "binding": "AI" },
+  "durable_objects": {
+    "bindings": [
+      { "name": "CASE_AGENT", "class_name": "CaseAgentObject" },
+      { "name": "MESSAGE_RATE_LIMITER", "class_name": "MessageRateLimiterObject" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CaseAgentObject", "MessageRateLimiterObject"] }],
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",

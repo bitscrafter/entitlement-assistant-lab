@@ -3,7 +3,7 @@ import { SystemClock } from "../../../adapter/clock/system-clock.ts";
 import { UuidVersion7Generator } from "../../../adapter/identifier/uuid-version7-generator.ts";
 import { PostgresConnection } from "../../../adapter/postgres/postgres-connection.ts";
 import { ConsoleSecurityEventLog } from "../../../adapter/security-event-log/console-security-event-log.ts";
-import { createWorkersAI } from "../../../external/ai.ts";
+import { createWorkersAI, simulateStreamingMiddleware, wrapLanguageModel } from "../../../external/ai.ts";
 import { importHashKey } from "../../../subsystem/attribution/src/infra/audit-record-hash.ts";
 import { type Application, createApplication } from "./application.ts";
 import {
@@ -112,8 +112,14 @@ const WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 /** The case agent of each case (a Durable Object per case), answering with Workers AI. */
 export const CaseAgentObject = caseAgentObject<Environment>({
   applicationFor,
-  // The binding's type comes from the Workers runtime; the provider checks it on first use.
-  languageModelFor: (environment) => createWorkersAI({ binding: environment.AI as never })(WORKERS_AI_MODEL),
+  // The model is called without streaming and its answer replayed as a stream: streamed tool-call arguments from
+  // Workers AI arrive garbled for this model, while a whole answer carries them intact (discovery 29).
+  languageModelFor: (environment) =>
+    wrapLanguageModel({
+      // The binding's type comes from the Workers runtime; the provider checks it on first use.
+      model: createWorkersAI({ binding: environment.AI as never })(WORKERS_AI_MODEL),
+      middleware: simulateStreamingMiddleware(),
+    }),
 });
 
 export { MessageRateLimiterObject };

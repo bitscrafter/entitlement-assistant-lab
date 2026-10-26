@@ -24,8 +24,9 @@
 ## Next session
 
 1. Owner: keep the production secrets in a password manager.
-2. Explain-access P7 (chat UI with `useAgentChat`), then P8 (end to end, deploy). State in
-   `tech-docs/features/explain-access/workflow/progress.md`.
+2. Explain-access P8: deploy (Neon reset and reseed with the fixture-day shift, policy set registration, Durable
+   Objects and Workers AI bindings), live smoke test, live-model evaluation; then the GREEN gate and the adversarial
+   review. State in `tech-docs/features/explain-access/workflow/progress.md`.
 
 ## Decisions (owner, 2026-10-22)
 

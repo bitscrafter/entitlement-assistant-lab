@@ -1,8 +1,13 @@
 import { z } from "../../../../external/zod.ts";
 import type { EntitlementSource, ReasonFacts } from "../../../../kernel/entitlement.ts";
 import { decodeIdentifier, encodeIdentifier, type Uuid } from "../../../../kernel/identifier.ts";
+import type { Remedy } from "../../../../subsystem/product/src/usecase/find-lowest-plan-including.ts";
 import type { AccountSummary } from "../../../../subsystem/support/src/usecase/find-customer-account.ts";
-import type { ReadRefusal, ReadRequest } from "../../../../subsystem/support/src/usecase/read-request.ts";
+import type {
+  AccountContext,
+  ReadRefusal,
+  ReadRequest,
+} from "../../../../subsystem/support/src/usecase/read-request.ts";
 import type { CaseWorkUseCases } from "../case-work-use-cases.ts";
 import { ERRORS } from "../http/responses.ts";
 
@@ -57,6 +62,36 @@ const factsOf = (facts: ReasonFacts) => ({
   ...(facts.lastTermEndedAt === undefined ? {} : { last_term_ended_at: facts.lastTermEndedAt.toISOString() }),
 });
 
+/** The account a result is about, as the Details of a reply show it: the full id, its name, plan, and term. */
+const accountOf = (account: AccountContext) => ({
+  account_id: encodeIdentifier("acc", account.accountId),
+  display_name: account.displayName,
+  plan_key: account.planKey,
+  covering_term:
+    account.coveringTerm === null
+      ? null
+      : {
+          plan_key: account.coveringTerm.planKey ?? account.planKey,
+          source: account.coveringTerm.source,
+          ends_at: account.coveringTerm.endsAt?.toISOString() ?? null,
+        },
+});
+
+/** Each reason with how it reads to a CSR. */
+const reasonsOf = (reasonCodes: readonly string[], describeReason: (reasonCode: string) => string) =>
+  reasonCodes.map((code) => ({ code, description: describeReason(code) }));
+
+const remedyOf = (remedy: Remedy | null) =>
+  remedy === null
+    ? null
+    : {
+        lowest_plan_key: remedy.lowestPlanKey,
+        addons: remedy.addons.map((addon) => ({
+          addon_key: addon.addonKey,
+          eligible_plan_keys: addon.eligiblePlanKeys,
+        })),
+      };
+
 const summaryOf = (account: AccountSummary) => ({
   account_id: encodeIdentifier("acc", account.accountId),
   display_name: account.displayName,
@@ -86,15 +121,26 @@ const accountIdParameter = {
   type: "string",
   description: "A customer account id, as find_customer_account returns it (acc_…).",
 };
+const featureKeyParameter = {
+  type: "string",
+  description:
+    "A lowercase feature key, such as seats, api-access, sso, audit-log-export, or advanced-analytics.",
+};
 
 const findArguments = z.strictObject({ query: z.string().min(1).max(320) });
-const checkArguments = z.strictObject({ account_id: z.string().max(64), feature_key: z.string().max(64) });
+/** Catalog keys are lowercase kebab-case (CM-12); a model writing `SSO` means `sso`. */
+const catalogKey = z
+  .string()
+  .max(64)
+  .transform((key) => key.trim().toLowerCase());
+
+const checkArguments = z.strictObject({ account_id: z.string().max(64), feature_key: catalogKey });
 const listArguments = z.strictObject({ account_id: z.string().max(64) });
 const explainArguments = z.strictObject({
   person_email: z.string().max(320),
   account_id: z.string().max(64),
-  feature_key: z.string().max(64),
-  operation: z.string().max(64),
+  feature_key: catalogKey,
+  operation: catalogKey,
 });
 
 /** The tools of the case agent (api.md §9): one per use case, translation only (A1). */
@@ -141,7 +187,7 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
         "Check whether a customer account is entitled to one feature, with every source, or why not.",
       parameters: {
         type: "object",
-        properties: { account_id: accountIdParameter, feature_key: { type: "string" } },
+        properties: { account_id: accountIdParameter, feature_key: featureKeyParameter },
         required: ["account_id", "feature_key"],
         additionalProperties: false,
       },
@@ -162,22 +208,23 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
         return {
           output: {
             result: "Entitled",
+            account: accountOf(result.account),
             feature_key: parsed.data.feature_key,
             quota: result.quota,
             sources: result.sources.map(sourceOf),
-            covering_term:
-              result.coveringTerm === null
-                ? null
-                : {
-                    source: result.coveringTerm.source,
-                    ends_at: result.coveringTerm.endsAt?.toISOString() ?? null,
-                  },
           },
         };
       }
       if (result.kind === "NotEntitled") {
         return {
-          output: { result: "NotEntitled", reason_codes: result.reasonCodes, facts: factsOf(result.facts) },
+          output: {
+            result: "NotEntitled",
+            account: accountOf(result.account),
+            feature_key: parsed.data.feature_key,
+            reasons: reasonsOf(result.reasonCodes, context.describeReason),
+            facts: factsOf(result.facts),
+            remedy: remedyOf(result.remedy),
+          },
         };
       }
       return { output: refusal(result, context.describeReason) };
@@ -206,12 +253,13 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
       return {
         output: {
           result: "Listed",
+          account: accountOf(result.account),
           entries: result.entries.map((entry) => ({
             feature_key: entry.featureKey,
             quota: entry.quota,
             sources: entry.sources.map(sourceOf),
           })),
-          reason_codes: result.reasonCodes,
+          reasons: reasonsOf(result.reasonCodes, context.describeReason),
           facts: factsOf(result.facts),
         },
       };
@@ -227,8 +275,11 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
         properties: {
           person_email: { type: "string" },
           account_id: accountIdParameter,
-          feature_key: { type: "string" },
-          operation: { type: "string" },
+          feature_key: featureKeyParameter,
+          operation: {
+            type: "string",
+            description: "A lowercase feature operation, such as configure or create-token.",
+          },
         },
         required: ["person_email", "account_id", "feature_key", "operation"],
         additionalProperties: false,
@@ -252,6 +303,10 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
       return {
         output: {
           result: "Explained",
+          account: accountOf(result.account),
+          person_email: parsed.data.person_email,
+          feature_key: parsed.data.feature_key,
+          operation: parsed.data.operation,
           outcome: result.outcome,
           findings: result.findings.map((finding) =>
             finding.kind === "access"
@@ -262,18 +317,9 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
                   covering_term_source: finding.coveringTermSource,
                 },
           ),
-          reason_codes: result.reasonCodes,
+          reasons: reasonsOf(result.reasonCodes, context.describeReason),
           facts: factsOf(result.facts),
-          remedy:
-            result.remedy === null
-              ? null
-              : {
-                  lowest_plan_key: result.remedy.lowestPlanKey,
-                  addons: result.remedy.addons.map((addon) => ({
-                    addon_key: addon.addonKey,
-                    eligible_plan_keys: addon.eligiblePlanKeys,
-                  })),
-                },
+          remedy: remedyOf(result.remedy),
         },
       };
     },

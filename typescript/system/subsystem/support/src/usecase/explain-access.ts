@@ -9,7 +9,14 @@ import type {
   Remedy,
 } from "../../../product/src/usecase/find-lowest-plan-including.ts";
 import type { ReadEnforcement } from "./read-enforcement.ts";
-import type { EntitlementSource, ReadRefusal, ReadRequest, ReasonFacts } from "./read-request.ts";
+import {
+  type AccountContext,
+  accountContextOf,
+  type EntitlementSource,
+  type ReadRefusal,
+  type ReadRequest,
+  type ReasonFacts,
+} from "./read-request.ts";
 
 export type { Remedy };
 
@@ -24,6 +31,7 @@ export type ExplanationFinding =
 export type ExplainAccessResult =
   | {
       readonly kind: "Explained";
+      readonly account: AccountContext;
       readonly outcome: "Allow" | "Deny";
       /** Why it is allowed: present for `Allow`. */
       readonly findings: readonly ExplanationFinding[];
@@ -83,6 +91,12 @@ export class ExplainAccess {
       const personAccount =
         person === null ? null : await this.#getCustomerAccount.byCustomer(person.customerId);
       if (personAccount === null) return { kind: "NotFound" };
+      const computed = await this.#computeEffectiveEntitlements.execute({
+        accountId: request.accountId,
+        at: this.#clock.now(),
+      });
+      if (computed === null) return { kind: "NotFound" };
+      const account = accountContextOf(computed);
       const decision = await this.#decider.decide({
         principal: { kind: "Individual", accountId: personAccount.accountId },
         actionKey: `feature.${request.featureKey}.${request.operation}`,
@@ -103,24 +117,27 @@ export class ExplainAccess {
           }
           return [];
         });
-        return { kind: "Explained", outcome: "Allow", findings, reasonCodes: [], facts: {}, remedy: null };
+        return {
+          kind: "Explained",
+          account,
+          outcome: "Allow",
+          findings,
+          reasonCodes: [],
+          facts: {},
+          remedy: null,
+        };
       }
       const entitlementFinding = decision.findings.find((finding) => finding.source === "entitlement");
       const facts = entitlementFinding?.source === "entitlement" ? entitlementFinding.facts : {};
       const remedy = decision.reasonCodes.includes("entitlement.feature-not-included")
         ? await this.#findLowestPlanIncluding.execute({
             featureKey: request.featureKey,
-            currentPlanKey:
-              (
-                await this.#computeEffectiveEntitlements.execute({
-                  accountId: request.accountId,
-                  at: this.#clock.now(),
-                })
-              )?.latestPlanKey ?? null,
+            currentPlanKey: computed.latestPlanKey,
           })
         : null;
       return {
         kind: "Explained",
+        account,
         outcome: "Deny",
         findings: [],
         reasonCodes: decision.reasonCodes,

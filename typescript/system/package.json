@@ -18,6 +18,7 @@
     "ui:build": "vite build --config application/entitlement-assistant/vite.config.ts"
   },
   "dependencies": {
+    "@ai-sdk/react": "4.0.157",
     "@cloudflare/ai-chat": "0.12.2",
     "@marcbachmann/cel-js": "8.0.0",
     "@modelcontextprotocol/client": "2.3.1",
