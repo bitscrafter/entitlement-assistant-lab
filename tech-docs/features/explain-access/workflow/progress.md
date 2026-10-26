@@ -24,5 +24,5 @@
 | P8 end to end and deploy | coder | 🔄 | Neon reset and reseeded; deployed; live smoke test passed; §5 evaluation: tool choice 20/20, reply wording 13/20 (discovery 33), 20/20 after the fix (34) |
 | K5 other models | architect | ✅ | gpt-oss-120b strongest; Llama 4 Scout fails; Kimi and GLM need Workers Paid (discovery 35) |
 | CM-19 gpt-oss and answer references | coder | 🔄 | built, unit-tested (references mutation-proven), deployed `ae82798a`; live evaluation waits for the free neuron allocation to reset (discovery 36) |
-| GREEN gate | assistant | ✅ | 367 passed, biome, tsc (server and UI), depcruise clean @ 232a122 |
+| GREEN gate | assistant | ✅ | 367 passed @ 232a122; after the review, 387 passed, biome, tsc (server and UI), depcruise clean @ d44d6ae |
 | Adversarial review | review agent | ✅ | round 1: REJECT, 2 major, 4 minor, all fixed (37); round 2: ACCEPT, 3 minor: R2-2 fixed, R2-1 and R2-3 to the owner (38) |

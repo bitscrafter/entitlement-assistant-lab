@@ -29,9 +29,12 @@
 
 1. Owner: keep the production secrets in a password manager.
 2. Explain-access (resume here): after 00:00 UTC, when the free Workers AI allocation resets, run the amended §5
-   evaluation of CM-19 against version `ae82798a`: `EVALUATION_ORIGIN=https://entitlement-assistant.jose-luis-rios.workers.dev
-   SEED_PASSWORDS_FILE=.env.seed-passwords npm run eval:live` (25 turns, about 5,000 neurons).
-3. Then the GREEN gate on a clean tree, the adversarial review, and the merge into `main` with the owner's approval.
+   evaluation against version `58b37e05` (deployed from d44d6ae): `EVALUATION_ORIGIN=https://entitlement-assistant.jose-luis-rios.workers.dev
+   SEED_PASSWORDS_FILE=.env.seed-passwords npm run eval:live` (25 turns, about 5,000 neurons). Record it as
+   discovery 39, then ask the owner to merge `feature/explain-access` into `main` and close out (AI_WORKFLOW.md §6).
+3. Done for explain-access: GREEN 387 @ d44d6ae; adversarial review round 1 REJECT (fixed), round 2 ACCEPT (minor
+   findings fixed or ruled, discoveries 37, 38); non-AI smoke test of `58b37e05` passed; discoveries reconciled
+   except 36 (the evaluation).
 
 ## Decisions (owner, 2026-10-22)
 
@@ -89,6 +92,9 @@
 - CM-19: gpt-oss-120b (free on Workers AI like Llama); lookup permissive, display strict: the model writes `[acc_…]`
   and `[email]` references, the screen writes the stored names, for accounts and people. Spec §5 amended. The live
   evaluation is a committed command, `npm run eval:live`.
+- Review rulings: D14 bounds a lookup (3 characters, 50 decided, 10 listed, `more_matches` from authorized only);
+  no signal may depend on accounts the CSR cannot read (S07d), so every name search shows a fixed notice instead;
+  the email path reads at most 49 role accounts; stream frames re-load the principal.
 
 ## Open
 

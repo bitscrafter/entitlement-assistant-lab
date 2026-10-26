@@ -4,7 +4,7 @@
 
 1. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
 2. At the end: GitHub remote (owner, 2026-10-25).
-3. Feature explain-access: spike K5 (other Workers AI models, same evaluation), GREEN gate, adversarial review, merge; update production-readiness "Insider enumeration" with the code.
+3. Feature explain-access: live §5 evaluation after the Workers AI allocation resets, then merge and close-out.
 
 ## Completed
 
