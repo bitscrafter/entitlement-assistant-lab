@@ -1,9 +1,9 @@
-import { attemptInWindow } from "../../../adapter/message-rate-limiter/sliding-window.ts";
 import { AIChatAgent, getAgentByName, getCurrentAgent } from "../../../external/agents.ts";
 import { convertToModelMessages, type LanguageModel, stepCountIs, streamText } from "../../../external/ai.ts";
 import type { Uuid } from "../../../kernel/identifier.ts";
+import { attemptInWindow } from "../../../kernel/message-rate.ts";
 import type { MessageRateLimiter } from "../../../port/message-rate-limiter.ts";
-import { shownToolError } from "./agent/agent-tools.ts";
+import { shownToolError, turnErrorLogOf } from "./agent/agent-tools.ts";
 import { CASE_AGENT_INSTRUCTIONS, finalStepAnswersInWords } from "./agent/instructions.ts";
 import { CLOSES, type ConnectionSession } from "./agent/websocket-message-guard.ts";
 import type { Application, CaseAgentParts } from "./application.ts";
@@ -200,7 +200,7 @@ export function caseAgentObject<Environment extends CaseAgentEnvironment>(runtim
       });
       return result.toUIMessageStreamResponse({
         onError: (error) => {
-          console.error(JSON.stringify({ log: "case-agent-turn-failed", traceId, message: String(error) }));
+          console.error(JSON.stringify(turnErrorLogOf(error, traceId)));
           return shownToolError(error, traceId);
         },
       });

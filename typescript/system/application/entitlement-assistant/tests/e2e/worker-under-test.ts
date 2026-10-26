@@ -96,6 +96,20 @@ export class CaseAgentObject extends BaseCaseAgentObject {
         return Response.json(this.messages);
       case "state":
         return Response.json({ state: this.state ?? null });
+      case "schedules":
+        return Response.json(
+          (await this.listSchedules()).map((schedule) => ({
+            callback: schedule.callback,
+            delay_seconds: schedule.type === "delayed" ? schedule.delayInSeconds : null,
+          })),
+        );
+      case "run-schedules":
+        // Runs what the agent scheduled, by name, as the alarm would.
+        for (const schedule of await this.listSchedules()) {
+          await (this as unknown as Record<string, () => Promise<void>>)[schedule.callback]?.call(this);
+          await this.cancelSchedule(schedule.id);
+        }
+        return new Response(null, { status: 204 });
       case "close-expired":
         await this.closeExpiredConnections();
         return new Response(null, { status: 204 });

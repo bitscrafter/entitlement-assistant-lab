@@ -208,6 +208,10 @@ storage. The alternative without the Agents SDK: design/case-agent-without-agent
 | --- | --- |
 | user message | the CSR's text; untrusted, sanitized at entry (proposal §6.2) |
 | cancel | stop the current model response |
+| stream resume (request, acknowledgement) | resume receiving a response after reconnecting |
+
+Every frame is checked for the token's expiry and re-loads the principal (explain-access D6, D10); a user message
+is also counted against the rate limit (D13). Any other frame is dropped.
 
 **Frames from the server:**
 
@@ -235,7 +239,7 @@ as §3: details only when the CSR may see them.
 
 | Tool | Use case | Arguments | Result | Feature |
 | --- | --- | --- | --- | --- |
-| `find_customer_account` | `FindCustomerAccount` | `query` | `Found`, `Ambiguous`, `NotFound`, `Denied` | explain-access |
+| `find_customer_account` | `FindCustomerAccount` | `query` (at least 3 characters) | `Found`, `Ambiguous` (at most 10, with `more_matches`), `NotFound`, `Denied` | explain-access |
 | `check_entitlement` | `CheckEntitlement` | `account_id`, `feature_key` | entitled, quota, sources, reasons, facts | explain-access |
 | `list_entitlements` | `ListEntitlements` | `account_id` | entries, or reasons and facts | explain-access |
 | `explain_access` | `ExplainAccess` | `person_email`, `account_id`, `feature_key`, `operation` | outcome, findings, remedy | explain-access |

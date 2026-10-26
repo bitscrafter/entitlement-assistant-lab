@@ -26,9 +26,14 @@ describe("explain-access connection lifetime", () => {
 
   test("scenario 05i ensures the server closes an agent connection when its session token expires", async () => {
     const connection = await harness.connectAgent("cse_alex_1", "iac_alex");
+    await connection.settle();
+    // Scheduled on the agent's clock at 15:00:00: the token's exp, 15:20:00, is 1,200 seconds away.
+    expect(JSON.parse(await harness.control("schedules", "cse_alex_1"))).toEqual([
+      { callback: "closeExpiredConnections", delay_seconds: 1200 },
+    ]);
 
     await harness.control("clock", "cse_alex_1", "2026-10-22T15:20:00Z");
-    await harness.control("close-expired", "cse_alex_1");
+    await harness.control("run-schedules", "cse_alex_1");
     await connection.closed();
     expect(connection.closedWith).toEqual({ code: 4401, reason: "session_expired" });
 

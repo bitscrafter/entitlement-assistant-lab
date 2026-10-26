@@ -1,6 +1,6 @@
 import type { Uuid } from "../../kernel/identifier.ts";
+import { attemptInWindow } from "../../kernel/message-rate.ts";
 import type { MessageRateLimiter } from "../../port/message-rate-limiter.ts";
-import { attemptInWindow } from "./sliding-window.ts";
 
 /** A message rate limiter held in memory, for a single process (tests, local runs). */
 export class InMemoryMessageRateLimiter implements MessageRateLimiter {

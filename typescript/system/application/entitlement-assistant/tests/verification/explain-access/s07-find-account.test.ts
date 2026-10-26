@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { type SpecAuditRecord, specAuditRecords } from "../../support/explain-access.ts";
+import { seededUuid } from "../../../src/database/seed.ts";
+import {
+  insertStandaloneAccounts,
+  type SpecAuditRecord,
+  specAuditRecords,
+} from "../../support/explain-access.ts";
 import { createHarness, external, type Harness, readRequest, uuidOf } from "../../support/harness.ts";
 
 const LOOKUP = { action_key: "account.read", case: null } as const;
@@ -167,4 +172,78 @@ describe("explain-access finding an account", () => {
       expect(JSON.stringify(records)).not.toContain(query);
     },
   );
+
+  describe("scenario 07e ensures a lookup is bounded", () => {
+    const numbered = (name: string, count: number) =>
+      Array.from({ length: count }, (_, index) => {
+        const number = String(index + 1).padStart(2, "0");
+        return { alias: `acc_${name.toLowerCase()}_${number}`, displayName: `${name} ${number}` };
+      });
+    const northwind = numbered("Northwind", 55);
+    const southwind = numbered("Southwind", 10);
+    beforeEach(async () => {
+      await insertStandaloneAccounts(harness.owner, [...northwind, ...southwind]);
+      await harness.owner.query(
+        "UPDATE account SET account_display_name = 'Southwind 11' WHERE account_id = $1",
+        [uuidOf("acc_umbrella")],
+      );
+    });
+    const candidatesOf = (accounts: readonly { alias: string; displayName: string }[]) =>
+      accounts.map(({ alias, displayName }) => ({
+        accountId: seededUuid(alias),
+        displayName,
+        ownAccount: false,
+        roles: [],
+      }));
+
+    test("case A, a query shorter than 3 characters", async () => {
+      const result = await find("iac_blair", " a ");
+
+      expect(result).toEqual({ kind: "QueryTooShort" });
+      expect(await specAuditRecords(harness)).toEqual([]);
+    });
+
+    test("case B, more matches than the bounds", async () => {
+      const result = await find("iac_blair", "northwind");
+
+      expect(result).toEqual({
+        kind: "Ambiguous",
+        candidates: candidatesOf(northwind.slice(0, 10)),
+        moreMatches: true,
+      });
+      expect(lookupRecords(await specAuditRecords(harness))).toEqual(
+        northwind
+          .slice(0, 50)
+          .map(({ alias }) => ({
+            actor: "iac_blair",
+            subject: seededUuid(alias),
+            audit_outcome: "Allow",
+            reasons: [],
+          }))
+          .sort((left, right) => left.subject.localeCompare(right.subject)),
+      );
+    });
+
+    test("case C, the flag counts only authorized candidates", async () => {
+      const result = await find("iac_alex", "southwind");
+
+      expect(result).toEqual({ kind: "Ambiguous", candidates: candidatesOf(southwind), moreMatches: false });
+      expect(lookupRecords(await specAuditRecords(harness))).toEqual(
+        [
+          ...southwind.map(({ alias }) => ({
+            actor: "iac_alex",
+            subject: seededUuid(alias) as string,
+            audit_outcome: "Allow",
+            reasons: [] as string[],
+          })),
+          {
+            actor: "iac_alex",
+            subject: "acc_umbrella",
+            audit_outcome: "Deny",
+            reasons: ["policy.enterprise-accounts-need-level-2"],
+          },
+        ].sort((left, right) => left.subject.localeCompare(right.subject)),
+      );
+    });
+  });
 });

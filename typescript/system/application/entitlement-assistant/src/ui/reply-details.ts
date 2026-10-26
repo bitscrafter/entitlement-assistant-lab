@@ -63,6 +63,13 @@ export interface ReplyView {
     readonly displayName: string;
     readonly roles: readonly string[];
   }[];
+  /** A lookup matched more readable accounts than it lists: the CSR refines the query (explain-access D14). */
+  readonly moreMatches: boolean;
+  /**
+   * A lookup searched by part of a name, so its answer is bounded (D14) and shows only readable accounts. The notice
+   * depends only on the query the CSR's turn sent, never on what the search found, so it reveals nothing (AU-6).
+   */
+  readonly nameSearch: boolean;
   /** Refusals that name no account (not found, denied by policy), in plain words. */
   readonly refusals: readonly string[];
 }
@@ -84,6 +91,10 @@ const REFERENCE = /\[(acc_[A-Za-z0-9_-]{22}|[^\s[\]@]+@[^\s[\]@]+)\]/g;
 /** Shown for a reference to an account or person that no tool of this reply returned. */
 export const UNKNOWN_ACCOUNT = "(an account not in this reply's results)";
 export const UNKNOWN_PERSON = "(a person not in this reply's results)";
+
+/** Shown with every name search, whatever it found (review round 2, R2-1). */
+export const NAME_SEARCH_NOTICE =
+  "Only accounts you may read are shown, and a name search checks at most 50 matches. If this isn't the account you meant, use a longer part of the name, an email, or the account id.";
 
 /**
  * @ensures Every `[acc_…]` reads as that account's stored display name and every `[email]` as the stored email, when a
@@ -169,7 +180,9 @@ function stateOf(part: ReplyPart): ToolCallView["state"] {
  *          (`resolveReferences`); `NO_ANSWER` when that text writes out a tool call.
  * @ensures `accounts` has one card per account the results name, in the order first named, with every line those
  *          results give it.
- * @ensures `choices` lists the accounts of a several-match lookup that the reply did not go on to show as a card.
+ * @ensures `choices` lists the accounts of a several-match lookup that the reply did not go on to show as a card;
+ *          `moreMatches` is whether a lookup listed fewer than it matched; `nameSearch` is whether a lookup's query
+ *          was part of a name (neither an email nor an account id).
  * @ensures A "not found" is reported only when nothing in the reply resolved to an account or a choice; a policy
  *          denial is always reported.
  */
@@ -184,6 +197,11 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
   let notFound = false;
   const texts: string[] = [];
   const people = new Map<string, string>();
+  const knowPerson = (email: string) => {
+    if (email !== "") people.set(email.toLowerCase(), email);
+  };
+  let moreMatches = false;
+  let nameSearch = false;
 
   const cardFor = (account: Json) => {
     const accountId = asString(account.account_id);
@@ -207,6 +225,10 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
     }
     if (!part.type.startsWith("tool-")) continue;
     const toolName = part.type.slice("tool-".length);
+    if (toolName === "find_customer_account") {
+      const query = asString(asRecord(part.input)?.query).trim();
+      if (query !== "" && !query.includes("@") && !query.startsWith("acc_")) nameSearch = true;
+    }
     const view: ToolCallView = {
       toolName,
       state: stateOf(part),
@@ -239,9 +261,13 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
     const account = asRecord(output.account);
     switch (output.result) {
       case "Found":
-        if (account !== null) cardFor(account);
+        if (account !== null) {
+          cardFor(account);
+          for (const email of asStrings(account.owners_and_admins)) knowPerson(email);
+        }
         break;
       case "Ambiguous":
+        if (output.more_matches === true) moreMatches = true;
         for (const candidate of Array.isArray(output.candidates) ? output.candidates : []) {
           const record = asRecord(candidate) ?? {};
           choices.push({
@@ -301,8 +327,7 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
         if (account !== null) {
           const findings = Array.isArray(output.findings) ? output.findings : [];
           const access = findings.map(asRecord).find((finding) => finding?.kind === "access");
-          const personEmail = asString(output.person_email);
-          if (personEmail !== "") people.set(personEmail.toLowerCase(), personEmail);
+          knowPerson(asString(output.person_email));
           cardFor(account).lines.push({
             kind: "access",
             personEmail: asString(output.person_email),
@@ -331,6 +356,8 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
     text: TOOL_CALL_TEXT.test(text) ? NO_ANSWER : resolveReferences(text, accountNames, people),
     accounts: [...cards.entries()].map(([accountId, card]) => ({ accountId, ...card })),
     choices: remainingChoices,
+    moreMatches,
+    nameSearch,
     refusals: [
       ...(notFound && !resolved ? ["No account matched, or it is not one you may read."] : []),
       ...policyDenials,

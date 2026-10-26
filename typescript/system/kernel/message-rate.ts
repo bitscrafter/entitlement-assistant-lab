@@ -1,4 +1,4 @@
-/** The message rate limit of explain-access D13: 20 messages per employee within any 60 seconds. */
+/** The message rate limit of explain-access D13: 20 messages per employee within any 60 seconds (a rule, so in the kernel, CM-1). */
 export const MESSAGE_LIMIT = 20;
 export const WINDOW_MILLISECONDS = 60_000;
 

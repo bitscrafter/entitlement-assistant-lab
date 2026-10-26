@@ -5,6 +5,7 @@ import { renewSession } from "./authentication-client.ts";
 import {
   type AccountCard,
   type DetailLine,
+  NAME_SEARCH_NOTICE,
   type ReplyPart,
   type ReplyView,
   replyViewOf,
@@ -161,7 +162,11 @@ function Reply({ view }: { readonly view: ReplyView }) {
           <p className="text">{view.text}</p>
         </section>
       )}
-      {(view.accounts.length > 0 || view.choices.length > 0 || view.refusals.length > 0) && (
+      {(view.accounts.length > 0 ||
+        view.choices.length > 0 ||
+        view.moreMatches ||
+        view.nameSearch ||
+        view.refusals.length > 0) && (
         <section>
           <h2>Details</h2>
           {view.refusals.map((refusal) => (
@@ -182,6 +187,8 @@ function Reply({ view }: { readonly view: ReplyView }) {
               </ul>
             </div>
           )}
+          {view.moreMatches && <p className="refusal">More accounts match; refine the query.</p>}
+          {view.nameSearch && <p className="notice">{NAME_SEARCH_NOTICE}</p>}
           {view.accounts.map((account) => (
             <AccountDetails key={account.accountId} account={account} />
           ))}

@@ -3,8 +3,8 @@
 | | |
 | :--- | :--- |
 | **Purpose** | States what the feature must do: a signed-in employee opens a case, connects to it, and asks the assistant to find customer accounts, check and list their entitlements, and explain why a person can or cannot use a feature in an account. Each scenario becomes exactly one verification test (`AI_AS_TESTER.md`). |
-| **Status** | Approved by the owner (2026-10-25); amended by the owner the same day: S05j counts the renewal's record, S09a states the covering term in every case; amended 2026-10-26: §5 runs gpt-oss-120b, names Acme Corp, adds the ambiguous "Acme" message, and counts names by reference (ADR CM-19) |
-| **Feature** | explain-access · scenarios S05a–S05m, S06a–S06b, S07a–S07d, S08a–S08e, S09a–S09b, S10a–S10b, S11, S12, S13 |
+| **Status** | Approved by the owner (2026-10-25); amended by the owner the same day: S05j counts the renewal's record, S09a states the covering term in every case; amended 2026-10-26: §5 runs gpt-oss-120b, names Acme Corp, adds the ambiguous "Acme" message, and counts names by reference (ADR CM-19); after the adversarial review: D14 and S07e bound a lookup, S05i asserts the scheduled close, stream frames are checked like messages (D10) |
+| **Feature** | explain-access · scenarios S05a–S05m, S06a–S06b, S07a–S07e, S08a–S08e, S09a–S09b, S10a–S10b, S11, S12, S13 |
 | **Mode** | feature; reads customer data; writes only cases, case assignments, and audit records |
 | **Depends on** | feature employee-sign-in (a valid session) |
 | **References** | • Proposal: [`../../entitlement-assistant-proposal.md`](../../entitlement-assistant-proposal.md) §7<br>• Authorization decision: AU-1 to AU-6 in [`../../adr/authorization.md`](../../adr/authorization.md); [`../../diagrams/authorization-decision.activity.puml`](../../diagrams/authorization-decision.activity.puml)<br>• Disclosure of refusals: AU-6; the `account.read` finding: AU-4; one record per decision: AT-3 in [`../../adr/attribution.md`](../../adr/attribution.md)<br>• Case assignee: SU-14 in [`../../adr/support.md`](../../adr/support.md); shared ports: CM-17 in [`../../adr/common.md`](../../adr/common.md)<br>• Data model: [`../../data-model/README.md`](../../data-model/README.md) (Access, Entitlement, Product, Policy, Support, Attribution)<br>• Reason codes: [`../../data-model/attribution.md`](../../data-model/attribution.md) §4a<br>• Sequence: [`../../diagrams/agent-connection.sequence.puml`](../../diagrams/agent-connection.sequence.puml) |
@@ -34,6 +34,7 @@
    - [S07b — A query matching several accounts lists every authorized candidate](#s07b--a-query-matching-several-accounts-lists-every-authorized-candidate)
    - [S07c — A candidate denied by a policy is left out](#s07c--a-candidate-denied-by-a-policy-is-left-out)
    - [S07d — No match, and no authorized match, look the same](#s07d--no-match-and-no-authorized-match-look-the-same)
+   - [S07e — A lookup is bounded](#s07e--a-lookup-is-bounded)
    - [S08a — A level-1 representative is denied an Enterprise account](#s08a--a-level-1-representative-is-denied-an-enterprise-account)
    - [S08b — Level 2 and supervisors may read an Enterprise account](#s08b--level-2-and-supervisors-may-read-an-enterprise-account)
    - [S08c — Without account.read, an Enterprise account looks like a missing one](#s08c--without-accountread-an-enterprise-account-looks-like-a-missing-one)
@@ -70,6 +71,7 @@ Approving this spec also approves these values:
 | D11 | **A message frame larger than 16 KiB (16,384 bytes, the HTTP body limit) closes the connection with `1009 message_too_big`**, before the principal is re-loaded or the language model is called. | Bounds the work and the model cost one frame can cause. |
 | D12 | **A principal without `account.read` is refused before any customer data is read:** one decision, one audit record, no search and no account load. Without the permission the answer is `Deny` whatever the account (deny by default; policies only add requirements), so no policy is evaluated. A lookup's record names no subject and carries the query's HMAC; a check, list, or explanation names the requested account id as its subject, whether or not it exists (audit records reference accounts softly). A lookup that matches nothing writes one record too: `Failed`, no subject, `support.no-matching-account`. | Nothing in the answer, its timing, or its record depends on which accounts exist (AU-6); probing leaves a trail. |
 | D13 | **Each employee may send at most 20 chat messages per minute, across all their connections and cases.** One counter per employee (a Durable Object behind a rate-limiter port, on the `Clock` port) is asked after the size check (D11) and before anything else is done with a message; the 21st message within a minute closes its connection with `4429 rate_limited` before the principal is re-loaded or the language model is called. | Bounds the model work and audit writes one employee can cause. |
+| D14 | **A lookup is bounded:** a query shorter than 3 characters once trimmed is refused before anything is read or audited (`QueryTooShort`); at most 50 matching accounts are read, decided, and audited (in display-name order; for an email, the person's own account first); at most 10 authorized candidates are returned, with `more_matches: true` when more than 10 were authorized. | One lookup cannot list or audit the whole customer base (adversarial review R1-1). The flag counts only authorized candidates, so it says nothing about accounts the principal may not read (AU-6). |
 
 ## 2. Fixture
 
@@ -426,8 +428,10 @@ GET  /agents/case-agent/<case_id>      WebSocket upgrade; session cookie; same-o
                                        4401 invalid_session for an inactive principal (D10),
                                        1009 message_too_big for a frame over 16 KiB (D11),
                                        4429 rate_limited past 20 messages per minute per employee (D13)
-Frames from the browser: user message and cancel (Agents SDK chat protocol, api.md §8). A client frame that
-                                       writes agent state is rejected and changes nothing.
+Frames from the browser: user message, cancel, and stream resume (Agents SDK chat protocol, api.md §8).
+                                       Each is checked for expiry and re-loads the principal (D6, D10); a user
+                                       message is also counted (D13). A client frame that writes agent state is
+                                       rejected and changes nothing.
 
 Every response carries the headers of api.md §2 (Cache-Control: no-store, Strict-Transport-Security); the
 expected responses below leave them out.
@@ -435,7 +439,8 @@ Error bodies: OAuth 2 format (api.md §3). 401 invalid_session · 403 forbidden 
 error_details only with access_denied, for a principal who holds account.read (D3).
 JSON bodies are shown formatted for reading; Content-Length is the length of the compact form the server sends.
 
-FindCustomerAccount(query)             → Found(summary) | Ambiguous(authorized candidates) | NotFound | Denied(reason codes)
+FindCustomerAccount(query)             → Found(summary) | Ambiguous(authorized candidates, more_matches)
+                                         | NotFound | Denied(reason codes) | QueryTooShort
 CheckEntitlement(account, feature)     → entitled, quota, sources, reason codes and facts | NotFound | Denied(reason codes)
 ListEntitlements(account)              → effective entries, or reason codes and facts when nothing is effective
                                          | NotFound | Denied(reason codes)
@@ -451,7 +456,7 @@ Tools: find_customer_account, check_entitlement, list_entitlements, explain_acce
 FindCustomerAccount reads a query as an email when it contains "@" (the person's own account and every account
 where they hold an active role), as an account id when it starts with "acc_", and otherwise as a case-insensitive
 fragment of any account's display name. Matches are deduplicated. Each candidate gets its own decision (D2);
-denied candidates are left out (D3).
+denied candidates are left out (D3). A lookup is bounded (D14).
 ```
 
 ---
@@ -965,13 +970,15 @@ The instant is 2026-10-22T15:00:00Z.
 
 ```yaml
 steps:
-  - the clock advances to 2026-10-22T15:20:00Z
+  - the connection opens
+  - the clock advances to 2026-10-22T15:20:00Z, and the close the agent scheduled runs
   - the client sends the message "Does Acme have SSO?" on the closed connection
 ```
 
 **Then:**
 
 ```yaml
+on_open: the agent schedules exactly one close of the connection at 2026-10-22T15:20:00Z (the token's exp)
 at_15_20_00: the server sends a close frame · code 4401 · reason session_expired
 after_close: the message is not handed to the language model; it receives no call
 audit_records: none                       # closing is not a decision
@@ -1466,6 +1473,91 @@ audit_records:                            # exactly one: a lookup is audited eve
     detail:
       query_hmac: present                 # repeated queries can be matched without storing them
       query: absent                       # the query text appears nowhere in the record
+```
+
+### S07e — A lookup is bounded
+
+**Level:** `[use-case]`
+
+**Given:**
+
+```text
+The fixture of S07a, plus customer accounts added for this scenario, Standalone, with no term and no holds:
+"Northwind 01" to "Northwind 55" (55 accounts), and "Southwind 01" to "Southwind 10" (10 accounts).
+acc_umbrella's display name is "Southwind 11"; its latest term's plan is enterprise.
+Policy enterprise-accounts-need-level-2 as in §2.
+iac_blair: representative, level 2, holds account.read. iac_alex: representative, level 1, holds account.read.
+Every audit record below has action_key account.read, detail.use_case FindCustomerAccount, and the policy
+set version.
+```
+
+**Case A — A query shorter than 3 characters**
+
+When:
+
+```yaml
+principal: iac_blair
+use_case: FindCustomerAccount
+arguments:
+  query: " a "                            # "a" once trimmed
+```
+
+Then:
+
+```yaml
+result: QueryTooShort
+audit_records: none                       # nothing is read or decided
+```
+
+**Case B — More matches than the bounds**
+
+When:
+
+```yaml
+principal: iac_blair
+use_case: FindCustomerAccount
+arguments:
+  query: northwind
+```
+
+Then:
+
+```yaml
+result: Ambiguous
+candidates: Northwind 01 to Northwind 10, in that order
+more_matches: true
+audit_records:                            # exactly fifty: Northwind 01 to Northwind 50
+  - actor: iac_blair
+    subject: each of Northwind 01 to Northwind 50
+    audit_outcome: Allow
+```
+
+**Case C — The flag counts only authorized candidates**
+
+When:
+
+```yaml
+principal: iac_alex
+use_case: FindCustomerAccount
+arguments:
+  query: southwind
+```
+
+Then:
+
+```yaml
+result: Ambiguous
+candidates: Southwind 01 to Southwind 10, in that order    # acc_umbrella is left out (D3)
+more_matches: false                       # eleven matched; ten were authorized
+audit_records:                            # exactly eleven
+  - actor: iac_alex
+    subject: each of Southwind 01 to Southwind 10
+    audit_outcome: Allow
+  - actor: iac_alex
+    subject: acc_umbrella
+    audit_outcome: Deny
+    reasons:
+      - policy.enterprise-accounts-need-level-2
 ```
 
 ### S08a — A level-1 representative is denied an Enterprise account

@@ -140,12 +140,41 @@ describe("WebSocketMessageGuard frames", () => {
     expect(await guard.decide(noUser, SESSION, STORED)).toEqual({ kind: "Drop" });
   });
 
-  test.each(["cf_agent_stream_resume_request", "cf_agent_stream_resume_ack", "cf_agent_chat_request_cancel"])(
-    "ensures the stream frame %s passes through unchanged and checks nothing",
+  const STREAM_FRAMES = [
+    "cf_agent_stream_resume_request",
+    "cf_agent_stream_resume_ack",
+    "cf_agent_chat_request_cancel",
+  ];
+
+  test.each(STREAM_FRAMES)(
+    "ensures the stream frame %s passes through unchanged once the principal is re-loaded, uncounted",
     async (type) => {
       const { guard, calls } = guardWith();
       expect(await guard.decide(JSON.stringify({ type }), SESSION, STORED)).toEqual({ kind: "PassThrough" });
+      expect(calls).toEqual(["principal"]);
+    },
+  );
+
+  test.each(STREAM_FRAMES)(
+    "ensures the stream frame %s after the token's expiry closes with session_expired",
+    async (type) => {
+      const { guard, calls } = guardWith();
+      expect(await guard.decide(JSON.stringify({ type }), { ...SESSION, expiresAt: NOW }, STORED)).toEqual({
+        kind: "Close",
+        close: { code: 4401, reason: "session_expired" },
+      });
       expect(calls).toEqual([]);
+    },
+  );
+
+  test.each(STREAM_FRAMES)(
+    "ensures the stream frame %s of a principal who may no longer act closes",
+    async (type) => {
+      const { guard } = guardWith({ mayAct: false });
+      expect(await guard.decide(JSON.stringify({ type }), SESSION, STORED)).toEqual({
+        kind: "Close",
+        close: { code: 4401, reason: "invalid_session" },
+      });
     },
   );
 });

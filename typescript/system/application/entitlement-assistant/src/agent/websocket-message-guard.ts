@@ -35,7 +35,7 @@ export type GuardDecision =
   | { readonly kind: "Close"; readonly close: Close }
   /** Ignored: a frame that could write the conversation, a tool result, an approval, or the agent's state. */
   | { readonly kind: "Drop" }
-  /** Handed to the SDK as given: it only reads or stops the caller's own stream. */
+  /** Handed to the SDK as given, once the session is checked: it only reads or stops the caller's own stream. */
   | { readonly kind: "PassThrough" }
   /** A chat request rebuilt by the server: its stored history and the newest user message's text only. */
   | { readonly kind: "Chat"; readonly frame: string };
@@ -67,6 +67,8 @@ export class WebSocketMessageGuard {
    * @ensures A chat request past the rate limit closes with 4429, after the token's expiry with 4401
    *          `session_expired`, and for a principal who may no longer act with 4401 `invalid_session`; the principal
    *          is re-loaded only after the other checks pass.
+   * @ensures A stream frame (resume, cancel) is checked for the token's expiry and re-loads the principal (D6, D10),
+   *          closing as a chat request would; it is not counted (D13 counts messages to the model).
    */
   async decide(
     frame: string,
@@ -79,7 +81,10 @@ export class WebSocketMessageGuard {
       | { type?: unknown; id?: unknown; init?: { body?: unknown } }
       | undefined;
     if (typeof parsed?.type !== "string") return { kind: "Drop" };
-    if (PASSED_THROUGH.has(parsed.type)) return { kind: "PassThrough" };
+    if (PASSED_THROUGH.has(parsed.type)) {
+      const close = await this.#sessionClose(session, this.#dependencies.clock.now());
+      return close === null ? { kind: "PassThrough" } : { kind: "Close", close };
+    }
     if (parsed.type !== "cf_agent_use_chat_request" || typeof parsed.id !== "string") return { kind: "Drop" };
     const text = newestUserText(parsed.init?.body);
     if (text === null) return { kind: "Drop" };
@@ -88,10 +93,8 @@ export class WebSocketMessageGuard {
     if ((await this.#dependencies.rateLimiter.attempt(session.principalAccountId, now)) === "Refused") {
       return { kind: "Close", close: CLOSES.rateLimited };
     }
-    if (now >= session.expiresAt) return { kind: "Close", close: CLOSES.sessionExpired };
-    if (!(await this.#dependencies.principalMayAct(session.principalAccountId))) {
-      return { kind: "Close", close: CLOSES.invalidSession };
-    }
+    const close = await this.#sessionClose(session, now);
+    if (close !== null) return { kind: "Close", close };
     const userMessage = {
       id: this.#dependencies.newMessageId(),
       role: "user",
@@ -105,6 +108,13 @@ export class WebSocketMessageGuard {
         init: { method: "POST", body: JSON.stringify({ messages: [...storedMessages, userMessage] }) },
       }),
     };
+  }
+
+  /** The close for a session whose token has expired or whose principal may no longer act; the principal last. */
+  async #sessionClose(session: ConnectionSession, now: Date): Promise<Close | null> {
+    if (now >= session.expiresAt) return CLOSES.sessionExpired;
+    if (!(await this.#dependencies.principalMayAct(session.principalAccountId))) return CLOSES.invalidSession;
+    return null;
   }
 }
 

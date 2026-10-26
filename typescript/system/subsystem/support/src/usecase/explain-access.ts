@@ -32,6 +32,8 @@ export type ExplainAccessResult =
   | {
       readonly kind: "Explained";
       readonly account: AccountContext;
+      /** The person's email as stored (CM-10), whatever case the request wrote it in. */
+      readonly personEmail: string;
       readonly outcome: "Allow" | "Deny";
       /** Why it is allowed: present for `Allow`. */
       readonly findings: readonly ExplanationFinding[];
@@ -88,8 +90,8 @@ export class ExplainAccess {
   ): Promise<ExplainAccessResult> {
     return this.#enforcement.read(request, "ExplainAccess", request.accountId, async () => {
       const person = await this.#findIndividualByEmail.execute(request.personEmail);
-      const personAccount =
-        person === null ? null : await this.#getCustomerAccount.byCustomer(person.customerId);
+      if (person === null) return { kind: "NotFound" };
+      const personAccount = await this.#getCustomerAccount.byCustomer(person.customerId);
       if (personAccount === null) return { kind: "NotFound" };
       const computed = await this.#computeEffectiveEntitlements.execute({
         accountId: request.accountId,
@@ -120,6 +122,7 @@ export class ExplainAccess {
         return {
           kind: "Explained",
           account,
+          personEmail: person.email,
           outcome: "Allow",
           findings,
           reasonCodes: [],
@@ -138,6 +141,7 @@ export class ExplainAccess {
       return {
         kind: "Explained",
         account,
+        personEmail: person.email,
         outcome: "Deny",
         findings: [],
         reasonCodes: decision.reasonCodes,

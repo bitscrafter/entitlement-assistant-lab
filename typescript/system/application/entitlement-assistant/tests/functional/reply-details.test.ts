@@ -302,7 +302,7 @@ describe("replyViewOf, names in the answer", () => {
   test("ensures an account and a person referenced in the answer read as stored", () => {
     const view = replyViewOf([
       explained,
-      { type: "text", text: "[CAROL@acme.com] cannot create API tokens in [" + ACME + "]." },
+      { type: "text", text: `[CAROL@acme.com] cannot create API tokens in [${ACME}].` },
     ]);
     expect(view.text).toBe("carol@acme.com cannot create API tokens in Acme Corp.");
   });
@@ -333,5 +333,56 @@ describe("replyViewOf, names in the answer", () => {
   test("ensures text outside square brackets is kept as written", () => {
     const text = "Acme has SSO [see Details] until 2026-11-01.";
     expect(resolveReferences(text, new Map([[ACME, "Acme Corp"]]), new Map())).toBe(text);
+  });
+});
+
+describe("replyViewOf, review round 1", () => {
+  test("ensures an owner or admin a lookup returned is named as stored", () => {
+    const view = replyViewOf([
+      tool(
+        "find_customer_account",
+        { query: "Acme Corp" },
+        {
+          result: "Found",
+          account: { ...acmeAccount, owners_and_admins: ["jane@acme.com"] },
+        },
+      ),
+      { type: "text", text: `[JANE@acme.com] administers [${ACME}].` },
+    ]);
+    expect(view.text).toBe("jane@acme.com administers Acme Corp.");
+  });
+
+  test("ensures a lookup that listed fewer than it matched says so", () => {
+    const listed = (more: boolean) =>
+      replyViewOf([
+        tool(
+          "find_customer_account",
+          { query: "acme" },
+          {
+            result: "Ambiguous",
+            candidates: [{ account_id: ACME, display_name: "Acme Corp", own_account: false, roles: [] }],
+            more_matches: more,
+          },
+        ),
+      ]).moreMatches;
+    expect([listed(true), listed(false)]).toEqual([true, false]);
+  });
+});
+
+describe("replyViewOf, the name-search notice", () => {
+  const lookup = (query: string, output: unknown) => tool("find_customer_account", { query }, output);
+  const found = { result: "Found", account: acmeAccount };
+
+  test("ensures a search by part of a name is noticed, whatever it found", () => {
+    const views = [
+      replyViewOf([lookup("Acme Corp", found)]),
+      replyViewOf([lookup("massive", { error: "not_found" })]),
+    ];
+    expect(views.map((view) => view.nameSearch)).toEqual([true, true]);
+  });
+
+  test("ensures a lookup by email or account id is not a name search", () => {
+    const views = [replyViewOf([lookup("jane@acme.com", found)]), replyViewOf([lookup(ACME, found)])];
+    expect(views.map((view) => view.nameSearch)).toEqual([false, false]);
   });
 });

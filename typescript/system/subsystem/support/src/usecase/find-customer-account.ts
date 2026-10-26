@@ -37,10 +37,20 @@ export interface AccountCandidate {
 
 export type FindCustomerAccountResult =
   | { readonly kind: "Found"; readonly account: AccountSummary }
-  | { readonly kind: "Ambiguous"; readonly candidates: readonly AccountCandidate[] }
+  | {
+      readonly kind: "Ambiguous";
+      readonly candidates: readonly AccountCandidate[];
+      /** More than `MAXIMUM_CANDIDATES` were authorized: the CSR refines the query (D14). */
+      readonly moreMatches: boolean;
+    }
+  | { readonly kind: "QueryTooShort" }
   | ReadRefusal;
 
 const USE_CASE = "FindCustomerAccount";
+/** The bounds of one lookup (D14): one query cannot list or audit the whole customer base. */
+export const MINIMUM_QUERY_LENGTH = 3;
+export const MAXIMUM_DECIDED = 50;
+export const MAXIMUM_CANDIDATES = 10;
 const ADMINISTERING_ROLES: ReadonlySet<string> = new Set(["owner", "admin"]);
 
 interface Candidate extends AccountCandidate {
@@ -79,6 +89,8 @@ export class FindCustomerAccount {
   }
 
   /**
+   * @ensures A query shorter than `MINIMUM_QUERY_LENGTH` once trimmed is `QueryTooShort`, before anything is read or
+   *          audited (D14).
    * @ensures A principal without `account.read` is refused before any search, with one audit record carrying the
    *          query's keyed hash, never the query (D12): `NotFound`.
    * @ensures A query matching no account writes one `Failed` record, `support.no-matching-account`: `NotFound`.
@@ -86,14 +98,19 @@ export class FindCustomerAccount {
    *          is denied by policies alone, `Denied` with their reasons; otherwise `NotFound`.
    * @ensures One authorized candidate is `Found` with its summary; several are `Ambiguous`, the person's own
    *          account first, then by display name.
+   * @ensures At most `MAXIMUM_DECIDED` matches are read, decided, and audited (an email: the person's own account and
+   *          at most `MAXIMUM_DECIDED - 1` where they hold a role), and at most `MAXIMUM_CANDIDATES` returned;
+   *          `moreMatches` is whether more were authorized (D14), so it says nothing of accounts the principal may
+   *          not read.
    */
   async execute(request: ReadRequest & { readonly query: string }): Promise<FindCustomerAccountResult> {
     const query = request.query.trim();
+    if (query.length < MINIMUM_QUERY_LENGTH) return { kind: "QueryTooShort" };
     const queryHash = await this.#identifierHasher.hash(query);
     const gate = await this.#enforcement.permitted(request, USE_CASE, { queryHash });
     if (gate.outcome !== "Allow") return { kind: "NotFound" };
 
-    const candidates = await this.#candidates(query);
+    const candidates = (await this.#candidates(query)).slice(0, MAXIMUM_DECIDED);
     if (candidates.length === 0) {
       await this.#enforcement.record(
         request,
@@ -128,12 +145,15 @@ export class FindCustomerAccount {
       return { kind: "Found", account: await this.#summary(only.account) };
     return {
       kind: "Ambiguous",
-      candidates: allowed.map(({ accountId, displayName, ownAccount, roles }) => ({
-        accountId,
-        displayName,
-        ownAccount,
-        roles,
-      })),
+      candidates: allowed
+        .slice(0, MAXIMUM_CANDIDATES)
+        .map(({ accountId, displayName, ownAccount, roles }) => ({
+          accountId,
+          displayName,
+          ownAccount,
+          roles,
+        })),
+      moreMatches: allowed.length > MAXIMUM_CANDIDATES,
     };
   }
 
@@ -150,9 +170,12 @@ export class FindCustomerAccount {
           assignment.roleKey,
         ]);
       }
+      // Bounded before any account is read (D14): the person's own account plus at most 49 others.
+      const otherAccounts = [...rolesByAccount]
+        .filter(([accountId]) => accountId !== own.accountId)
+        .slice(0, MAXIMUM_DECIDED - 1);
       const others: Candidate[] = [];
-      for (const [accountId, roles] of rolesByAccount) {
-        if (accountId === own.accountId) continue;
+      for (const [accountId, roles] of otherAccounts) {
         const account = await this.#getCustomerAccount.execute(accountId);
         if (account !== null) others.push(candidateOf(account, false, roles));
       }
@@ -163,7 +186,7 @@ export class FindCustomerAccount {
       const account = decoded.ok ? await this.#getCustomerAccount.execute(decoded.value) : null;
       return account === null ? [] : [candidateOf(account, false, [])];
     }
-    return (await this.#getCustomerAccount.searchByDisplayName(query)).map((account) =>
+    return (await this.#getCustomerAccount.searchByDisplayName(query, MAXIMUM_DECIDED)).map((account) =>
       candidateOf(account, false, []),
     );
   }

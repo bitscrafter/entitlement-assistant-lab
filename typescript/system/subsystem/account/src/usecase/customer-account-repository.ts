@@ -17,6 +17,6 @@ export interface CustomerAccountRepository {
   /** @ensures The customer's account, or null (one per customer, CM-6). */
   findByCustomer(customerId: Uuid): Promise<CustomerAccount | null>;
 
-  /** @ensures Every customer account whose display name contains `fragment`, ignoring case, ordered by display name. */
-  searchByDisplayName(fragment: string): Promise<readonly CustomerAccount[]>;
+  /** @ensures At most `limit` customer accounts whose display name contains `fragment`, ignoring case, by display name. */
+  searchByDisplayName(fragment: string, limit: number): Promise<readonly CustomerAccount[]>;
 }

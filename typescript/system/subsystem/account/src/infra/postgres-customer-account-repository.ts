@@ -27,11 +27,12 @@ export class PostgresCustomerAccountRepository implements CustomerAccountReposit
     return row === undefined ? null : toCustomerAccount(row);
   }
 
-  async searchByDisplayName(fragment: string): Promise<readonly CustomerAccount[]> {
+  async searchByDisplayName(fragment: string, limit: number): Promise<readonly CustomerAccount[]> {
     const pattern = `%${fragment.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
     const rows = await this.#connection.query<CustomerAccountRow>(
-      `${SELECT_CUSTOMER_ACCOUNT} WHERE a.account_display_name ILIKE $1 ${GROUP} ORDER BY a.account_display_name`,
-      [pattern],
+      `${SELECT_CUSTOMER_ACCOUNT} WHERE a.account_display_name ILIKE $1 ${GROUP}
+        ORDER BY a.account_display_name, a.account_id LIMIT $2`,
+      [pattern, limit],
     );
     return rows.map(toCustomerAccount);
   }

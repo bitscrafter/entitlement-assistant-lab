@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Uuid } from "../../../../kernel/identifier.ts";
+import { ToolRefusal, turnErrorLogOf } from "../../src/agent/agent-tools.ts";
 import { finalStepAnswersInWords } from "../../src/agent/instructions.ts";
 import { CASE_TOOLS, type ToolContext } from "../../src/agent/tools.ts";
 import type { CaseWorkUseCases } from "../../src/case-work-use-cases.ts";
@@ -28,6 +29,19 @@ function contextRecording(calls: unknown[]): ToolContext {
         explainAccess: recording("explainAccess"),
       } as unknown as CaseWorkUseCases),
     describeReason: (code) => code,
+  };
+}
+
+/** A context whose every use case answers `result`. */
+function contextAnswering(result: unknown): ToolContext {
+  const answering = { execute: async () => result };
+  return {
+    ...contextRecording([]),
+    runUseCases: (work) =>
+      work({
+        findCustomerAccount: answering,
+        explainAccess: answering,
+      } as unknown as CaseWorkUseCases),
   };
 }
 
@@ -77,5 +91,74 @@ describe("finalStepAnswersInWords", () => {
       undefined,
       { toolChoice: "none" },
     ]);
+  });
+});
+
+describe("turnErrorLogOf", () => {
+  test("ensures a refused argument logs the tool's name, never the arguments", () => {
+    const invalidInput = Object.assign(
+      new Error('Type validation failed: Value: {"person_email":"carol@acme.com"}'),
+      {
+        name: "AI_InvalidToolInputError",
+        toolName: "explain_access",
+      },
+    );
+    const logs = [
+      turnErrorLogOf(invalidInput, "t1"),
+      turnErrorLogOf(new ToolRefusal("carol@acme.com is not valid", "explain_access"), "t2"),
+    ];
+    expect(logs).toEqual([
+      { log: "tool-arguments-refused", traceId: "t1", tool: "explain_access" },
+      { log: "tool-arguments-refused", traceId: "t2", tool: "explain_access" },
+    ]);
+    expect(JSON.stringify(logs)).not.toContain("carol");
+  });
+
+  test("ensures any other error logs as a failed turn, with its message", () => {
+    expect(turnErrorLogOf(new Error("connection reset"), "t3")).toEqual({
+      log: "case-agent-turn-failed",
+      traceId: "t3",
+      message: "Error: connection reset",
+    });
+  });
+});
+
+describe("the case tools, as the review of round 2 asked", () => {
+  test("ensures a query too short is refused as an argument, with the bound", async () => {
+    const outcome = await CASE_TOOLS.find_customer_account?.run(
+      { query: " a " },
+      contextAnswering({ kind: "QueryTooShort" }),
+    );
+    expect(outcome).toEqual({ errorText: "The query needs at least 3 characters." });
+  });
+
+  test("ensures a lookup reports whether more accounts matched than it lists", async () => {
+    const outcome = await CASE_TOOLS.find_customer_account?.run(
+      { query: "northwind" },
+      contextAnswering({ kind: "Ambiguous", candidates: [], moreMatches: true }),
+    );
+    expect(outcome).toEqual({ output: { result: "Ambiguous", candidates: [], more_matches: true } });
+  });
+
+  test("ensures an explanation reports the person's stored email, not the one the model wrote", async () => {
+    const outcome = await CASE_TOOLS.explain_access?.run(
+      {
+        person_email: "CAROL@Acme.com",
+        account_id: external("acc_acme"),
+        feature_key: "api-access",
+        operation: "create-token",
+      },
+      contextAnswering({
+        kind: "Explained",
+        account: { accountId: ALEX, displayName: "Acme Corp", planKey: "business", coveringTerm: null },
+        personEmail: "carol@acme.com",
+        outcome: "Deny",
+        findings: [],
+        reasonCodes: [],
+        facts: {},
+        remedy: null,
+      }),
+    );
+    expect(outcome).toMatchObject({ output: { person_email: "carol@acme.com" } });
   });
 });

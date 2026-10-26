@@ -10,6 +10,8 @@ export const CASE_AGENT_INSTRUCTIONS = [
   "never invent or guess an account_id.",
   "Never write a tool call as text: when you answer, answer in words.",
   "When a lookup is ambiguous, list the candidates and ask the CSR which one they mean.",
+  "A search by part of a name shows only accounts the CSR may read, and not every match: if the account found does",
+  "not fit what the CSR asked, ask them for a longer part of the name, an email, or the account id.",
   "Answer in one or two short sentences of plain text, without Markdown: the screen shows each account's details",
   "from the tools beside your answer, so do not repeat lists or quotas. Write dates as YYYY-MM-DD.",
   "Refer to an account only as its account_id in square brackets, such as [acc_0123456789abcdefghijkl], and to a",

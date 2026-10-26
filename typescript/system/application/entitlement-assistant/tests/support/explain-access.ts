@@ -72,3 +72,34 @@ export function validToken(
 export function day(date: string): Date {
   return new Date(`${date}T00:00:00Z`);
 }
+
+/**
+ * Adds Standalone organization accounts with no term and no holds, straight in the tables, as a Given states them;
+ * each account's id is the seeded id of its alias.
+ */
+export async function insertStandaloneAccounts(
+  owner: PostgresConnection,
+  accounts: readonly { readonly alias: string; readonly displayName: string }[],
+): Promise<void> {
+  const createdAt = at("09:00:00", "2026-01-05");
+  for (const { alias, displayName } of accounts) {
+    const customerId = seededUuid(`${alias}_customer`);
+    await owner.query(
+      "INSERT INTO customer (customer_id, customer_kind, customer_status, created_at) VALUES ($1, 'Organization', 'Active', $2)",
+      [customerId, createdAt],
+    );
+    await owner.query(
+      `INSERT INTO account (account_id, account_kind, account_display_name, account_status, created_at)
+       VALUES ($1, 'Customer', $2, 'Active', $3)`,
+      [seededUuid(alias), displayName, createdAt],
+    );
+    await owner.query(
+      "INSERT INTO organization (customer_id, legal_name, primary_domain, created_at) VALUES ($1, $2, $3, $4)",
+      [customerId, displayName, `${alias.replaceAll("_", "-")}.example`, createdAt],
+    );
+    await owner.query(
+      "INSERT INTO customer_account (account_id, customer_id, customer_kind, account_category) VALUES ($1, $2, 'Organization', 'Standalone')",
+      [seededUuid(alias), customerId],
+    );
+  }
+}

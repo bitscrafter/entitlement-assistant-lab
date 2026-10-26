@@ -2,7 +2,10 @@ import { z } from "../../../../external/zod.ts";
 import type { EntitlementSource, ReasonFacts } from "../../../../kernel/entitlement.ts";
 import { decodeIdentifier, encodeIdentifier, type Uuid } from "../../../../kernel/identifier.ts";
 import type { Remedy } from "../../../../subsystem/product/src/usecase/find-lowest-plan-including.ts";
-import type { AccountSummary } from "../../../../subsystem/support/src/usecase/find-customer-account.ts";
+import {
+  type AccountSummary,
+  MINIMUM_QUERY_LENGTH,
+} from "../../../../subsystem/support/src/usecase/find-customer-account.ts";
 import type {
   AccountContext,
   ReadRefusal,
@@ -163,6 +166,8 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
       const result = await context.runUseCases((useCases) =>
         useCases.findCustomerAccount.execute({ ...context.request, query: parsed.data.query }),
       );
+      if (result.kind === "QueryTooShort")
+        return { errorText: `The query needs at least ${MINIMUM_QUERY_LENGTH} characters.` };
       if (result.kind === "Found") return { output: { result: "Found", account: summaryOf(result.account) } };
       if (result.kind === "Ambiguous") {
         return {
@@ -174,6 +179,7 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
               own_account: candidate.ownAccount,
               roles: candidate.roles,
             })),
+            more_matches: result.moreMatches,
           },
         };
       }
@@ -304,7 +310,7 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
         output: {
           result: "Explained",
           account: accountOf(result.account),
-          person_email: parsed.data.person_email,
+          person_email: result.personEmail,
           feature_key: parsed.data.feature_key,
           operation: parsed.data.operation,
           outcome: result.outcome,

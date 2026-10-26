@@ -36,8 +36,8 @@ export class GetCustomerAccount {
   }
 
   /** @ensures Every customer account whose display name contains `fragment`, ignoring case, ordered by display name. */
-  async searchByDisplayName(fragment: string): Promise<readonly CustomerAccountView[]> {
-    return (await this.#accounts.searchByDisplayName(fragment)).map(toView);
+  async searchByDisplayName(fragment: string, limit: number): Promise<readonly CustomerAccountView[]> {
+    return (await this.#accounts.searchByDisplayName(fragment, limit)).map(toView);
   }
 }
 
