@@ -24,8 +24,8 @@
 ## Next session
 
 1. Owner: keep the production secrets in a password manager.
-2. Explain-access architect plan (ports, adapters, schema, seed data, automated end-to-end test), owner review, then
-   RED tests and build (demo mode).
+2. Explain-access: spikes K1–K3, then P1 and the RED gate (plan approved 2026-10-25,
+   `tech-docs/features/explain-access/workflow/architect-plan.md`).
 
 ## Decisions (owner, 2026-10-22)
 
@@ -58,6 +58,10 @@
   account.read is refused before any customer data is read, and a lookup matching nothing is audited
   (support.no-matching-account, query HMAC only); D13 20 messages per minute per employee, a Durable Object counter
   behind a rate-limiter port, close 4429 rate_limited; security-event causes CaseNotFound and CaseNotAssigned.
+- Explain-access plan approved with every recommendation: agent tests fall back to a plain class in Node if the
+  Workers pool spike fails; policy registration and activation in this feature; spec cases are test fixtures, not
+  seed; the deployed seed shifts fixture dates to the seeding day; one feature. Terms approved: message rate limiter,
+  connection session, permission gate, policy expression evaluator, scripted language model.
 - Plain HTTP is redirected (308) to the configured HTTPS origin by the Worker, which runs first for every request;
   owner tried the live deployment and approved merging `feature/deploy`.
 
