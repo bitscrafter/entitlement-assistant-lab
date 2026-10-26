@@ -15,7 +15,7 @@ end box
 box "Cloudflare network" #FFF7EC
   participant "Worker\nfetch handler" as worker
   participant "Case agent cse_alex_1\n«Durable Object, one per case»" as agent
-  participant "Language model\n«port; Workers AI,\nLlama 3.3 70B»" as model
+  participant "Language model\n«port; Workers AI,\ngpt-oss-120b»" as model
   participant "Read use case\n«Support: FindCustomerAccount,\nCheckEntitlement, …»" as usecase
   participant "PDP\n«AuthorizationDecider»" as pdp
 end box

@@ -80,7 +80,7 @@ It exercises the core concepts of an IAM system in one small product:
 
 | Required component | Cloudflare building block |
 | --- | --- |
-| LLM | Llama 3.3 70B on **Workers AI**, with tool calling |
+| LLM | gpt-oss-120b on **Workers AI**, with tool calling (ADR CM-19) |
 | Workflow / coordination | One **Agent** (Agents SDK, backed by a Durable Object) per case runs the chat loop. A durable **process instance** (Cloudflare Workflows, behind a port) per approval waits for the decision or its deadline. A scheduled sweep records expired grants. |
 | User input via chat | A browser chat UI served as **static assets by the same Worker** that serves the API, streaming over the Agents SDK WebSocket |
 | Memory or state | The case conversation in the Agent's embedded SQLite. Everything else (accounts, subscriptions, grants, policies, cases, change requests, the audit chain) in PostgreSQL |
@@ -101,7 +101,7 @@ glossary in the change that first uses it.
 | **Durable Object** | A stateful object with a globally unique identity. Each instance runs in one place at a time, handles its requests one after another, and owns private, strongly consistent storage (an embedded SQLite database). It can hold WebSocket connections. |
 | **Agents SDK** | Cloudflare's library for building AI agents on Durable Objects. `AIChatAgent` adds a persisted, streaming chat conversation. One instance per case. |
 | **Cloudflare Workflows** | Durable, multi-step execution: each step's result is persisted, failed steps are retried, and an instance can wait days for an event or a deadline without consuming resources. Implements our approval process instances. |
-| **Workers AI** | Cloudflare's serverless model inference, reached through the `AI` binding. Hosts Llama 3.3 70B Instruct, which supports tool calling. |
+| **Workers AI** | Cloudflare's serverless model inference, reached through the `AI` binding. Hosts open models with tool calling; the assistant uses gpt-oss-120b (ADR CM-19). |
 | **Hyperdrive** | Cloudflare's connection pooler that lets a Worker use PostgreSQL through a standard driver. |
 | **Static assets** | Files (HTML, JavaScript, CSS) that a Worker serves directly. |
 | **Wrangler** | Cloudflare's CLI for local development and deployment. |

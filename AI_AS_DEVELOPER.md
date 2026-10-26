@@ -10,7 +10,7 @@ accepted plan.
 | Language | TypeScript, `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true` |
 | Runtime | Cloudflare Workers (`nodejs_compat`), Wrangler |
 | Agent | Agents SDK `AIChatAgent`, one instance per case |
-| LLM | Workers AI, Llama 3.3 70B Instruct, through the AI SDK |
+| LLM | Workers AI, gpt-oss-120b (`@cf/openai/gpt-oss-120b`, ADR CM-19), through the AI SDK |
 | Database | PostgreSQL through Hyperdrive; `pg` driver; SQL migrations in each subsystem's `src/infra/` |
 | Session token | `jose` (JWT signing and verification) — no hand-written cryptography |
 | Validation | `zod` for tool arguments and HTTP bodies, strict (unknown keys rejected) |

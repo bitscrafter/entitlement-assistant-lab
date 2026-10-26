@@ -4,8 +4,11 @@ import {
   NO_ANSWER,
   type ReplyPart,
   replyViewOf,
+  resolveReferences,
   sourceLabel,
   titleOf,
+  UNKNOWN_ACCOUNT,
+  UNKNOWN_PERSON,
 } from "../../src/ui/reply-details.ts";
 
 const ACME = "acc_AaD0wsQAcISy9edCLE0dkw";
@@ -274,5 +277,61 @@ describe("replyViewOf, an answer written as a tool call", () => {
   test("ensures an answer in words that mentions a name is kept", () => {
     const text = 'Acme Corp has SSO; its "name" on file is Acme Corp.';
     expect(replyViewOf([{ type: "text", text }]).text).toBe(text);
+  });
+});
+
+describe("replyViewOf, names in the answer", () => {
+  const explained = tool(
+    "explain_access",
+    {
+      person_email: "carol@acme.com",
+      account_id: ACME,
+      feature_key: "api-access",
+      operation: "create-token",
+    },
+    {
+      result: "Explained",
+      account: acmeAccount,
+      person_email: "carol@acme.com",
+      outcome: "Deny",
+      reasons: [],
+      findings: [],
+    },
+  );
+
+  test("ensures an account and a person referenced in the answer read as stored", () => {
+    const view = replyViewOf([
+      explained,
+      { type: "text", text: "[CAROL@acme.com] cannot create API tokens in [" + ACME + "]." },
+    ]);
+    expect(view.text).toBe("carol@acme.com cannot create API tokens in Acme Corp.");
+  });
+
+  test("ensures a candidate of a several-match lookup is named as stored", () => {
+    const view = replyViewOf([
+      tool(
+        "find_customer_account",
+        { query: "Acme" },
+        {
+          result: "Ambiguous",
+          candidates: [
+            { account_id: ACME, display_name: "Acme Corp", roles: [] },
+            { account_id: LABS, display_name: "Acme Labs", roles: [] },
+          ],
+        },
+      ),
+      { type: "text", text: `Did you mean [${ACME}] or [${LABS}]?` },
+    ]);
+    expect(view.text).toBe("Did you mean Acme Corp or Acme Labs?");
+  });
+
+  test("ensures a reference that no tool of the reply returned is not given a name", () => {
+    const view = replyViewOf([explained, { type: "text", text: `[${LABS}] and [dave@acme.com].` }]);
+    expect(view.text).toBe(`${UNKNOWN_ACCOUNT} and ${UNKNOWN_PERSON}.`);
+  });
+
+  test("ensures text outside square brackets is kept as written", () => {
+    const text = "Acme has SSO [see Details] until 2026-11-01.";
+    expect(resolveReferences(text, new Map([[ACME, "Acme Corp"]]), new Map())).toBe(text);
   });
 });

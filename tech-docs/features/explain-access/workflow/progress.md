@@ -22,5 +22,7 @@
 | P6 case agent | coder | ✅ | the case agent as a hardened `AIChatAgent` (spike K4): the WebSocket message guard wraps `onMessage` (size, kind, rate, expiry, principal; unit-tested), tools as AI SDK tools over the strict runners, Workers AI through `workers-ai-provider`; Durable Object rate limiter (conformance suite in the runtime); every agent scenario in the Workers runtime; forged history and frames refused, failing model shown generically; nine mutations caught |
 | P7 chat UI | coder | ✅ | open a case, chat through `useAgentChat`; replies as Tools, Result, and Details from the tool results (discovery 32); Cmd/Ctrl+Enter sends; close codes handled; verified end to end locally with Workers AI (discoveries 29–30); accepted by the owner in the browser |
 | P8 end to end and deploy | coder | 🔄 | Neon reset and reseeded; deployed; live smoke test passed; §5 evaluation: tool choice 20/20, reply wording 13/20 (discovery 33), 20/20 after the fix (34) |
+| K5 other models | architect | ✅ | gpt-oss-120b strongest; Llama 4 Scout fails; Kimi and GLM need Workers Paid (discovery 35) |
+| CM-19 gpt-oss and answer references | coder | 🔄 | built, unit-tested (references mutation-proven), deployed `ae82798a`; live evaluation waits for the free neuron allocation to reset (discovery 36) |
 | GREEN gate | assistant | ⬜ | |
 | Adversarial review | review agent | ⬜ | |

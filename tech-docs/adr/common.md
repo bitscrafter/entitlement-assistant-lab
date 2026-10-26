@@ -29,6 +29,7 @@
 | [CM-16](#cm-16-the-session-token-carries-identity-only) | The session token carries identity only |
 | [CM-17](#cm-17-authorization-and-attribution-are-reached-through-shared-ports) | Authorization and attribution are reached through shared ports |
 | [CM-18](#cm-18-the-case-agent-is-a-hardened-aichatagent) | The case agent is a hardened `AIChatAgent` |
+| [CM-19](#cm-19-gpt-oss-120b-answers-and-the-screen-writes-every-name) | gpt-oss-120b answers, and the screen writes every name |
 
 ---
 
@@ -277,3 +278,15 @@
 | **Consequences** | • The hardening depends on how `AIChatAgent` installs its handler; an SDK upgrade is checked by the runtime tests of the hardening before it is taken.<br>• The agent runs only in the Workers runtime, so its scenarios are tested there, with test controls inside the agent. |
 | **Alternatives** | • A plain Durable Object without the Agents SDK, on the WebSocket hibernation API: no client-supplied history by construction and no SDK dependency, at the cost of resumable streams, live multi-tab updates, the SDK client, and maintaining the protocol ourselves. Built and tested during explain-access before this decision; described in full in [`../design/case-agent-without-agents-sdk.md`](../design/case-agent-without-agents-sdk.md).<br>• The SDK's base `Agent` class without `AIChatAgent`: the SDK's routing, connections, and scheduling, with our own chat handling; still needs the SDK's state sync blocked. |
 | **Related** | • [AU-6](authorization.md#au-6-refusals-reveal-nothing-beyond-what-a-legitimate-principal-may-know)<br>• [CM-16](#cm-16-the-session-token-carries-identity-only) |
+
+### CM-19. gpt-oss-120b answers, and the screen writes every name
+
+|  |  |
+| :--- | :--- |
+| **Decision** | • The case agent's model is `@cf/openai/gpt-oss-120b` on Workers AI, replacing Llama 3.3 70B.<br>• The model never writes the name of an account or a person. It writes a reference: `[acc_…]` for an account, `[email]` for a person. The screen replaces each reference with the display name or email stored in the database, taken from the tool results of the same reply; a reference that no tool of the reply returned reads "(an account not in this reply's results)" or "(a person not in this reply's results)".<br>• Lookup stays permissive (any fragment of a display name, explain-access S07); display is strict. |
+| **Status** | Accepted · 2026-10-26 · decided by the owner |
+| **Context** | • The spec's live-model evaluation found Llama 3.3 writing tool calls as JSON text in 7 of 20 answers, and starting turns with a tool call on an invented account id (discoveries 33, 34).<br>• Spike K5 compared models available on Workers Free (discovery 35): gpt-oss-120b looked the account up first and answered in words in every run, was faster, and has a 128k-token context against Llama's 24k; Llama 4 Scout never called a tool; Kimi K2.6 and GLM 5.3 need Workers Paid.<br>• gpt-oss wrote Markdown, repeated ids, and once spaced an email (`Carol @acme.com`). Any model may shorten or misspell a name. |
+| **Rationale** | • Names on screen come from the system of record, so the answer cannot misname an account or a person, whatever the model writes.<br>• The answer is rendered as plain text, so a resolved name is never markup. |
+| **Consequences** | • Free tier: both models fit Workers AI's 10,000 free neurons a day at roughly 50 turns; past it, requests fail until 00:00 UTC (production-readiness).<br>• A model that ignores the reference format shows its own spelling; the live evaluation counts answers that name accounts or people without references.<br>• The model id is one constant; another model is a change to that constant and a re-run of the evaluation. |
+| **Alternatives** | • Keep Llama 3.3 with the fallback for tool calls written as text (discovery 34): works, but guesses ids and slips more often.<br>• Instructions alone for names: cheapest, but nothing enforces them.<br>• A check after the turn for shortened names: detecting a partial name in free text is guesswork. |
+| **Related** | • [CM-18](#cm-18-the-case-agent-is-a-hardened-aichatagent)<br>• [CM-10](#cm-10-store-only-the-normalized-email) |

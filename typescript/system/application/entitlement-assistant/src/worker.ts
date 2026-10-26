@@ -106,14 +106,14 @@ export default {
   },
 };
 
-/** The model behind the case agent (AI_AS_DEVELOPER.md §1: Llama 3.3 70B Instruct on Workers AI). */
-const WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+/** The model behind the case agent (ADR CM-19: gpt-oss-120b on Workers AI, chosen by spike K5). */
+const WORKERS_AI_MODEL = "@cf/openai/gpt-oss-120b";
 
 /** The case agent of each case (a Durable Object per case), answering with Workers AI. */
 export const CaseAgentObject = caseAgentObject<Environment>({
   applicationFor,
   // The model is called without streaming and its answer replayed as a stream: streamed tool-call arguments from
-  // Workers AI arrive garbled for this model, while a whole answer carries them intact (discovery 29).
+  // Workers AI arrived garbled (discovery 29), while a whole answer carries them intact.
   languageModelFor: (environment) =>
     wrapLanguageModel({
       // The binding's type comes from the Workers runtime; the provider checks it on first use.

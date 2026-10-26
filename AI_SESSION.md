@@ -1,6 +1,6 @@
 # AI Session — current state
 
-**Updated:** 2026-10-25 (deploy session)
+**Updated:** 2026-10-26 (explain-access P8)
 
 ## State
 
@@ -18,15 +18,21 @@
   disabled; production secrets in `.env.production-secrets.json`. All three files are git-ignored, mode 600, and never
   shown in chat. Smoke test passed: sign-in, session, identical refusals (demo password, unknown email, suspended),
   foreign origin 403, `__Host-` cookie with HttpOnly, Secure, SameSite=Strict, CSP and HSTS headers.
-- **Feature explain-access:** spec updated and approved (2026-10-25) on branch `feature/explain-access`, with the
-  agent connection sequence (`tech-docs/diagrams/agent-connection.sequence.puml`). Next: the architect plan.
+- **Feature explain-access: P1–P8 built** on branch `feature/explain-access` (last commit cbe8bc6), deployed
+  (version `b39c53a8`). Neon reset, migrated, and reseeded (same generated passwords, fixture day 2026-10-26); the
+  bundled policy set registered and activated as `sys_deployment` (`npm run policies:register`). Live smoke test
+  passed (redirect, sign-in, case, foreign-origin upgrade 403, check and refusal turns, another CSR's case 404).
+  Spec §5 evaluation, 4 messages × 5 runs: tool choice 20/20; answers in words 13/20, then 20/20 after the fix
+  (discoveries 33, 34). State in `tech-docs/features/explain-access/workflow/progress.md`.
 
 ## Next session
 
 1. Owner: keep the production secrets in a password manager.
-2. Explain-access P8: deploy (Neon reset and reseed with the fixture-day shift, policy set registration, Durable
-   Objects and Workers AI bindings), live smoke test, live-model evaluation; then the GREEN gate and the adversarial
-   review. State in `tech-docs/features/explain-access/workflow/progress.md`.
+2. Explain-access spike K5 (resume here): other Workers AI models with function calling against the same §5
+   evaluation, tool choice and answers in words, time-boxed to about two hours; first confirm the candidates in the
+   current Workers AI catalog. A switch needs the owner's ruling, a spec amendment (it names Llama 3.3 70B), and an
+   ADR.
+3. Then the GREEN gate on a clean tree, the adversarial review, and the merge into `main` with the owner's approval.
 
 ## Decisions (owner, 2026-10-22)
 
@@ -72,8 +78,16 @@
 - Plain HTTP is redirected (308) to the configured HTTPS origin by the Worker, which runs first for every request;
   owner tried the live deployment and approved merging `feature/deploy`.
 
+## Decisions (owner, 2026-10-26)
+
+- Replies show Tools, Answer (formerly Result), and Details built only from tool results (option B); full account
+  ids; a check that finds a feature missing carries its remedy; Cmd+Enter (Ctrl+Enter) sends.
+- Deployments are recorded as the system identity `sys_deployment`, authenticated only by the owner's database
+  credentials in the demo; production would use CI workload identity (production-readiness).
+- Neon reset and reseeded for explain-access with the same passwords (1A).
+- Answer wording fixed (look accounts up first, no tool call as text, "No answer was written; see Details."
+  fallback); spike K5 to compare other Workers AI models.
+
 ## Open
 
 - Feature-spec decisions are approved with each spec.
-- `AI_WORKFLOW.md` §3 runs `depcruise src`, but the package has no `src` at its root, so that step checks nothing;
-  `depcruise .` (as in `npm run check`) is the working command. Not yet fixed.

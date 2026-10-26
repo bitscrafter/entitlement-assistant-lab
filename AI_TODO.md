@@ -4,9 +4,11 @@
 
 1. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
 2. At the end: GitHub remote (owner, 2026-10-25).
-3. Feature explain-access: architect plan, owner review, RED tests, build (demo mode); update production-readiness "Insider enumeration" with the code.
+3. Feature explain-access: spike K5 (other Workers AI models, same evaluation), GREEN gate, adversarial review, merge; update production-readiness "Insider enumeration" with the code.
 
 ## Completed
+
+- Explain-access P1–P8 (2026-10-26): plan approved, spikes K1–K4, hardened `AIChatAgent`, deployed (`b39c53a8`), live smoke test passed, §5 evaluation 20/20 tool choice and 20/20 answers in words after the fix; last commit cbe8bc6.
 
 - Explain-access spec updated and approved (2026-10-25): D9–D13, S05k–S05m, agent connection sequence diagram.
 

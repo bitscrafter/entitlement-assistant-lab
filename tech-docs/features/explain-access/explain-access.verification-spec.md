@@ -3,7 +3,7 @@
 | | |
 | :--- | :--- |
 | **Purpose** | States what the feature must do: a signed-in employee opens a case, connects to it, and asks the assistant to find customer accounts, check and list their entitlements, and explain why a person can or cannot use a feature in an account. Each scenario becomes exactly one verification test (`AI_AS_TESTER.md`). |
-| **Status** | Approved by the owner (2026-10-25); amended by the owner the same day: S05j counts the renewal's record, S09a states the covering term in every case |
+| **Status** | Approved by the owner (2026-10-25); amended by the owner the same day: S05j counts the renewal's record, S09a states the covering term in every case; amended 2026-10-26: §5 runs gpt-oss-120b, names Acme Corp, adds the ambiguous "Acme" message, and counts names by reference (ADR CM-19) |
 | **Feature** | explain-access · scenarios S05a–S05m, S06a–S06b, S07a–S07d, S08a–S08e, S09a–S09b, S10a–S10b, S11, S12, S13 |
 | **Mode** | feature; reads customer data; writes only cases, case assignments, and audit records |
 | **Depends on** | feature employee-sign-in (a valid session) |
@@ -3043,17 +3043,21 @@ language_model: received no call on reconnect
 
 ## 5. Live-model evaluation (report-only)
 
-Not part of any gate. Run against Workers AI with Llama 3.3 70B, reported as a pass rate per message over
-5 runs. The reply must quote only reason codes and facts that the tool returned.
+Not part of any gate. Run against Workers AI with gpt-oss-120b (ADR CM-19), reported as pass rates per message over
+5 runs: the expected tool call; an answer in words (not a tool call written as text); every account and person named
+by reference (`[acc_…]`, `[email]`), never by a name the model wrote. The reply must quote only reason codes and facts
+that the tool returned.
 
 ```yaml
 - message: What plan is Initech on?
   expected_tool_call: find_customer_account · query Initech
-- message: Does Acme have SSO?
+- message: Does Acme Corp have SSO?
   expected_tool_call: check_entitlement · acc_acme · sso (after resolving the account)
+- message: Does Acme have SSO?               # matches Acme Corp and Acme Labs
+  expected: the answer asks which account, naming both candidates; or checks sso in both
 - message: What is Globex entitled to?
   expected_tool_call: list_entitlements · acc_globex
-- message: Why can't carol@acme.com create API tokens at Acme?
+- message: Why can't carol@acme.com create API tokens at Acme Corp?
   expected_tool_call: explain_access · carol@acme.com · acc_acme · api-access · create-token
 ```
 

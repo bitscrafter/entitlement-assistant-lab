@@ -35,6 +35,7 @@
 | **MCP adapter** | External AI clients reach the same use cases through an MCP server behind OAuth; it needs client registration, scopes mapped to permissions, and per-client audit attribution. |
 | **API limits and evolution** | Rate limits per endpoint and per employee, versioning of endpoints and tools, pagination beyond fixed limits, and webhooks for external systems. |
 | **Data residency** | Some customers require their data to stay in a given region. The system of record is a single database in one region. |
+| **Model capacity** | The demo runs on Workers AI's free allocation (10,000 neurons a day, roughly 50 assistant turns); past it, every turn fails until 00:00 UTC. Production needs a paid plan, a budget per employee or per case, and a model choice re-evaluated as the catalog changes (ADR CM-19). |
 | **Case agent lifecycle under load** | The case agent's hibernation and wake-up (connections re-attached, scheduled expiries kept) cannot be forced in the local test runtime; it is reviewed, not tested. It also needs a test of SDK upgrades: the agent's hardening relies on the Agents SDK replacing `onMessage` in its constructor. |
 
 ## 2. Customer Identity

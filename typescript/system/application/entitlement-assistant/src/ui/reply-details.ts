@@ -75,6 +75,33 @@ export const NO_ANSWER = "No answer was written; see Details.";
 /** A tool call written out as JSON, as Llama does when tools are refused on its last step. */
 const TOOL_CALL_TEXT = /\{\s*"name"\s*:\s*"[A-Za-z_]+"\s*,\s*"parameters"\s*:/;
 
+/**
+ * How the model names an account or a person: a reference in square brackets, `[acc_…]` or `[carol@acme.com]`. The
+ * screen writes each one as the database stores it, so a name in the answer is never the model's spelling (ADR CM-19).
+ */
+const REFERENCE = /\[(acc_[A-Za-z0-9_-]{22}|[^\s[\]@]+@[^\s[\]@]+)\]/g;
+
+/** Shown for a reference to an account or person that no tool of this reply returned. */
+export const UNKNOWN_ACCOUNT = "(an account not in this reply's results)";
+export const UNKNOWN_PERSON = "(a person not in this reply's results)";
+
+/**
+ * @ensures Every `[acc_…]` reads as that account's stored display name and every `[email]` as the stored email, when a
+ *          tool of this reply returned them; otherwise as `UNKNOWN_ACCOUNT` or `UNKNOWN_PERSON`.
+ * @ensures Text outside a reference is unchanged.
+ */
+export function resolveReferences(
+  text: string,
+  accounts: ReadonlyMap<string, string>,
+  people: ReadonlyMap<string, string>,
+): string {
+  return text.replace(REFERENCE, (_whole, reference: string) =>
+    reference.startsWith("acc_") && !reference.includes("@")
+      ? (accounts.get(reference) ?? UNKNOWN_ACCOUNT)
+      : (people.get(reference.toLowerCase()) ?? UNKNOWN_PERSON),
+  );
+}
+
 const asRecord = (value: unknown): Json | null =>
   typeof value === "object" && value !== null ? (value as Json) : null;
 const asString = (value: unknown): string => (typeof value === "string" ? value : "");
@@ -138,7 +165,8 @@ function stateOf(part: ReplyPart): ToolCallView["state"] {
 
 /**
  * @ensures `tools` lists every tool part once per distinct tool, input, and result, in order, with how many times.
- * @ensures `text` is the reply's text parts, joined; `NO_ANSWER` when that text writes out a tool call.
+ * @ensures `text` is the reply's text parts, joined, with every reference resolved from this reply's results
+ *          (`resolveReferences`); `NO_ANSWER` when that text writes out a tool call.
  * @ensures `accounts` has one card per account the results name, in the order first named, with every line those
  *          results give it.
  * @ensures `choices` lists the accounts of a several-match lookup that the reply did not go on to show as a card.
@@ -155,6 +183,7 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
   const policyDenials: string[] = [];
   let notFound = false;
   const texts: string[] = [];
+  const people = new Map<string, string>();
 
   const cardFor = (account: Json) => {
     const accountId = asString(account.account_id);
@@ -272,6 +301,8 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
         if (account !== null) {
           const findings = Array.isArray(output.findings) ? output.findings : [];
           const access = findings.map(asRecord).find((finding) => finding?.kind === "access");
+          const personEmail = asString(output.person_email);
+          if (personEmail !== "") people.set(personEmail.toLowerCase(), personEmail);
           cardFor(account).lines.push({
             kind: "access",
             personEmail: asString(output.person_email),
@@ -291,9 +322,13 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
   const remainingChoices = choices.filter((choice) => !cards.has(choice.accountId));
   const resolved = cards.size > 0 || remainingChoices.length > 0;
   const text = texts.join("\n\n");
+  const accountNames = new Map<string, string>(
+    choices.map((choice) => [choice.accountId, choice.displayName] as const),
+  );
+  for (const [accountId, card] of cards) accountNames.set(accountId, card.displayName);
   return {
     tools,
-    text: TOOL_CALL_TEXT.test(text) ? NO_ANSWER : text,
+    text: TOOL_CALL_TEXT.test(text) ? NO_ANSWER : resolveReferences(text, accountNames, people),
     accounts: [...cards.entries()].map(([accountId, card]) => ({ accountId, ...card })),
     choices: remainingChoices,
     refusals: [
