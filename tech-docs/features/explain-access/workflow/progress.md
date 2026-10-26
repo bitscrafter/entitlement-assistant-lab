@@ -3,16 +3,16 @@
 | | |
 | :--- | :--- |
 | **Purpose** | The phase table of explain-access: role, status, outcome. |
-| **Status** | Plan approved; spikes running |
+| **Status** | Spikes done; P1 next |
 | **References** | • Plan: [`architect-plan.md`](architect-plan.md)<br>• Spec: [`../explain-access.verification-spec.md`](../explain-access.verification-spec.md) |
 
 | Phase | Role | Status | Outcome |
 | --- | --- | --- | --- |
 | Spec | owner | ✅ | approved 2026-10-25 (D9–D13, S05k–S05m added) |
 | Plan | architect | ✅ | approved 2026-10-25 with every recommendation (Q1–Q5) and the proposed terms |
-| K1 CEL in Workers | architect | ⬜ | |
-| K2 agent tests in the Workers pool | architect | ⬜ | |
-| K3 Workers AI tool calling | architect | ⬜ | |
+| K1 CEL in Workers | architect | ✅ | pass: `@marcbachmann/cel-js` (discovery 5) |
+| K2 agent tests in the Workers pool | architect | ✅ | partial: agent and WebSocket work, `pg` does not; Q1-A applies (discoveries 6–8) |
+| K3 Workers AI tool calling | architect | ✅ | pass (discovery 9) |
 | P1 schema, seed, harness | coder | ⬜ | |
 | RED gate | tester | ⬜ | |
 | P2 product and entitlement | coder | ⬜ | |
