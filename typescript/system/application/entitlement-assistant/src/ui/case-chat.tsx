@@ -157,7 +157,7 @@ function Reply({ view }: { readonly view: ReplyView }) {
       )}
       {view.text !== "" && (
         <section>
-          <h2>Result</h2>
+          <h2>Answer</h2>
           <p className="text">{view.text}</p>
         </section>
       )}

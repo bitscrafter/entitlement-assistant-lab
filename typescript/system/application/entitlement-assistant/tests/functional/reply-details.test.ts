@@ -1,5 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { dayOf, type ReplyPart, replyViewOf, sourceLabel, titleOf } from "../../src/ui/reply-details.ts";
+import {
+  dayOf,
+  NO_ANSWER,
+  type ReplyPart,
+  replyViewOf,
+  sourceLabel,
+  titleOf,
+} from "../../src/ui/reply-details.ts";
 
 const ACME = "acc_AaD0wsQAcISy9edCLE0dkw";
 const LABS = "acc_AaD0wsQAd8Wi84ul6NvJ-A";
@@ -253,5 +260,19 @@ describe("replyViewOf, what a reply reports", () => {
     expect(replyViewOf([lookup, acmeChecked]).choices).toEqual([
       { accountId: LABS, displayName: "Acme Labs", roles: [] },
     ]);
+  });
+});
+
+describe("replyViewOf, an answer written as a tool call", () => {
+  test.each([
+    '{"name": "list_entitlements", "parameters": {"account_id": "acc_AaD0wsQAcXKkJwEEfKpH9A"}}',
+    'The function call to best answer the prompt is:\n\n{"name": "find_customer_account", "parameters": {"query": "Acme"}}',
+  ])("ensures the answer is NO_ANSWER for %s", (text) => {
+    expect(replyViewOf([{ type: "text", text }]).text).toBe(NO_ANSWER);
+  });
+
+  test("ensures an answer in words that mentions a name is kept", () => {
+    const text = 'Acme Corp has SSO; its "name" on file is Acme Corp.';
+    expect(replyViewOf([{ type: "text", text }]).text).toBe(text);
   });
 });

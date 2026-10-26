@@ -69,6 +69,12 @@ export interface ReplyView {
 
 type Json = Readonly<Record<string, unknown>>;
 
+/** Shown as the answer when the model wrote a tool call as text instead of words (discovery 33). */
+export const NO_ANSWER = "No answer was written; see Details.";
+
+/** A tool call written out as JSON, as Llama does when tools are refused on its last step. */
+const TOOL_CALL_TEXT = /\{\s*"name"\s*:\s*"[A-Za-z_]+"\s*,\s*"parameters"\s*:/;
+
 const asRecord = (value: unknown): Json | null =>
   typeof value === "object" && value !== null ? (value as Json) : null;
 const asString = (value: unknown): string => (typeof value === "string" ? value : "");
@@ -132,7 +138,7 @@ function stateOf(part: ReplyPart): ToolCallView["state"] {
 
 /**
  * @ensures `tools` lists every tool part once per distinct tool, input, and result, in order, with how many times.
- * @ensures `text` is the reply's text parts, joined.
+ * @ensures `text` is the reply's text parts, joined; `NO_ANSWER` when that text writes out a tool call.
  * @ensures `accounts` has one card per account the results name, in the order first named, with every line those
  *          results give it.
  * @ensures `choices` lists the accounts of a several-match lookup that the reply did not go on to show as a card.
@@ -284,9 +290,10 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
   }
   const remainingChoices = choices.filter((choice) => !cards.has(choice.accountId));
   const resolved = cards.size > 0 || remainingChoices.length > 0;
+  const text = texts.join("\n\n");
   return {
     tools,
-    text: texts.join("\n\n"),
+    text: TOOL_CALL_TEXT.test(text) ? NO_ANSWER : text,
     accounts: [...cards.entries()].map(([accountId, card]) => ({ accountId, ...card })),
     choices: remainingChoices,
     refusals: [
