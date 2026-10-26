@@ -1,0 +1,20 @@
+policy_key: courtesy-up-to-14-days
+cases:
+  - name: 14 days of courtesy
+    given:
+      context:
+        coverage_source: Courtesy
+        duration_days: 14
+    then: true
+  - name: 15 days of courtesy
+    given:
+      context:
+        coverage_source: Courtesy
+        duration_days: 15
+    then: false
+  - name: 30 days of trial, not courtesy
+    given:
+      context:
+        coverage_source: Trial
+        duration_days: 30
+    then: true

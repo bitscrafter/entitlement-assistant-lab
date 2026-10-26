@@ -1,0 +1,12 @@
+policy_key: grants-up-to-90-days
+cases:
+  - name: 90 days
+    given:
+      context:
+        duration_days: 90
+    then: true
+  - name: 91 days
+    given:
+      context:
+        duration_days: 91
+    then: false

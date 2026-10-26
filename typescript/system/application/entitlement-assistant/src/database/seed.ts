@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { PostgresConnection } from "../../../../adapter/postgres/postgres-connection.ts";
 import { PostgresClient } from "../../../../external/postgres.ts";
 import { parseYaml } from "../../../../external/yaml.ts";
 import { z } from "../../../../external/zod.ts";
 import type { Uuid } from "../../../../kernel/identifier.ts";
 import { WebCryptoPasswordHasher } from "../../../../subsystem/internal-identity/src/infra/web-crypto-password-hasher.ts";
+import { PostgresPolicySetRepository } from "../../../../subsystem/policy/src/infra/postgres-policy-set-repository.ts";
+import { loadBundledPolicySet } from "../policy-set.ts";
+import { catalogSchema, customerFixturesSchema, insertCatalog, insertCustomers } from "./seed-customers.ts";
 import { isLocalDatabase, type SeedPasswords } from "./seed-passwords.ts";
 
 const SEED_DIRECTORY = fileURLToPath(new URL("../../resource/seed/", import.meta.url));
@@ -37,6 +41,7 @@ const referenceDataSchema = z.strictObject({
   birthright_role_assignments: z.array(
     z.strictObject({ department: key, job_function: key, minimum_job_level: z.int().positive(), role: key }),
   ),
+  catalog: catalogSchema,
 });
 
 const holdSchema = z.strictObject({
@@ -77,6 +82,7 @@ const fixturesSchema = z.strictObject({
       holds: z.array(holdSchema).optional(),
     }),
   ),
+  ...customerFixturesSchema,
 });
 
 /** The seeded aliases (`emp_alex`, `iac_alex`) and the UUIDs they stand for. */
@@ -106,6 +112,22 @@ async function readSeedFile<Schema extends z.ZodType>(
   schema: Schema,
 ): Promise<z.infer<Schema>> {
   return schema.parse(parseYaml(await readFile(`${SEED_DIRECTORY}${fileName}`, "utf8")));
+}
+
+/**
+ * Every action key the reference data defines: resource permissions and feature permissions (access §2).
+ *
+ * @ensures `<resource_type>.<operation>` for each resource operation, and `feature.<feature_key>.<operation>` for each
+ *          feature operation of the catalog.
+ */
+export async function readActionKeys(): Promise<ReadonlySet<string>> {
+  const reference = await readSeedFile("reference-data.yaml", referenceDataSchema);
+  return new Set([
+    ...reference.resource_operations.map((operation) => operation.permission),
+    ...reference.catalog.features.flatMap((feature) =>
+      (feature.operations ?? []).map((operation) => `feature.${feature.feature}.${operation.operation}`),
+    ),
+  ]);
 }
 
 /** The fixture employees a seed password is created for. */
@@ -144,19 +166,51 @@ function choosePasswords(
   return (email) => passwords.get(email) ?? "";
 }
 
+/** The day of the specs' fixed instant (explain-access D7); fixture instants are written relative to it. */
+const FIXTURE_REFERENCE_DAY = "2026-10-22";
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Moves fixture instants so that the reference day falls on `fixtureDay`, keeping every interval.
+ *
+ * @requires `fixtureDay`, when given, is a calendar day `YYYY-MM-DD`.
+ * @ensures Without `fixtureDay`, every instant is returned unchanged.
+ * @ensures With it, every instant moves by the whole days between the reference day and `fixtureDay`.
+ */
+export function fixtureInstantShifter(fixtureDay?: string): (instant: string) => string {
+  if (fixtureDay === undefined) return (instant) => instant;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fixtureDay))
+    throw new Error("The fixture day is a calendar day, YYYY-MM-DD.");
+  const days = Math.round(
+    (Date.parse(`${fixtureDay}T00:00:00Z`) - Date.parse(`${FIXTURE_REFERENCE_DAY}T00:00:00Z`)) /
+      MILLISECONDS_PER_DAY,
+  );
+  return (instant) => new Date(Date.parse(instant) + days * MILLISECONDS_PER_DAY).toISOString();
+}
+
+export interface SeedOptions {
+  /** Replaces the published demo passwords; required for a database that is not local. */
+  readonly passwords?: SeedPasswords;
+  /** Moves the fixture so that the specs' reference day (2026-10-22) falls on this day. */
+  readonly fixtureDay?: string;
+}
+
 /**
  * Loads reference data and fixtures straight into the tables, in one transaction. Seeding bypasses the use
  * cases and writes no audit records (production-readiness, migration ordering).
  *
- * @requires `passwords` is given unless the database is local, and then names every fixture employee.
+ * @requires `options.passwords` is given unless the database is local, and then names every fixture employee.
  * @ensures Every alias in the fixtures maps to its `seededUuid`.
  * @ensures An account is `Suspended` exactly when it has an unreleased hold.
  * @ensures Each employee's credential verifies its seed password when `passwords` is given, else the fixture's.
+ * @ensures Every fixture instant is moved by `fixtureInstantShifter(options.fixtureDay)`.
+ * @ensures The bundled policy set is registered and active.
  */
-export async function seed(connectionString: string, passwords?: SeedPasswords): Promise<SeedAliases> {
+export async function seed(connectionString: string, options: SeedOptions = {}): Promise<SeedAliases> {
   const reference = await readSeedFile("reference-data.yaml", referenceDataSchema);
   const fixtures = await readSeedFile("fixtures.yaml", fixturesSchema);
-  const passwordOf = choosePasswords(connectionString, fixtures.employees, passwords);
+  const passwordOf = choosePasswords(connectionString, fixtures.employees, options.passwords);
+  const instantOf = fixtureInstantShifter(options.fixtureDay);
   const hasher = new WebCryptoPasswordHasher();
   const aliases = new Map<string, Uuid>();
   const idOf = (name: string): Uuid => {
@@ -200,6 +254,7 @@ export async function seed(connectionString: string, passwords?: SeedPasswords):
         ],
       );
     }
+    await insertCatalog(client, reference.catalog);
     for (const role of reference.roles) {
       await client.query(
         "INSERT INTO role (role_key, principal_kind, name, description) VALUES ($1, $2, $3, $4)",
@@ -220,7 +275,7 @@ export async function seed(connectionString: string, passwords?: SeedPasswords):
       );
     }
 
-    const seededAt = fixtures.seeded_at;
+    const seededAt = instantOf(fixtures.seeded_at);
     const insertInternalIdentity = async (
       identity: string,
       account: string,
@@ -315,18 +370,38 @@ export async function seed(connectionString: string, passwords?: SeedPasswords):
             idOf(`hld_${employee.account}_${index}`),
             idOf(employee.account),
             hold.reason,
-            hold.placed_at,
+            instantOf(hold.placed_at),
             idOf(hold.placed_by),
           ],
         );
       }
     }
+    await insertCustomers(client, fixtures, idOf, instantOf, seededAt);
     await client.query("COMMIT");
-    return aliases;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
   } finally {
     await client.end();
+  }
+  await registerBundledPolicySet(connectionString, instantOf(fixtures.seeded_at));
+  return aliases;
+}
+
+/** Registers and activates the bundled policy set as the seed's deployment (policy §6), by iac_sam. */
+async function registerBundledPolicySet(connectionString: string, at: string): Promise<void> {
+  const connection = await PostgresConnection.open(connectionString);
+  try {
+    const policySets = new PostgresPolicySetRepository(connection);
+    const set = await loadBundledPolicySet();
+    await policySets.register(set, "seed", seededUuid("iac_sam"), new Date(at));
+    await policySets.activate(
+      set.version,
+      seededUuid("act_seeded_policy_set"),
+      seededUuid("iac_sam"),
+      new Date(at),
+    );
+  } finally {
+    await connection.close();
   }
 }

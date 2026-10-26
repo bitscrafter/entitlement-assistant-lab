@@ -1,0 +1,20 @@
+policy_key: contact-is-authenticated
+cases:
+  - name: a contact not authenticated
+    given:
+      context:
+        has_contact: true
+        contact_authenticated: false
+    then: false
+  - name: a contact authenticated
+    given:
+      context:
+        has_contact: true
+        contact_authenticated: true
+    then: true
+  - name: no contact
+    given:
+      context:
+        has_contact: false
+        contact_authenticated: false
+    then: true

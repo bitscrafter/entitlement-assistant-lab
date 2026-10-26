@@ -1,0 +1,10 @@
+policy_key: cancel-needs-contact-or-approval
+description: A cancellation needs the customer's request or a supervisor's approval.
+governed_actions:
+  - subscription.cancel
+applies_when: "!context.has_contact"
+requires: "context.approval_granted"
+unmet_outcome: Conditional
+prerequisites:
+  - prerequisite_kind: Approval
+    fulfilled_by_permission: approval.decide

@@ -7,6 +7,7 @@ import { importHashKey } from "../../../subsystem/attribution/src/infra/audit-re
 import { type Application, createApplication } from "./application.ts";
 import { httpsRedirect, servedByApplication } from "./http/request-guard.ts";
 import { errorResponse } from "./http/responses.ts";
+import { loadBundledPolicySet } from "./policy-set.ts";
 
 /** Bindings and secrets declared in wrangler.jsonc and set with `wrangler secret put` (or .dev.vars locally). */
 interface Environment {
@@ -22,16 +23,30 @@ interface Environment {
 
 let application: Promise<Application> | undefined;
 
-/** Builds the application once per isolate: keys are imported once, a database connection is opened per request. */
-async function build(environment: Environment): Promise<Application> {
+/**
+ * Imports the session signing key pair from the private JWK in the Worker secret.
+ *
+ * @ensures The private half signs and the public half verifies ES256 tokens; neither can be exported.
+ */
+export async function importSessionSigningKey(
+  privateJwkText: string,
+): Promise<{ readonly privateKey: CryptoKey; readonly publicKey: CryptoKey }> {
   // key_ops and ext describe the exported key, not the uses imported here; each half gets its own usage.
   const {
     key_ops: _operations,
     ext: _extractable,
     ...privateJwk
-  } = JSON.parse(environment.SESSION_SIGNING_KEY) as webcrypto.JsonWebKey;
+  } = JSON.parse(privateJwkText) as webcrypto.JsonWebKey;
   const { d: _privateComponent, ...publicJwk } = privateJwk;
   const curve = { name: "ECDSA", namedCurve: "P-256" } as const;
+  return {
+    privateKey: await crypto.subtle.importKey("jwk", privateJwk, curve, false, ["sign"]),
+    publicKey: await crypto.subtle.importKey("jwk", publicJwk, curve, false, ["verify"]),
+  };
+}
+
+/** Builds the application once per isolate: keys are imported once, a database connection is opened per request. */
+async function build(environment: Environment): Promise<Application> {
   return createApplication({
     applicationOrigin: environment.APPLICATION_ORIGIN,
     openDatabase: () => PostgresConnection.open(environment.HYPERDRIVE.connectionString),
@@ -40,14 +55,15 @@ async function build(environment: Environment): Promise<Application> {
     securityEventLog: new ConsoleSecurityEventLog(),
     sessionSigningKey: {
       keyId: environment.SESSION_SIGNING_KEY_ID,
-      privateKey: await crypto.subtle.importKey("jwk", privateJwk, curve, false, ["sign"]),
-      publicKey: await crypto.subtle.importKey("jwk", publicJwk, curve, false, ["verify"]),
+      ...(await importSessionSigningKey(environment.SESSION_SIGNING_KEY)),
     },
     auditHashKey: {
       keyId: environment.AUDIT_HASH_KEY_ID,
       key: await importHashKey(environment.AUDIT_HASH_KEY),
     },
     identifierHashKey: await importHashKey(environment.IDENTIFIER_HASH_KEY),
+    policySet: await loadBundledPolicySet(),
+    forwardToCaseAgent: async () => errorResponse("not_found"),
   });
 }
 

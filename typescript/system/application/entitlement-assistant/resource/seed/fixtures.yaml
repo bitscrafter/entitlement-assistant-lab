@@ -89,3 +89,356 @@ employees:
       - reason: OperationalSuspension
         placed_at: "2026-10-22T14:55:00Z"
         placed_by: iac_sam
+organizations:
+  - customer: cus_acme
+    account: acc_acme
+    legal_name: Acme Corp
+    primary_domain: acme.com
+  - customer: cus_acme_labs
+    account: acc_acme_labs
+    legal_name: Acme Labs
+    primary_domain: acmelabs.com
+  - customer: cus_initech
+    account: acc_initech
+    legal_name: Initech
+    primary_domain: initech.com
+  - customer: cus_globex
+    account: acc_globex
+    legal_name: Globex
+    primary_domain: globex.com
+  - customer: cus_hooli
+    account: acc_hooli
+    legal_name: Hooli
+    primary_domain: hooli.com
+  - customer: cus_wayne
+    account: acc_wayne
+    legal_name: Wayne Enterprises
+    primary_domain: wayne.com
+  - customer: cus_stark
+    account: acc_stark
+    legal_name: Stark Industries
+    primary_domain: stark.com
+  - customer: cus_umbrella
+    account: acc_umbrella
+    legal_name: Umbrella Corporation
+    primary_domain: umbrella.com
+  - customer: cus_cyberdyne
+    account: acc_cyberdyne
+    legal_name: Cyberdyne Systems
+    primary_domain: cyberdyne.com
+  - customer: cus_tyrell
+    account: acc_tyrell
+    legal_name: Tyrell Corporation
+    primary_domain: tyrell.com
+  - customer: cus_soylent
+    account: acc_soylent
+    legal_name: Soylent
+    primary_domain: soylent.com
+# Each person owns their own account (the owner role on itself); on OrganizationMember accounts its feature
+# permissions are inert. Role assignments are assigned by the member's own account.
+individuals:
+  - customer: cus_olivia
+    account: acc_olivia
+    email: olivia@acme.com
+    given_name: Olivia
+    family_name: Reed
+    account_category: OrganizationMember
+    memberships:
+      - membership: mbr_olivia_acme
+        organization: cus_acme
+        joined_at: "2026-09-01T00:00:00Z"
+    roles:
+      - assignment: ara_olivia_acme_owner
+        member_of: acc_acme
+        role: owner
+  - customer: cus_jane
+    account: acc_jane
+    email: jane@acme.com
+    given_name: Jane
+    family_name: Doe
+    account_category: Standalone
+    memberships:
+      - membership: mbr_jane_acme
+        organization: cus_acme
+        joined_at: "2026-09-01T00:00:00Z"
+    roles:
+      - assignment: ara_jane_acme_admin
+        member_of: acc_acme
+        role: admin
+      - assignment: ara_jane_acme_billing
+        member_of: acc_acme
+        role: billing
+  - customer: cus_ben
+    account: acc_ben
+    email: ben@acme.com
+    given_name: Ben
+    family_name: Carter
+    account_category: OrganizationMember
+    memberships:
+      - membership: mbr_ben_acme
+        organization: cus_acme
+        joined_at: "2026-09-01T00:00:00Z"
+    roles:
+      - assignment: ara_ben_acme_billing
+        member_of: acc_acme
+        role: billing
+  - customer: cus_carol
+    account: acc_carol
+    email: carol@acme.com
+    given_name: Carol
+    family_name: Diaz
+    account_category: OrganizationMember
+    memberships:
+      - membership: mbr_carol_acme
+        organization: cus_acme
+        joined_at: "2026-09-01T00:00:00Z"
+    roles:
+      - assignment: ara_carol_acme_viewer
+        member_of: acc_acme
+        role: viewer
+  - customer: cus_dan
+    account: acc_dan
+    email: dan@acme.com
+    given_name: Dan
+    family_name: Evans
+    account_category: OrganizationMember
+    memberships:
+      - membership: mbr_dan_acme
+        organization: cus_acme
+        joined_at: "2026-09-01T00:00:00Z"
+        ended_at: "2026-10-15T00:00:00Z"
+        end_reason: Removed
+    roles:
+      - assignment: ara_dan_acme_admin
+        member_of: acc_acme
+        role: admin
+        ended_at: "2026-10-15T00:00:00Z"
+        ended_by: iac_sam
+        end_reason: MembershipEnded
+    holds:
+      - reason: NoActiveMembership
+        placed_at: "2026-10-15T00:00:00Z"
+        placed_by: iac_sam
+  - customer: cus_bob
+    account: acc_bob
+    email: bob@initech.com
+    given_name: Bob
+    family_name: Green
+    account_category: OrganizationMember
+    memberships:
+      - membership: mbr_bob_initech
+        organization: cus_initech
+        joined_at: "2026-09-01T00:00:00Z"
+    roles:
+      - assignment: ara_bob_initech_owner
+        member_of: acc_initech
+        role: owner
+  - customer: cus_lee
+    account: acc_lee
+    email: lee@globex.com
+    given_name: Lee
+    family_name: Hall
+    account_category: OrganizationMember
+    memberships:
+      - membership: mbr_lee_globex
+        organization: cus_globex
+        joined_at: "2026-09-01T00:00:00Z"
+    roles:
+      - assignment: ara_lee_globex_owner
+        member_of: acc_globex
+        role: owner
+  - customer: cus_gavin
+    account: acc_gavin
+    email: gavin@hooli.com
+    given_name: Gavin
+    family_name: Ito
+    account_category: OrganizationMember
+    memberships:
+      - membership: mbr_gavin_hooli
+        organization: cus_hooli
+        joined_at: "2026-09-01T00:00:00Z"
+    roles:
+      - assignment: ara_gavin_hooli_owner
+        member_of: acc_hooli
+        role: owner
+  - customer: cus_bruce
+    account: acc_bruce
+    email: bruce@wayne.com
+    given_name: Bruce
+    family_name: Jones
+    account_category: OrganizationMember
+    memberships:
+      - membership: mbr_bruce_wayne
+        organization: cus_wayne
+        joined_at: "2026-09-01T00:00:00Z"
+    roles:
+      - assignment: ara_bruce_wayne_owner
+        member_of: acc_wayne
+        role: owner
+  - customer: cus_tony
+    account: acc_tony
+    email: tony@stark.com
+    given_name: Tony
+    family_name: King
+    account_category: OrganizationMember
+    memberships:
+      - membership: mbr_tony_stark
+        organization: cus_stark
+        joined_at: "2026-09-01T00:00:00Z"
+    roles:
+      - assignment: ara_tony_stark_owner
+        member_of: acc_stark
+        role: owner
+  - customer: cus_pat
+    account: acc_pat
+    email: pat@umbrella.com
+    given_name: Pat
+    family_name: Lane
+    account_category: OrganizationMember
+    memberships:
+      - membership: mbr_pat_umbrella
+        organization: cus_umbrella
+        joined_at: "2026-09-01T00:00:00Z"
+    roles:
+      - assignment: ara_pat_umbrella_admin
+        member_of: acc_umbrella
+        role: admin
+  - customer: cus_mia
+    account: acc_mia
+    email: mia@acmelabs.com
+    given_name: Mia
+    family_name: Fox
+    account_category: OrganizationMember
+    memberships:
+      - membership: mbr_mia_acme_labs
+        organization: cus_acme_labs
+        joined_at: "2026-09-01T00:00:00Z"
+    roles:
+      - assignment: ara_mia_acme_labs_owner
+        member_of: acc_acme_labs
+        role: owner
+customer_account_holds:
+  - account: acc_umbrella
+    reason: OperationalSuspension
+    placed_at: "2026-10-20T10:00:00Z"
+    placed_by: iac_sam
+# Terms are created by iac_sam in the demo (entitlement §2: an employee creates terms).
+subscriptions:
+  - subscription: sub_acme
+    account: acc_acme
+    started_at: "2026-10-01T00:00:00Z"
+    terms:
+      - term: trm_acme_1
+        plan: business
+        source: Payment
+        starts_at: "2026-10-01T00:00:00Z"
+        scheduled_end_at: "2026-11-01T00:00:00Z"
+    addons:
+      - subscription_addon: sad_acme_advanced_analytics
+        addon: advanced-analytics
+        started_at: "2026-10-01T00:00:00Z"
+  - subscription: sub_acme_labs
+    account: acc_acme_labs
+    started_at: "2026-09-01T00:00:00Z"
+    terms:
+      - term: trm_acme_labs_1
+        plan: free
+        source: FreePlan
+        starts_at: "2026-09-01T00:00:00Z"
+  - subscription: sub_initech
+    account: acc_initech
+    started_at: "2026-09-01T00:00:00Z"
+    terms:
+      - term: trm_initech_1
+        plan: free
+        source: FreePlan
+        starts_at: "2026-09-01T00:00:00Z"
+  - subscription: sub_globex
+    account: acc_globex
+    started_at: "2026-09-01T00:00:00Z"
+    terms:
+      - term: trm_globex_1
+        plan: pro
+        source: Payment
+        starts_at: "2026-09-01T00:00:00Z"
+        scheduled_end_at: "2026-10-01T00:00:00Z"
+  - subscription: sub_hooli
+    account: acc_hooli
+    started_at: "2026-10-15T00:00:00Z"
+    terms:
+      - term: trm_hooli_1
+        plan: pro
+        source: Payment
+        starts_at: "2026-10-15T00:00:00Z"
+        scheduled_end_at: "2026-11-15T00:00:00Z"
+    grants:
+      - grant: grt_hooli_seats
+        feature: seats
+        quota: 10
+        reason: Onboarding a new team before the next renewal.
+        starts_at: "2026-10-20T00:00:00Z"
+        expires_at: "2026-11-03T00:00:00Z"
+      - grant: grt_hooli_old
+        feature: seats
+        quota: 5
+        reason: Temporary seats for a migration.
+        starts_at: "2026-10-16T00:00:00Z"
+        expires_at: "2026-10-21T00:00:00Z"
+  - subscription: sub_wayne
+    account: acc_wayne
+    started_at: "2026-10-10T00:00:00Z"
+    terms:
+      - term: trm_wayne_1
+        plan: pro
+        source: Trial
+        starts_at: "2026-10-10T00:00:00Z"
+        scheduled_end_at: "2026-11-09T00:00:00Z"
+  - subscription: sub_stark
+    account: acc_stark
+    started_at: "2026-10-01T00:00:00Z"
+    ended_at: "2026-10-05T00:00:00Z"
+    ended_by: iac_sam
+    end_reason: Canceled
+    terms:
+      - term: trm_stark_1
+        plan: business
+        source: Payment
+        starts_at: "2026-10-01T00:00:00Z"
+        scheduled_end_at: "2026-11-01T00:00:00Z"
+        ended_at: "2026-10-05T00:00:00Z"
+        ended_by: iac_sam
+        end_reason: SubscriptionEnded
+  - subscription: sub_umbrella
+    account: acc_umbrella
+    started_at: "2026-01-01T00:00:00Z"
+    terms:
+      - term: trm_umbrella_1
+        plan: enterprise
+        source: Contract
+        starts_at: "2026-01-01T00:00:00Z"
+  - subscription: sub_cyberdyne
+    account: acc_cyberdyne
+    started_at: "2026-01-01T00:00:00Z"
+    terms:
+      - term: trm_cyberdyne_1
+        plan: enterprise
+        source: Contract
+        starts_at: "2026-01-01T00:00:00Z"
+  - subscription: sub_tyrell
+    account: acc_tyrell
+    started_at: "2025-10-01T00:00:00Z"
+    terms:
+      - term: trm_tyrell_1
+        plan: enterprise
+        source: Contract
+        starts_at: "2025-10-01T00:00:00Z"
+        scheduled_end_at: "2026-10-01T00:00:00Z"
+  - subscription: sub_jane
+    account: acc_jane
+    started_at: "2026-10-05T00:00:00Z"
+    terms:
+      - term: trm_jane_1
+        plan: pro
+        source: Payment
+        starts_at: "2026-10-05T00:00:00Z"
+        scheduled_end_at: "2026-11-05T00:00:00Z"

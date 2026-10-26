@@ -17,7 +17,8 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "resolveJsonModule": true
   },
   "include": ["kernel", "port", "adapter", "external", "subsystem", "application", "vitest.config.ts"],
   "exclude": [

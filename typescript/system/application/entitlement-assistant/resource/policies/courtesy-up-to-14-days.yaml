@@ -1,0 +1,8 @@
+policy_key: courtesy-up-to-14-days
+description: Courtesy coverage lasts at most 14 days.
+governed_actions:
+  - subscription.add-courtesy-term
+  - subscription.change-plan
+applies_when: "context.coverage_source == 'Courtesy'"
+requires: "context.duration_days <= 14"
+unmet_outcome: Deny

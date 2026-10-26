@@ -3,7 +3,17 @@ import { fileURLToPath } from "node:url";
 import { PostgresClient } from "../../../../external/postgres.ts";
 
 /** Subsystems whose migrations run, bottom of the layer order first (CM-15). */
-export const SUBSYSTEMS_IN_LAYER_ORDER = ["internal-identity", "account", "access", "attribution"] as const;
+export const SUBSYSTEMS_IN_LAYER_ORDER = [
+  "customer-identity",
+  "internal-identity",
+  "account",
+  "product",
+  "access",
+  "entitlement",
+  "policy",
+  "support",
+  "attribution",
+] as const;
 
 const SYSTEM_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const MIGRATION_LOCK_KEY = 72_101;

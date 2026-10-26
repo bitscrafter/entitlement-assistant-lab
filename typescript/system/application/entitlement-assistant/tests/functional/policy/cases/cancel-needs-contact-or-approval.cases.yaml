@@ -1,0 +1,20 @@
+policy_key: cancel-needs-contact-or-approval
+cases:
+  - name: without a contact or approval
+    given:
+      context:
+        has_contact: false
+        approval_granted: false
+    then: false
+  - name: without a contact, with approval
+    given:
+      context:
+        has_contact: false
+        approval_granted: true
+    then: true
+  - name: with a contact
+    given:
+      context:
+        has_contact: true
+        approval_granted: false
+    then: true

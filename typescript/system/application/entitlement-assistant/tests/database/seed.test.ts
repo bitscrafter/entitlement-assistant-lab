@@ -9,7 +9,7 @@ import {
 import { parseUuid } from "../../../../kernel/identifier.ts";
 import { WebCryptoPasswordHasher } from "../../../../subsystem/internal-identity/src/infra/web-crypto-password-hasher.ts";
 import { migrate } from "../../src/database/migrate.ts";
-import { readSeedEmployees, seed, seededUuid } from "../../src/database/seed.ts";
+import { fixtureInstantShifter, readSeedEmployees, seed, seededUuid } from "../../src/database/seed.ts";
 
 async function passwordHashOf(connection: PostgresConnection, email: string): Promise<string> {
   const rows = await connection.query<{ password_hash: string }>(
@@ -60,7 +60,12 @@ describe("seed", () => {
       "SELECT account_id FROM account WHERE account_status = 'Suspended' ORDER BY account_id",
     );
     expect(suspended.map((row) => row.account_id).sort()).toEqual(
-      [seededUuid("iac_casey"), seededUuid("iac_dana")].sort(),
+      [
+        seededUuid("iac_casey"),
+        seededUuid("iac_dana"),
+        seededUuid("acc_umbrella"),
+        seededUuid("acc_dan"),
+      ].sort(),
     );
   });
 
@@ -79,7 +84,9 @@ describe("seed", () => {
 
   test("requires seed passwords to name every fixture employee", async () => {
     await expect(
-      seed(database.connectionString, new Map([["alex@provider.example", "alex-k7m2-x9qp-4hdr"]])),
+      seed(database.connectionString, {
+        passwords: new Map([["alex@provider.example", "alex-k7m2-x9qp-4hdr"]]),
+      }),
     ).rejects.toThrow(/missing for blair@provider\.example/);
   });
 
@@ -92,7 +99,7 @@ describe("seed", () => {
       const passwords = new Map(
         employees.map((employee) => [employee.email, `${employee.given_name}-k7m2-x9qp`]),
       );
-      await seed(connectionStringFor(name), passwords);
+      await seed(connectionStringFor(name), { passwords });
       const seeded = await PostgresConnection.open(connectionStringFor(name));
       try {
         const hasher = new WebCryptoPasswordHasher();
@@ -103,6 +110,51 @@ describe("seed", () => {
             await hasher.verify(`${employee.given_name.toLowerCase()}-demo-password`, passwordHash),
           ).toBe(false);
         }
+      } finally {
+        await seeded.close();
+      }
+    } finally {
+      await withAdminClient(
+        async (client) => void (await client.query(`DROP DATABASE ${name} WITH (FORCE)`)),
+      );
+    }
+  });
+
+  test("ensures without a fixture day every instant is unchanged", () => {
+    expect(fixtureInstantShifter()("2026-10-22T15:00:00.000Z")).toBe("2026-10-22T15:00:00.000Z");
+  });
+
+  test.each([
+    ["a later day", "2026-11-05", "2026-11-05T15:00:00.000Z", "2026-10-15T00:00:00.000Z"],
+    ["an earlier day", "2026-10-20", "2026-10-20T15:00:00.000Z", "2026-09-29T00:00:00.000Z"],
+    ["the reference day", "2026-10-22", "2026-10-22T15:00:00.000Z", "2026-10-01T00:00:00.000Z"],
+  ])("ensures with %s every instant moves by the whole days to it", (_name, day, instant, termStart) => {
+    const shift = fixtureInstantShifter(day);
+    expect(shift("2026-10-22T15:00:00Z")).toBe(instant);
+    expect(shift("2026-10-01T00:00:00Z")).toBe(termStart);
+  });
+
+  test("requires the fixture day to be a calendar day", () => {
+    expect(() => fixtureInstantShifter("2026-11-05T00:00:00Z")).toThrow(/YYYY-MM-DD/);
+  });
+
+  test("ensures every fixture instant is moved by the fixture day when seeding", async () => {
+    const name = `entitlement_assistant_shift_${Date.now()}`;
+    await withAdminClient((client) => client.query(`CREATE DATABASE ${name}`));
+    try {
+      await migrate(connectionStringFor(name));
+      await seed(connectionStringFor(name), { fixtureDay: "2026-11-05" });
+      const seeded = await PostgresConnection.open(connectionStringFor(name));
+      try {
+        const rows = await seeded.query<{ starts_at: Date; scheduled_end_at: Date; placed_at: Date }>(
+          `SELECT t.starts_at, t.scheduled_end_at,
+                  (SELECT placed_at FROM account_hold WHERE account_id = $2) AS placed_at
+             FROM subscription_term t WHERE t.term_id = $1`,
+          [seededUuid("trm_acme_1"), seededUuid("acc_umbrella")],
+        );
+        expect(
+          rows.map((row) => [row.starts_at, row.scheduled_end_at, row.placed_at].map((d) => d.toISOString())),
+        ).toEqual([["2026-10-15T00:00:00.000Z", "2026-11-15T00:00:00.000Z", "2026-11-03T10:00:00.000Z"]]);
       } finally {
         await seeded.close();
       }

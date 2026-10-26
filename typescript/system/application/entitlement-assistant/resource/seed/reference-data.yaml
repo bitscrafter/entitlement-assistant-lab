@@ -1,4 +1,4 @@
-# Reference data every environment needs (data-model/access.md, internal-identity.md).
+# Reference data every environment needs (data-model/access.md, internal-identity.md, product.md).
 departments:
   - department: customer-support
     name: Customer Support
@@ -54,6 +54,12 @@ resource_operations:
   - permission: grant.request
     held_by: Individual
     description: Ask support to grant a feature to an account.
+  - permission: role-assignment.create
+    held_by: Individual
+    description: Give a member a role in an account.
+  - permission: role-assignment.end
+    held_by: Individual
+    description: End a member's role in an account.
 roles:
   - role: support-case-handling
     principal_kind: Employee
@@ -91,6 +97,44 @@ roles:
     permissions:
       - grant.record-expiry
       - change-request.apply
+  - role: owner
+    principal_kind: Individual
+    name: Owner
+    description: Everything in the account, including who holds which role.
+    permissions:
+      - feature.api-access.create-token
+      - feature.sso.configure
+      - feature.audit-log-export.export
+      - feature.advanced-analytics.view
+      - role-assignment.create
+      - role-assignment.end
+      - subscription.request-plan-change
+      - subscription.request-cancellation
+      - grant.request
+  - role: admin
+    principal_kind: Individual
+    name: Admin
+    description: Configures and uses every feature of the account.
+    permissions:
+      - feature.sso.configure
+      - feature.api-access.create-token
+      - feature.audit-log-export.export
+      - feature.advanced-analytics.view
+      - grant.request
+  - role: billing
+    principal_kind: Individual
+    name: Billing
+    description: Manages the plan and reads usage.
+    permissions:
+      - feature.audit-log-export.export
+      - feature.advanced-analytics.view
+      - subscription.request-plan-change
+  - role: viewer
+    principal_kind: Individual
+    name: Viewer
+    description: Views analytics.
+    permissions:
+      - feature.advanced-analytics.view
 birthright_role_assignments:
   - department: customer-support
     job_function: representative
@@ -116,3 +160,95 @@ birthright_role_assignments:
     job_function: supervisor
     minimum_job_level: 1
     role: case-supervision
+catalog:
+  products:
+    - product: workspace
+      name: Workspace
+      description: The collaboration product the provider sells.
+  features:
+    - feature: seats
+      product: workspace
+      name: Seats
+      description: Members who can hold a role in the account.
+      metered_unit: seats
+    - feature: api-access
+      product: workspace
+      name: API access
+      description: Programmatic access through API tokens.
+      operations:
+        - operation: create-token
+          description: Create an API token.
+    - feature: sso
+      product: workspace
+      name: Single sign-on
+      description: Sign-in through the customer's identity provider.
+      operations:
+        - operation: configure
+          description: Configure single sign-on.
+    - feature: audit-log-export
+      product: workspace
+      name: Audit log export
+      description: Export of the account's audit log.
+      operations:
+        - operation: export
+          description: Export the audit log.
+    - feature: advanced-analytics
+      product: workspace
+      name: Advanced analytics
+      description: Usage analytics beyond the standard reports.
+      operations:
+        - operation: view
+          description: View advanced analytics.
+  plan_ladders:
+    - plan_ladder: standard
+      name: Standard
+      description: The plans sold to every customer.
+  plans:
+    - plan: free
+      plan_ladder: standard
+      name: Free
+      tier_rank: 1
+      plan_category: Free
+      bundles:
+        - feature: seats
+          quota: 3
+    - plan: pro
+      plan_ladder: standard
+      name: Pro
+      tier_rank: 2
+      plan_category: Paid
+      bundles:
+        - feature: seats
+          quota: 25
+        - feature: api-access
+    - plan: business
+      plan_ladder: standard
+      name: Business
+      tier_rank: 3
+      plan_category: Paid
+      bundles:
+        - feature: seats
+          quota: 100
+        - feature: api-access
+        - feature: sso
+        - feature: audit-log-export
+    - plan: enterprise
+      plan_ladder: standard
+      name: Enterprise
+      tier_rank: 4
+      plan_category: Paid
+      bundles:
+        - feature: seats
+        - feature: api-access
+        - feature: sso
+        - feature: audit-log-export
+        - feature: advanced-analytics
+  addons:
+    - addon: advanced-analytics
+      name: Advanced analytics
+      description: Advanced analytics on top of a plan.
+      bundles:
+        - feature: advanced-analytics
+      eligible_on:
+        - pro
+        - business

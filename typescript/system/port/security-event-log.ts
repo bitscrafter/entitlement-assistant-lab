@@ -8,7 +8,9 @@ export type SecurityEventCause =
   | "WrongAudience"
   | "Expired"
   | "PrincipalInactive"
-  | "ForeignOrigin";
+  | "ForeignOrigin"
+  | "CaseNotFound"
+  | "CaseNotAssigned";
 
 export interface SecurityEvent {
   readonly cause: SecurityEventCause;

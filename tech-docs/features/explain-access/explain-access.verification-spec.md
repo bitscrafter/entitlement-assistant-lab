@@ -3,7 +3,7 @@
 | | |
 | :--- | :--- |
 | **Purpose** | States what the feature must do: a signed-in employee opens a case, connects to it, and asks the assistant to find customer accounts, check and list their entitlements, and explain why a person can or cannot use a feature in an account. Each scenario becomes exactly one verification test (`AI_AS_TESTER.md`). |
-| **Status** | Approved by the owner (2026-10-25) |
+| **Status** | Approved by the owner (2026-10-25); amended by the owner the same day: S05j counts the renewal's record, S09a states the covering term in every case |
 | **Feature** | explain-access · scenarios S05a–S05m, S06a–S06b, S07a–S07d, S08a–S08e, S09a–S09b, S10a–S10b, S11, S12, S13 |
 | **Mode** | feature; reads customer data; writes only cases, case assignments, and audit records |
 | **Depends on** | feature employee-sign-in (a valid session) |
@@ -1003,7 +1003,7 @@ steps:
 ```yaml
 at_15_20_00: the first connection is closed · code 4401 · reason session_expired (T expired)
 new_connection: HTTP/1.1 101 Switching Protocols (T2 is valid until 15:40:00)
-audit_records: none                       # neither the close nor the connection is an action
+audit_records: only the renewal's session.renew   # neither the close nor the connection is an action
 ```
 
 ### S05k — A principal suspended during a connection is disconnected at its next message
@@ -1911,6 +1911,7 @@ Then:
 entitled: true
 sources:
   - plan:business
+covering_term: Payment · until 2026-11-01
 audit_records:                            # exactly one
   - action_key: account.read
     actor: iac_blair
@@ -1938,6 +1939,7 @@ Then:
 entitled: true
 sources:
   - addon:advanced-analytics
+covering_term: Payment · until 2026-11-01
 audit_records:                            # exactly one
   - action_key: account.read
     actor: iac_blair
@@ -1966,6 +1968,7 @@ entitled: true
 quota: 100
 sources:
   - plan:business
+covering_term: Payment · until 2026-11-01
 audit_records:                            # exactly one
   - action_key: account.read
     actor: iac_blair
@@ -2051,6 +2054,7 @@ quota: 35                                 # 25 from the plan + 10 from the activ
 sources:
   - plan:pro
   - grant:grt_hooli_seats                  # grt_hooli_old is past its expiry and ignored
+covering_term: Payment · until 2026-11-15
 audit_records:                            # exactly one
   - action_key: account.read
     actor: iac_blair
@@ -2107,6 +2111,7 @@ entitled: true
 quota: unlimited
 sources:
   - plan:enterprise
+covering_term: Contract · open-ended
 audit_records:                            # exactly one
   - action_key: account.read
     actor: iac_blair

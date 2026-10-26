@@ -1,0 +1,17 @@
+policy_key: grant-quota-up-to-100
+cases:
+  - name: a quota of 100
+    given:
+      context:
+        quota: 100
+    then: true
+  - name: a quota of 101
+    given:
+      context:
+        quota: 101
+    then: false
+  - name: an unmetered feature, no quota
+    given:
+      context:
+        duration_days: 7
+    then: true

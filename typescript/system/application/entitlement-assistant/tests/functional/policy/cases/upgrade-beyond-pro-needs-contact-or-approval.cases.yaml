@@ -1,0 +1,30 @@
+policy_key: upgrade-beyond-pro-needs-contact-or-approval
+cases:
+  - name: to Business without a contact or approval
+    given:
+      context:
+        target_tier_rank: 3
+        has_contact: false
+        approval_granted: false
+    then: false
+  - name: to Business with approval
+    given:
+      context:
+        target_tier_rank: 3
+        has_contact: false
+        approval_granted: true
+    then: true
+  - name: to Business with a contact
+    given:
+      context:
+        target_tier_rank: 3
+        has_contact: true
+        approval_granted: false
+    then: true
+  - name: to Pro without a contact
+    given:
+      context:
+        target_tier_rank: 2
+        has_contact: false
+        approval_granted: false
+    then: true

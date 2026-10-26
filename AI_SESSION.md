@@ -24,8 +24,8 @@
 ## Next session
 
 1. Owner: keep the production secrets in a password manager.
-2. Explain-access: spikes K1–K3, then P1 and the RED gate (plan approved 2026-10-25,
-   `tech-docs/features/explain-access/workflow/architect-plan.md`).
+2. Explain-access P6 (case agent): enable the nine skipped case-agent scenarios as they are built; then P7 (chat
+   UI) and P8 (end to end, deploy). State in `tech-docs/features/explain-access/workflow/progress.md`.
 
 ## Decisions (owner, 2026-10-22)
 
@@ -62,6 +62,8 @@
   Workers pool spike fails; policy registration and activation in this feature; spec cases are test fixtures, not
   seed; the deployed seed shifts fixture dates to the seeding day; one feature. Terms approved: message rate limiter,
   connection session, permission gate, policy expression evaluator, scripted language model.
+- RED gate kept with mutations owed for S05c and S08e case C (both proven in P5); S05j and S09a amended; failing
+  tests not yet built are skipped and committed, then enabled in the phase that builds them.
 - Plain HTTP is redirected (308) to the configured HTTPS origin by the Worker, which runs first for every request;
   owner tried the live deployment and approved merging `feature/deploy`.
 

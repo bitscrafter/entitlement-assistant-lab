@@ -10,7 +10,11 @@ if (connectionString === undefined) {
 const passwordsFile = process.env.SEED_PASSWORDS_FILE;
 const passwords =
   passwordsFile === undefined ? undefined : parseSeedPasswords(await readFile(passwordsFile, "utf8"));
-const aliases = await seed(connectionString, passwords);
+const fixtureDay = process.env.SEED_FIXTURE_DAY;
+const aliases = await seed(connectionString, {
+  ...(passwords === undefined ? {} : { passwords }),
+  ...(fixtureDay === undefined ? {} : { fixtureDay }),
+});
 console.log(
   `Seeded ${aliases.size} identifiers${passwords === undefined ? " with the demo passwords" : ""}.`,
 );

@@ -1,0 +1,7 @@
+policy_key: no-self-approval
+description: Nobody approves a change they requested or confirmed.
+governed_actions:
+  - approval.decide
+applies_when: "true"
+requires: "principal.account_id != context.requester_account_id && principal.account_id != context.confirmer_account_id"
+unmet_outcome: Deny

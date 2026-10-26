@@ -88,7 +88,7 @@ entity "**policy_set_activation**" as policy_set_activation {
 	foreign_key(activated_by (fk account))
 	foreign_key(ended_by (fk account))
 	__
-	* activation_id : uuid «psa_…»
+	* activation_id : uuid «act_…»
 	* policy_set_version : text
 	* activated_at : timestamptz
 	* activated_by : uuid
