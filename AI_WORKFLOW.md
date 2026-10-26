@@ -69,7 +69,7 @@ predicts. If any passes, nothing was missing, and the scenario is questioned bef
 ```sh
 npx biome ci --error-on-warnings
 npx tsc --noEmit
-npx depcruise src --config .dependency-cruiser.cjs
+npx depcruise . --config .dependency-cruiser.cjs
 npx vitest run
 ```
 

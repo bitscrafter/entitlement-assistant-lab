@@ -2,14 +2,14 @@
 
 ## To Do
 
-1. Fix `AI_WORKFLOW.md` §3: `depcruise .` instead of `depcruise src`.
-2. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
-3. At the end: GitHub remote (owner, 2026-10-25).
-4. Feature explain-access: update its spec to what employee-sign-in established, owner approval, then build (demo mode).
+1. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
+2. At the end: GitHub remote (owner, 2026-10-25).
+3. Feature explain-access: update its spec to what employee-sign-in established, owner approval, then build (demo mode).
 
 ## Completed
 
-- Deployed (2026-10-25) to `entitlement-assistant.jose-luis-rios.workers.dev`: generated seed passwords (GREEN 104 passed @ 55c77ce), Neon migrated and seeded, worker login role, Hyperdrive with caching disabled, secrets, smoke test passed; plain HTTP redirected to HTTPS by the Worker; `feature/deploy` merged.
+- Deployed (2026-10-25) to `entitlement-assistant.jose-luis-rios.workers.dev`: generated seed passwords (GREEN 104 passed @ 55c77ce), Neon migrated and seeded, worker login role, Hyperdrive with caching disabled, secrets, smoke test passed; plain HTTP redirected to HTTPS by the Worker; `feature/deploy` merged @ c8a9886.
+- `AI_WORKFLOW.md` GREEN gate runs `depcruise .` (the package has no root `src`).
 - Parent folder renamed to `cloudflare`; `wrangler login` with the minimum scopes (`workers:write` covers Hyperdrive).
 
 - Proposal: purpose, glossary, domain model, cross-cutting models, scenarios in features; rulings recorded.
