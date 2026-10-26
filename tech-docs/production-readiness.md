@@ -130,7 +130,7 @@
 | --- | --- |
 | **Password hashing strength** | Workers' WebCrypto caps PBKDF2 at 100,000 iterations, below current guidance for PBKDF2-SHA256. Production would use Argon2id (WebAssembly, or a dedicated service) or delegate employee sign-in to the company's identity provider (OIDC with phishing-resistant MFA). |
 | **Several accounts per identity** | Accounts are limited to one per identity. Several accounts need declaring the account at sign-in, a default-account preference, and switching (a new token, with step-up where the target account requires it). |
-| **Workload credentials for system accounts** | System accounts act inside the application. Processes running elsewhere need verifiable credentials. |
+| **Workload credentials for system accounts** | System accounts act inside the application. Processes running elsewhere need verifiable credentials. Deployments are recorded as `sys_deployment`, but are authenticated only by the database owner's credentials; production runs them from CI with a workload identity (for example, a signed OIDC token exchanged for a short-lived credential) that maps to `sys_deployment`. |
 | **Ending sessions** | Sessions end only by expiry or sign-out clearing the cookie. Revoking a session (a lost laptop, a terminated employee) before expiry needs a revocation list by `sid` checked per request; today the principal re-check catches suspensions and inactive identities, not a stolen token of an active employee. |
 | **`OrganizationMember` accounts after leaving** | The category is immutable and each customer has one account, so an individual who leaves an organization cannot subscribe personally until several accounts per customer are allowed. |
 

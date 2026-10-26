@@ -14,6 +14,11 @@ system_identities:
     description: Applies approved change requests and expires undecided approvals.
     roles:
       - entitlement-maintenance
+  - identity: sys_deployment
+    account: iac_sys_deployment
+    name: deployment
+    description: Records deployments, such as registering and activating a policy set; holds no role and never acts.
+    roles: []
 employees:
   - identity: emp_alex
     account: iac_alex

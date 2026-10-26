@@ -14,6 +14,7 @@
     "dev": "npm run ui:build && wrangler dev",
     "seed:passwords": "node application/entitlement-assistant/src/tools/create-seed-passwords-command.ts",
     "policies:build": "node application/entitlement-assistant/src/tools/build-policy-set-command.ts",
+    "policies:register": "node application/entitlement-assistant/src/tools/register-policy-set-command.ts",
     "secrets:local": "node application/entitlement-assistant/src/tools/create-local-secrets-command.ts",
     "ui:build": "vite build --config application/entitlement-assistant/vite.config.ts"
   },

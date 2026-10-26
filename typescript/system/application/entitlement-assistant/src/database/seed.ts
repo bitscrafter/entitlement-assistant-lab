@@ -388,17 +388,17 @@ export async function seed(connectionString: string, options: SeedOptions = {}):
   return aliases;
 }
 
-/** Registers and activates the bundled policy set as the seed's deployment (policy §6), by iac_sam. */
+/** Registers and activates the bundled policy set as the seed's deployment (policy §6), recorded as `sys_deployment`. */
 async function registerBundledPolicySet(connectionString: string, at: string): Promise<void> {
   const connection = await PostgresConnection.open(connectionString);
   try {
     const policySets = new PostgresPolicySetRepository(connection);
     const set = await loadBundledPolicySet();
-    await policySets.register(set, "seed", seededUuid("iac_sam"), new Date(at));
+    await policySets.register(set, "seed", seededUuid("iac_sys_deployment"), new Date(at));
     await policySets.activate(
       set.version,
       seededUuid("act_seeded_policy_set"),
-      seededUuid("iac_sam"),
+      seededUuid("iac_sys_deployment"),
       new Date(at),
     );
   } finally {
