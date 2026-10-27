@@ -4,10 +4,12 @@
 
 1. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
 2. At the end: GitHub remote (owner, 2026-10-25).
-3. Features explain-access and case-lifecycle: live evaluations once Workers AI answers again, then merge both into `main` (approved), GREEN on `main`, deploy, close-out.
+3. Live evaluations of explain-access (§5) and case-lifecycle, once Workers AI answers again (its free allocation still refused calls at 01:12 UTC on 2026-10-27, though the dashboard showed 0 used): record as explain-access discovery 39 and case-lifecycle discovery 16.
 4. Next feature: grants-and-approvals (S15, S17, S18, S21–S26), spec first.
 
 ## Completed
+
+- Explain-access and case-lifecycle merged into `main` (2026-10-27): 7d64a27, 16d63fc; GREEN 537 on `main`; deployed from `main` (`0c06f4f0`); smoke test passed.
 
 - Case-lifecycle built (2026-10-26): 28 + 9 scenarios across three owner-approved amendments, six review rounds, GREEN 537 @ c164cc2, deployed `418de419`.
 

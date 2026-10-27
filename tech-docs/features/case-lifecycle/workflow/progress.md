@@ -2,7 +2,7 @@
 
 | | |
 | :--- | :--- |
-| **Status** | P1–P7 done (live evaluation of explain-access waits for the Workers AI reset); review accepted; commit, GREEN gate, and the owner's review of the judgment calls next |
+| **Status** | Merged into `main` @ 16d63fc (2026-10-27; GREEN 537 on `main`); deployed from `main` (`0c06f4f0`); the live check waits for Workers AI; discoveries 1–15 for the owner's review |
 | **References** | • Plan: [`architect-plan.md`](architect-plan.md)<br>• Spec: [`../case-lifecycle.verification-spec.md`](../case-lifecycle.verification-spec.md)<br>• Discoveries: [`discoveries.md`](discoveries.md) |
 
 | Phase | Role | Status | Outcome |

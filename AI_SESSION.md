@@ -34,13 +34,14 @@
 ## Next session
 
 1. Owner: keep the production secrets in a password manager.
-2. Resume here: the live evaluations wait for Workers AI's free allocation, which had not reset at 00:05 UTC on
-   2026-10-27 (a probe runs every 10 minutes). Then: `EVALUATION_ORIGIN=https://entitlement-assistant.jose-luis-rios.workers.dev
+2. Resume here: the live evaluations wait for Workers AI's free allocation, which still refused calls at 01:12 UTC on
+   2026-10-27 although the dashboard showed 0 of 10k used today; yesterday's 14.68k overran the allocation, so the
+   enforcement may count a rolling window. The probe script is `/tmp/ai-probe.mjs` (run from `typescript/system`). Then: `EVALUATION_ORIGIN=https://entitlement-assistant.jose-luis-rios.workers.dev
    SEED_PASSWORDS_FILE=.env.seed-passwords npm run eval:live` (explain-access §5, 25 turns), and the case-lifecycle
    live check (`/tmp/case-lifecycle-live.mjs`, run from `typescript/system`: proposal, case events and line, draft).
    Record both (explain-access discovery 39, case-lifecycle discovery 16).
-3. Then, as the owner approved: merge `feature/explain-access`, then `feature/case-lifecycle`, into `main`; GREEN
-   gate on `main`; deploy from `main`; close out both features (AI_WORKFLOW.md §6).
+3. Done: both features merged into `main` (7d64a27, 16d63fc), GREEN 537 on `main`, deployed from `main`
+   (`0c06f4f0`), smoke test passed. The live checks are the one open item of their close-out.
 4. For the owner's review: case-lifecycle discoveries 1–15 (judgment calls made autonomously), the glossary terms
    added (case panel, case assignee check, case WebSocket connections, server WebSocket message, case event, case
    events delivery, case line, case account name).

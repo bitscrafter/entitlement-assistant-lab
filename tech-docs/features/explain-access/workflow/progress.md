@@ -3,7 +3,7 @@
 | | |
 | :--- | :--- |
 | **Purpose** | The phase table of explain-access: role, status, outcome. |
-| **Status** | P7 done; P8 next |
+| **Status** | Merged into `main` @ 7d64a27 (2026-10-27); deployed from `main` (`0c06f4f0`); the live §5 evaluation of CM-19 waits for Workers AI (discovery 36) |
 | **References** | • Plan: [`architect-plan.md`](architect-plan.md)<br>• Spec: [`../explain-access.verification-spec.md`](../explain-access.verification-spec.md) |
 
 | Phase | Role | Status | Outcome |
