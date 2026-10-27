@@ -3,9 +3,10 @@
 ## To Do
 
 1. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
-2. At the end: GitHub remote (owner, 2026-10-25).
-3. Next (owner, 2026-10-27): rather than a new feature, make what exists deployable and demoable, so the owner can demo the app and submit the Cloudflare job application.
-4. Later (owner, 2026-10-27): documentation of the solution's viewpoints with videos and a live player: ER diagram, sequence and state diagrams, security decisions, principles.
+2. GitHub repository `entitlement-assistant-lab`: the owner creates the remote (2026-10-27). Secret scan of the whole history passed (2026-10-27): no secret value, key, or password in any commit; only key identifiers, a test's example host, and placeholders.
+3. When the bitscrafter.com page is public: link it from the README (owner, 2026-10-27; until then, the repository never links it).
+4. Next (owner, 2026-10-27): rather than a new feature, make what exists deployable and demoable, so the owner can demo the app and submit the Cloudflare job application.
+5. Later (owner, 2026-10-27): documentation of the solution's viewpoints with videos and a live player: ER diagram, sequence and state diagrams, security decisions, principles.
 
 ## Completed
 
