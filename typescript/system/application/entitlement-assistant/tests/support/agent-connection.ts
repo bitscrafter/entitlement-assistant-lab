@@ -61,10 +61,13 @@ export class AgentConversation {
 
   #chunks(): readonly ResponseChunk[] {
     return this.frames
-      .map((frame) => JSON.parse(frame) as { type: string; body?: string })
+      .map((frame) => JSON.parse(frame) as { type: string; body?: string; error?: boolean })
       .filter(
         (frame) =>
-          frame.type === "cf_agent_use_chat_response" && typeof frame.body === "string" && frame.body !== "",
+          frame.type === "cf_agent_use_chat_response" &&
+          frame.error !== true &&
+          typeof frame.body === "string" &&
+          frame.body !== "",
       )
       .map((frame) => JSON.parse(frame.body ?? "{}") as ResponseChunk);
   }
@@ -75,6 +78,15 @@ export class AgentConversation {
       .filter((chunk) => chunk.type === "text-delta")
       .map((chunk) => String(chunk.delta ?? ""))
       .join("");
+  }
+
+  /** The error texts of failed turns, as the browser shows them. */
+  errorTexts(): readonly string[] {
+    // A failed turn arrives as one frame marked `error`, its body the shown text (not a JSON chunk).
+    return this.frames
+      .map((frame) => JSON.parse(frame) as { type: string; body?: string; error?: boolean })
+      .filter((frame) => frame.type === "cf_agent_use_chat_response" && frame.error === true)
+      .map((frame) => String(frame.body ?? ""));
   }
 
   toolOutputs(): readonly {

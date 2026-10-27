@@ -29,6 +29,7 @@ function guardWith(
       calls.push("principal");
       return options.mayAct ?? true;
     },
+    takeDailyMessage: async () => "Allowed" as const,
     caseStillAssigned: async () => {
       calls.push("case");
       return options.assigned ?? true;

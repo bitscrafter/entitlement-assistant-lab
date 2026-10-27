@@ -60,6 +60,13 @@ export function CaseChat({
             text: "Too many messages in the last minute. Wait a moment, then send again.",
           });
           return;
+        case "daily_limit":
+          agent.close();
+          setNotice({
+            kind: "error",
+            text: "You reached today's message limit for this demo. Try again tomorrow (UTC).",
+          });
+          return;
         case "message_too_big":
           setNotice({ kind: "error", text: "That message is too long. Shorten it and send again." });
           return;

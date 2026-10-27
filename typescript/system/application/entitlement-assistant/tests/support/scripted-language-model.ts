@@ -45,6 +45,13 @@ export class ScriptedLanguageModel {
     return this.model.doStreamCalls.length;
   }
 
+  /** The output-token bound of each call the model received (usage-guards D4). */
+  get maxOutputTokens(): readonly (number | null)[] {
+    return (this.model.doStreamCalls as readonly { maxOutputTokens?: number }[]).map(
+      (call) => call.maxOutputTokens ?? null,
+    );
+  }
+
   /** The system instructions of the model's last call. */
   get lastInstructions(): string {
     const calls = this.model.doStreamCalls as readonly {

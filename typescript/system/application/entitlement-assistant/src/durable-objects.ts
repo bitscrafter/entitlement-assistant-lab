@@ -1,10 +1,19 @@
 import { AIChatAgent, getAgentByName, getCurrentAgent } from "../../../external/agents.ts";
-import { convertToModelMessages, type LanguageModel, stepCountIs, streamText } from "../../../external/ai.ts";
+import {
+  convertToModelMessages,
+  type LanguageModel,
+  stepCountIs,
+  streamText,
+  wrapLanguageModel,
+} from "../../../external/ai.ts";
 import type { Uuid } from "../../../kernel/identifier.ts";
-import { attemptInWindow } from "../../../kernel/message-rate.ts";
+import { attemptInWindow, MESSAGE_LIMIT } from "../../../kernel/message-rate.ts";
+import { takeFromDay } from "../../../kernel/usage-caps.ts";
+import type { DailyAllowance } from "../../../port/daily-allowance.ts";
 import type { MessageRateLimiter } from "../../../port/message-rate-limiter.ts";
 import { shownToolError, turnErrorLogOf } from "./agent/agent-tools.ts";
 import { CASE_AGENT_INSTRUCTIONS, finalStepAnswersInWords } from "./agent/instructions.ts";
+import { dailyAllowanceMiddleware, latestConversation, MAXIMUM_OUTPUT_TOKENS } from "./agent/usage-bounds.ts";
 import { CLOSES, type ConnectionSession } from "./agent/websocket-message-guard.ts";
 import type { Application, CaseAgentParts } from "./application.ts";
 import type { CaseEventsDelivery } from "./case-events-delivery.ts";
@@ -99,21 +108,25 @@ export class DurableObjectMessageRateLimiter implements MessageRateLimiter {
   readonly #namespace: DurableObjectNamespace;
   readonly #scope: string;
 
-  /** `scope` keeps separate counters per use (chat messages; the case panel's account search, D18). */
-  constructor(namespace: DurableObjectNamespace, scope = "") {
+  readonly #limit: number;
+
+  /**
+   * `scope` keeps separate counters per use (chat messages; the case panel's account search, D18; sign-ins per IP
+   * address, usage-guards D6); `limit` attempts per minute, chat messages' by default.
+   */
+  constructor(namespace: DurableObjectNamespace, scope = "", limit = MESSAGE_LIMIT) {
     this.#namespace = namespace;
     this.#scope = scope;
+    this.#limit = limit;
   }
 
-  async attempt(accountId: Uuid, at: Date): Promise<"Allowed" | "Refused"> {
-    const response = await this.#namespace
-      .get(this.#namespace.idFromName(`${this.#scope}${accountId}`))
-      .fetch(
-        new Request("https://message-rate-limiter.internal/attempt", {
-          method: "POST",
-          body: String(at.getTime()),
-        }),
-      );
+  async attempt(key: string, at: Date): Promise<"Allowed" | "Refused"> {
+    const response = await this.#namespace.get(this.#namespace.idFromName(`${this.#scope}${key}`)).fetch(
+      new Request("https://message-rate-limiter.internal/attempt", {
+        method: "POST",
+        body: JSON.stringify({ at: at.getTime(), limit: this.#limit }),
+      }),
+    );
     return (await response.text()) === "Allowed" ? "Allowed" : "Refused";
   }
 }
@@ -127,9 +140,45 @@ export class MessageRateLimiterObject {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const at = Number(await request.text());
-    const result = attemptInWindow((await this.#storage.get<number[]>("accepted")) ?? [], at);
+    const { at, limit } = JSON.parse(await request.text()) as { at: number; limit: number };
+    const result = attemptInWindow((await this.#storage.get<number[]>("accepted")) ?? [], at, limit);
     await this.#storage.put("accepted", result.accepted);
+    return new Response(result.outcome);
+  }
+}
+
+/** Daily allowances in the Worker (usage-guards D2, D3): one Durable Object per key, so each counts alone. */
+export class DurableObjectDailyAllowance implements DailyAllowance {
+  readonly #namespace: DurableObjectNamespace;
+
+  constructor(namespace: DurableObjectNamespace) {
+    this.#namespace = namespace;
+  }
+
+  async take(key: string, at: Date, cap: number): Promise<"Allowed" | "Refused"> {
+    const response = await this.#namespace.get(this.#namespace.idFromName(key)).fetch(
+      new Request("https://daily-allowance.internal/take", {
+        method: "POST",
+        body: JSON.stringify({ at: at.getTime(), cap }),
+      }),
+    );
+    return (await response.text()) === "Allowed" ? "Allowed" : "Refused";
+  }
+}
+
+/** One key's count for the current UTC day; a Durable Object handles one request at a time, so takes never race. */
+export class DailyAllowanceObject {
+  readonly #storage: DurableObjectStorage;
+
+  constructor(state: { readonly storage: DurableObjectStorage }) {
+    this.#storage = state.storage;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const { at, cap } = JSON.parse(await request.text()) as { at: number; cap: number };
+    const counted = await this.#storage.get<{ day: string; taken: number }>("counted");
+    const result = takeFromDay(counted, new Date(at), cap);
+    await this.#storage.put("counted", result.counted);
     return new Response(result.outcome);
   }
 }
@@ -305,12 +354,16 @@ export function caseAgentObject<Environment extends CaseAgentEnvironment>(runtim
       let result: { toUIMessageStreamResponse: ReturnType<typeof streamText>["toUIMessageStreamResponse"] };
       try {
         result = streamText({
-          model: runtime.languageModelFor(this.env),
+          // Every model call is taken from the demo's daily allowance first (usage-guards D2).
+          model: wrapLanguageModel({
+            model: runtime.languageModelFor(this.env) as never,
+            middleware: dailyAllowanceMiddleware(parts.takeModelCall) as never,
+          }),
+          maxOutputTokens: MAXIMUM_OUTPUT_TOKENS,
           // Events reach the model in its instructions, not as system messages amid the conversation (review R4-4).
           system: turnInstructions(events, state),
-          messages: await convertToModelMessages(
-            this.messages.filter((message) => message.role !== "system"),
-          ),
+          // The latest messages only: a long conversation does not cost more each turn (usage-guards D4).
+          messages: await convertToModelMessages([...latestConversation(this.messages)]),
           tools: parts.tools(actor),
           stopWhen: stepCountIs(MAXIMUM_MODEL_STEPS),
           prepareStep: ({ stepNumber }) => finalStepAnswersInWords(stepNumber, MAXIMUM_MODEL_STEPS),

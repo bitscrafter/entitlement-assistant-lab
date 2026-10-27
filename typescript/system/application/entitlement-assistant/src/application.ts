@@ -9,7 +9,9 @@ import { JoseSessionToken } from "../../../adapter/session-token/jose-session-to
 import type { Tool } from "../../../external/ai.ts";
 import { z } from "../../../external/zod.ts";
 import { decodeIdentifier, encodeIdentifier, type Uuid } from "../../../kernel/identifier.ts";
+import type { UsageCaps } from "../../../kernel/usage-caps.ts";
 import type { Clock } from "../../../port/clock.ts";
+import type { DailyAllowance } from "../../../port/daily-allowance.ts";
 import type { IdGenerator } from "../../../port/id-generator.ts";
 import type { MessageRateLimiter } from "../../../port/message-rate-limiter.ts";
 import type { SecurityEventCause, SecurityEventLog } from "../../../port/security-event-log.ts";
@@ -129,6 +131,12 @@ export interface ApplicationDependencies {
   readonly searchRateLimiter: MessageRateLimiter;
   /** Hands a case's new events to its agent after an action commits (case-lifecycle D21). */
   readonly caseEventsDelivery: CaseEventsDelivery;
+  /** The demo's daily allowances (usage-guards D2, D3): global model calls, and each employee's messages. */
+  readonly dailyAllowance: DailyAllowance;
+  /** The caps derived from the daily AI neuron budget (usage-guards D1). */
+  readonly usageCaps: UsageCaps;
+  /** Sign-in attempts per IP address per minute (usage-guards D6). */
+  readonly signInRateLimiter: MessageRateLimiter;
   /** Starts, wakes, and stops the approval process of each approval (grants-and-approvals D6). */
   readonly approvalProcess: ApprovalProcess;
   /** How long an approval waits for a decision (D9: 72 hours). */
@@ -168,6 +176,11 @@ export interface CaseAgentParts {
   }) => Record<string, Tool>;
   readonly clock: Clock;
   readonly newTraceId: () => string;
+  /**
+   * Takes one model call from the demo's day (usage-guards D2), before the call is made: `Refused` when none is left
+   * or the assistant is off (D5).
+   */
+  readonly takeModelCall: () => Promise<"Allowed" | "Refused">;
   /** The case's events, derived from its audit records (case-lifecycle D21). */
   readonly caseEvents: () => Promise<readonly CaseEvent[]>;
   /** A turn's events (D21) and the case state line (D22), as the actor may read the case, in one transaction. */
@@ -402,6 +415,9 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     policyDescriptions.get(reasonCode) ?? REASON_DESCRIPTIONS[reasonCode] ?? reasonCode;
 
   const newTraceId = () => traceIdOf(new Request(dependencies.applicationOrigin));
+  /** A refusal by a usage guard, for the operators: which cap, never who or what (usage-guards). */
+  const logUsageRefusal = (cap: string, traceId: string) =>
+    console.warn(JSON.stringify({ log: "usage-cap-reached", cap, traceId }));
   const logFailure = (log: string, error: unknown) =>
     console.error(JSON.stringify({ log, message: String(error) }));
 
@@ -572,6 +588,15 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
       return {
         clock: dependencies.clock,
         newTraceId,
+        takeModelCall: async () => {
+          const taken = await dependencies.dailyAllowance.take(
+            "model-calls",
+            dependencies.clock.now(),
+            dependencies.usageCaps.modelCallsPerDay,
+          );
+          if (taken === "Refused") logUsageRefusal("model-calls", newTraceId());
+          return taken;
+        },
         messageGuard: new WebSocketMessageGuard({
           rateLimiter: adapters.rateLimiter,
           clock: dependencies.clock,
@@ -590,6 +615,13 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
             return mayAct;
           },
           caseStillAssigned: (accountId) => caseAssignedTo(accountId),
+          takeDailyMessage: async (accountId, at) => {
+            const cap = dependencies.usageCaps.messagesPerEmployeePerDay;
+            if (cap === null) return "Allowed";
+            const taken = await dependencies.dailyAllowance.take(`messages:${accountId}`, at, cap);
+            if (taken === "Refused") logUsageRefusal("daily-messages", newTraceId());
+            return taken;
+          },
           newMessageId: () => dependencies.idGenerator.newId(),
         }),
         caseEvents: () => withAllUseCases((useCases) => useCases.listCaseEvents.execute(caseId)),
@@ -614,6 +646,12 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
   };
 
   async function signInHandler({ request, body, traceId, useCases }: RequestContext): Promise<Response> {
+    // Before any work: hashing a password is the costly step anyone can trigger (usage-guards D6).
+    const address = request.headers.get("cf-connecting-ip") ?? "unknown";
+    if ((await dependencies.signInRateLimiter.attempt(address, dependencies.clock.now())) === "Refused") {
+      logUsageRefusal("sign-in-attempts", traceId);
+      return errorResponse("rate_limited");
+    }
     if (!(request.headers.get("content-type") ?? "").startsWith("application/json")) {
       return errorResponse("invalid_request");
     }

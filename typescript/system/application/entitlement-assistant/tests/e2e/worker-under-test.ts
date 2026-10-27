@@ -3,6 +3,7 @@ import { UuidVersion7Generator } from "../../../../adapter/identifier/uuid-versi
 import { PostgresConnection } from "../../../../adapter/postgres/postgres-connection.ts";
 import { RecordingSecurityEventLog } from "../../../../adapter/security-event-log/recording-security-event-log.ts";
 import type { Uuid } from "../../../../kernel/identifier.ts";
+import { SIGN_IN_ATTEMPTS_PER_MINUTE, usageCapsOf } from "../../../../kernel/usage-caps.ts";
 import { importHashKey } from "../../../../subsystem/attribution/src/infra/audit-record-hash.ts";
 import { type Application, createApplication } from "../../src/application.ts";
 import {
@@ -12,8 +13,10 @@ import {
 } from "../../src/approval-process-workflow.ts";
 import {
   caseAgentObject,
+  DailyAllowanceObject,
   DurableObjectCaseEventsDelivery,
   DurableObjectCaseWebSocketConnections,
+  DurableObjectDailyAllowance,
   DurableObjectMessageRateLimiter,
   type DurableObjectNamespace,
   forwardToCaseAgent,
@@ -40,6 +43,10 @@ interface Environment {
   readonly CASE_AGENT: DurableObjectNamespace;
   readonly MESSAGE_RATE_LIMITER: DurableObjectNamespace;
   readonly APPROVAL_PROCESS: WorkflowBinding;
+  readonly DAILY_ALLOWANCE: DurableObjectNamespace;
+  /** The usage guards' budget for a test (usage-guards D1). */
+  readonly TEST_AI_NEURONS_PER_DAY: string;
+  readonly TEST_NEURONS_PER_MODEL_CALL: string;
   /** A few seconds, so the real Workflow timer fires during a test (grants-and-approvals invariants). */
   readonly TEST_APPROVAL_WINDOW_SECONDS: string;
 }
@@ -85,6 +92,16 @@ function applicationFor(environment: Environment): Promise<Application> {
             : new DurableObjectCaseEventsDelivery(environment.CASE_AGENT).deliver(caseId),
       },
       approvalProcess: new WorkflowApprovalProcess(environment.APPROVAL_PROCESS, clock),
+      dailyAllowance: new DurableObjectDailyAllowance(environment.DAILY_ALLOWANCE),
+      usageCaps: usageCapsOf({
+        neuronsPerDay: Number(environment.TEST_AI_NEURONS_PER_DAY),
+        neuronsPerModelCall: Number(environment.TEST_NEURONS_PER_MODEL_CALL),
+      }),
+      signInRateLimiter: new DurableObjectMessageRateLimiter(
+        environment.MESSAGE_RATE_LIMITER,
+        "sign-in:",
+        SIGN_IN_ATTEMPTS_PER_MINUTE,
+      ),
       approvalWindowMilliseconds: Number(environment.TEST_APPROVAL_WINDOW_SECONDS) * 1000,
       outboxRetryAfterMilliseconds: 60 * 1000,
     }))();
@@ -109,6 +126,8 @@ export class CaseAgentObject extends BaseCaseAgentObject {
   override async onRequest(request: Request): Promise<Response> {
     const action = new URL(request.url).pathname.split("/")[2];
     switch (action) {
+      case "max-output-tokens":
+        return Response.json(scriptedModel(this.env).maxOutputTokens);
       case "language-model-calls":
         return new Response(String(scriptedModel(this.env).calls));
       case "offered-tools":
@@ -150,7 +169,7 @@ export class CaseAgentObject extends BaseCaseAgentObject {
   }
 }
 
-export { MessageRateLimiterObject };
+export { DailyAllowanceObject, MessageRateLimiterObject };
 
 export const ApprovalProcessWorkflow = approvalProcessWorkflow<Environment>(applicationFor);
 

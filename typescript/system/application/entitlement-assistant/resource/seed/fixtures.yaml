@@ -64,6 +64,54 @@ employees:
     job_function: supervisor
     job_level: 2
     password: morgan-demo-password
+  # A reviewer account for Cloudflare (usage-guards D7): deployed with a 24-character generated password.
+  - identity: emp_cf_alex
+    account: iac_cf_alex
+    status: Active
+    email: cf-alex@provider.example
+    given_name: Alex
+    family_name: Rivera
+    display_name: Alex (cf)
+    department: customer-support
+    job_function: representative
+    job_level: 1
+    password: cf-alex-demo-password
+  # A reviewer account for Cloudflare (usage-guards D7): deployed with a 24-character generated password.
+  - identity: emp_cf_blair
+    account: iac_cf_blair
+    status: Active
+    email: cf-blair@provider.example
+    given_name: Blair
+    family_name: Chen
+    display_name: Blair (cf)
+    department: customer-support
+    job_function: representative
+    job_level: 2
+    password: cf-blair-demo-password
+  # A reviewer account for Cloudflare (usage-guards D7): deployed with a 24-character generated password.
+  - identity: emp_cf_morgan
+    account: iac_cf_morgan
+    status: Active
+    email: cf-morgan@provider.example
+    given_name: Morgan
+    family_name: Lee
+    display_name: Morgan (cf)
+    department: customer-support
+    job_function: supervisor
+    job_level: 2
+    password: cf-morgan-demo-password
+  # A reviewer account for Cloudflare (usage-guards D7): deployed with a 24-character generated password.
+  - identity: emp_cf_sam
+    account: iac_cf_sam
+    status: Active
+    email: cf-sam@provider.example
+    given_name: Sam
+    family_name: Okafor
+    display_name: Sam (cf)
+    department: customer-support
+    job_function: supervisor
+    job_level: 1
+    password: cf-sam-demo-password
   - identity: emp_drew
     account: iac_drew
     status: Active
