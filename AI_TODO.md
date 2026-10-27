@@ -4,9 +4,12 @@
 
 1. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
 2. At the end: GitHub remote (owner, 2026-10-25).
-3. Feature explain-access: live §5 evaluation after the Workers AI allocation resets, then merge and close-out.
+3. Features explain-access and case-lifecycle: live evaluations once Workers AI answers again, then merge both into `main` (approved), GREEN on `main`, deploy, close-out.
+4. Next feature: grants-and-approvals (S15, S17, S18, S21–S26), spec first.
 
 ## Completed
+
+- Case-lifecycle built (2026-10-26): 28 + 9 scenarios across three owner-approved amendments, six review rounds, GREEN 537 @ c164cc2, deployed `418de419`.
 
 - Explain-access P1–P8 (2026-10-26): plan approved, spikes K1–K4, hardened `AIChatAgent`, deployed (`b39c53a8`), live smoke test passed, §5 evaluation 20/20 tool choice and 20/20 answers in words after the fix; last commit cbe8bc6.
 
