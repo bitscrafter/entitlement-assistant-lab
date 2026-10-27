@@ -10,7 +10,7 @@
 
 ## Completed
 
-- Grants-and-approvals live check passed against the deployment (discovery 34) and merged to `main` (2026-10-27).
+- Grants-and-approvals live check passed against the deployment (discovery 34) and merged to `main` (`7c8914c`, 2026-10-27); deployed from `main` (`c05d86ca`), GREEN 607, smoke test passed.
 
 - Grants-and-approvals built, reviewed twice, committed on `feature/grants-and-approvals` (`0ef4f28`), deployed (`ff293743`, 2026-10-27) after a Neon reset and reseed with Morgan; GREEN 606.
 
