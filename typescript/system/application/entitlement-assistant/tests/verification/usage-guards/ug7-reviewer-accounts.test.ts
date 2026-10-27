@@ -15,6 +15,10 @@ describe("usage-guards reviewer accounts", () => {
     ["cf-blair", "Blair (cf)", "representative", 2, ["subscription-cancellation", "support-case-handling"]],
     ["cf-morgan", "Morgan (cf)", "supervisor", 2, ["approval-decision", "case-supervision"]],
     ["cf-sam", "Sam (cf)", "supervisor", 1, ["approval-decision", "case-supervision"]],
+    ["bc-alex", "Alex (bc)", "representative", 1, ["support-case-handling"]],
+    ["bc-blair", "Blair (bc)", "representative", 2, ["subscription-cancellation", "support-case-handling"]],
+    ["bc-morgan", "Morgan (bc)", "supervisor", 2, ["approval-decision", "case-supervision"]],
+    ["bc-sam", "Sam (bc)", "supervisor", 1, ["approval-decision", "case-supervision"]],
   ])(
     "UG7 ensures %s signs in as %s, %s level %d",
     async (alias, displayName, jobFunction, jobLevel, roles) => {

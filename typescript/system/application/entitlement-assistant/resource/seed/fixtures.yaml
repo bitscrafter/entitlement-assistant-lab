@@ -112,6 +112,54 @@ employees:
     job_function: supervisor
     job_level: 1
     password: cf-sam-demo-password
+  # A demo account for the bitscrafter.com page (usage-guards D7): deployed with a 24-character generated password.
+  - identity: emp_bc_alex
+    account: iac_bc_alex
+    status: Active
+    email: bc-alex@provider.example
+    given_name: Alex
+    family_name: Rivera
+    display_name: Alex (bc)
+    department: customer-support
+    job_function: representative
+    job_level: 1
+    password: bc-alex-demo-password
+  # A demo account for the bitscrafter.com page (usage-guards D7): deployed with a 24-character generated password.
+  - identity: emp_bc_blair
+    account: iac_bc_blair
+    status: Active
+    email: bc-blair@provider.example
+    given_name: Blair
+    family_name: Chen
+    display_name: Blair (bc)
+    department: customer-support
+    job_function: representative
+    job_level: 2
+    password: bc-blair-demo-password
+  # A demo account for the bitscrafter.com page (usage-guards D7): deployed with a 24-character generated password.
+  - identity: emp_bc_morgan
+    account: iac_bc_morgan
+    status: Active
+    email: bc-morgan@provider.example
+    given_name: Morgan
+    family_name: Lee
+    display_name: Morgan (bc)
+    department: customer-support
+    job_function: supervisor
+    job_level: 2
+    password: bc-morgan-demo-password
+  # A demo account for the bitscrafter.com page (usage-guards D7): deployed with a 24-character generated password.
+  - identity: emp_bc_sam
+    account: iac_bc_sam
+    status: Active
+    email: bc-sam@provider.example
+    given_name: Sam
+    family_name: Okafor
+    display_name: Sam (bc)
+    department: customer-support
+    job_function: supervisor
+    job_level: 1
+    password: bc-sam-demo-password
   - identity: emp_drew
     account: iac_drew
     status: Active

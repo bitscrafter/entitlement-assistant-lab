@@ -16,7 +16,7 @@
 | D4 | **G3, per turn:** at most 1,024 output tokens per model call, at most 5 model calls per message (as now), and the model reads the latest 20 messages of the conversation. | A turn's cost is bounded, and a long conversation does not cost more and more. |
 | D5 | **G4, kill switch:** `AI_NEURONS_PER_DAY = 0` refuses every turn without calling the model; sign-in, cases, and approvals keep working. | Off with one setting. |
 | D6 | **G5, sign-in per IP address:** at most 10 attempts a minute per address (`cf-connecting-ip`); the 11th answers `429 rate_limited` whatever the password. | Sign-in is the costly route open to anyone (password hashing). |
-| D7 | **Reviewer accounts:** `cf-alex` (representative, level 1), `cf-blair` (representative, level 2), `cf-morgan` (supervisor, level 2), `cf-sam` (supervisor, level 1), `@provider.example`, display names "Alex (cf)" and so on; deployed passwords are 24 random characters, given to reviewers privately. | Dedicated accounts, told apart in the audit trail; four roles show reads, Enterprise reads, approvals, and no self-approval. |
+| D7 | **Reviewer accounts:** `cf-alex` (representative, level 1), `cf-blair` (representative, level 2), `cf-morgan` (supervisor, level 2), `cf-sam` (supervisor, level 1), `@provider.example`, display names "Alex (cf)" and so on; deployed passwords are 24 random characters, given to reviewers privately. | Dedicated accounts, told apart in the audit trail; four roles show reads, Enterprise reads, approvals, and no self-approval. A second set with the `bc-` prefix ("Alex (bc)"…) serves the bitscrafter.com page's demo (owner, 2026-10-27). |
 
 ## 2. Scenarios
 
@@ -28,4 +28,4 @@
 | UG4 | A turn's bounds | Every model call carries at most 1,024 output tokens; a conversation of 30 messages sends the model only the latest 20. |
 | UG5 | Sign-in attempts from one address | The 11th within a minute is `429 rate_limited`, even with the right password; another address signs in. |
 | UG6 | The derivation | 10,000 and 100 give 100 model calls and 40 messages; 0 gives 0 and 0. |
-| UG7 | The reviewer accounts | The four `cf-` employees sign in with their roles. |
+| UG7 | The reviewer accounts | The four `cf-` and four `bc-` employees sign in with their roles. |
