@@ -10,6 +10,8 @@ changes anything; a change is only prepared, and a person confirms it.
 
 - **Live:** <https://entitlement-assistant.jose-luis-rios.workers.dev> (sign-in only; reviewers receive accounts
   privately)
+- **Try it:** [`tech-docs/demo-scenarios.md`](tech-docs/demo-scenarios.md), 21 scripted scenarios: who to sign in
+  as, what to type or click, what to expect, and what each shows
 - **Code:** [`typescript/system/`](typescript/system/) · **Docs:** [`tech-docs/`](tech-docs/)
 
 ## What it does

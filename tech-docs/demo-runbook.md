@@ -65,7 +65,8 @@ Two accounts are needed to show an approval: nobody approves a change they reque
    It ends with `Reset: 17 migrations, 165 seeded identifiers (fixture day …), policy set … active`. Everything in the database is replaced: cases, grants, approvals, the audit trail. The fixture dates move to today.
 2. **Check the allowance:** the day's model calls are shared by everyone. If a demo matters, avoid running checks that day, and keep the assistant on (`AI_NEURONS_PER_DAY` above 0, §6).
 3. **Sign in once** as the representative and the supervisor you will use, in two browsers (or a private window), so both are ready.
-4. **Have the demo script** (the bitscrafter.com page) open.
+4. **Have the demo script** open: the scenarios in [`demo-scenarios.md`](demo-scenarios.md) (also the base of the
+   bitscrafter.com page's walkthrough).
 
 ## 4. During a demo
 
