@@ -233,8 +233,8 @@ process covers the assignment's workflow component; it carries the change-reques
 | --- | --- | --- | --- | --- |
 | 1 | employee-sign-in | S01–S03, S04a–S04f | — | [`features/employee-sign-in/employee-sign-in.verification-spec.md`](features/employee-sign-in/employee-sign-in.verification-spec.md) |
 | 2 | explain-access | S05a–S13 | employee-sign-in | [`features/explain-access/explain-access.verification-spec.md`](features/explain-access/explain-access.verification-spec.md) |
-| 3 | case-lifecycle | S27, S33, S34 | explain-access | planned |
-| 4 | grants-and-approvals | S15, S17, S18, S21–S26 | case-lifecycle | planned |
+| 3 | case-lifecycle | S27, S33, S34 | explain-access | [`features/case-lifecycle/case-lifecycle.verification-spec.md`](features/case-lifecycle/case-lifecycle.verification-spec.md) |
+| 4 | grants-and-approvals | S15, S17, S18, S21–S26, S38, S39 | case-lifecycle | [`features/grants-and-approvals/grants-and-approvals.verification-spec.md`](features/grants-and-approvals/grants-and-approvals.verification-spec.md) |
 | 5 | change-subscription | S14, S16, S16a, S16b, S19, S20 | grants-and-approvals | planned |
 | — | candidate features | S28–S32 | — | — |
 

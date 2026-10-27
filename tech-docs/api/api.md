@@ -252,11 +252,13 @@ subject is set, the read tools act on it only (case-lifecycle D6).
 | `explain_access` | `ExplainAccess` | `person_email`, `account_id`, `feature_key`, `operation` | outcome, findings, remedy | explain-access |
 | `propose_case_subject` | `ProposeCaseSubject` · `account.read` | `account_id` | `proposed` with the account as stored; nothing is set; the UI offers **Set as case subject** | case-lifecycle |
 | `draft_case_summary` | none | `summary` | `drafted` with the summary; nothing is stored; the case panel offers it for review | case-lifecycle |
-| `prepareChangePlan` | `PrepareChangeRequest` (`ChangePlan`) | `target_plan_key`, `coverage_source?`, `duration_days?` | change request id and diff, or refusal | change-subscription |
-| `prepareCancellation` | `PrepareChangeRequest` (`CancelSubscription`) | none | change request id and diff, or refusal | change-subscription |
-| `getAccountHistory` | `GetAccountHistory` · `audit.read` | `limit?` | audit records with actor, participants, outcome, reasons | change-subscription |
-| `prepareGrant` | `PrepareChangeRequest` (`CreateGrant`) | `feature_key`, `quota?`, `duration_days`, `reason` | change request id and diff, or refusal | grants-and-approvals |
-| `prepareCourtesyTerm` | `PrepareChangeRequest` (`AddCourtesyTerm`) | `duration_days`, `reason` | change request id and diff, or refusal | candidate S28 |
+| `prepare_change_plan` | `PrepareChangeRequest` (`ChangePlan`) | `target_plan_key`, `coverage_source?`, `duration_days?` | change request id and diff, or refusal | change-subscription |
+| `prepare_cancellation` | `PrepareChangeRequest` (`CancelSubscription`) | none | change request id and diff, or refusal | change-subscription |
+| `get_account_history` | `GetAccountHistory` · `audit.read` | `limit?` | audit records with actor, participants, outcome, reasons | change-subscription |
+| `prepare_grant` | `PrepareChangeRequest` (`CreateGrant`) | `feature_key`, `quota?`, `duration_days`, `reason` | `prepared` with the change request (id, kind, parameters, diff, preview with reasons), or a refusal | grants-and-approvals |
+| `prepare_grant_revocation` | `PrepareChangeRequest` (`RevokeGrant`) | `grant_id`, `reason` | as `prepare_grant`; an inactive grant is refused | grants-and-approvals |
+| `prepare_grant_extension` | `PrepareChangeRequest` (`ExtendGrant`) | `grant_id`, `duration_days`, `reason` | as `prepare_grant`; an expired grant is refused (prepare a new grant) | grants-and-approvals |
+| `prepare_courtesy_term` | `PrepareChangeRequest` (`AddCourtesyTerm`) | `duration_days`, `reason` | change request id and diff, or refusal | candidate S28 |
 
 Preparing runs the decision early so that the card can show a refusal or an approval need before the CSR
 confirms; the decision that counts is the one at confirmation (SU-4).
