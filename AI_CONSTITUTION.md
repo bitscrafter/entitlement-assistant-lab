@@ -89,11 +89,11 @@ guard is a work item.**
 | `model-has-no-io` | A subsystem's `model/` imports nothing outside itself and the shared pure `kernel/`: no I/O, framework, or other layer. | dependency-cruiser rule in the GREEN gate |
 | `dependencies-point-inward` | Inside a subsystem: `model` ← `usecase` ← `infra`; only `infra` and shared adapters import `external/`; only the application's bootstrap wires adapters. | dependency-cruiser rule in the GREEN gate |
 | `subsystems-meet-through-use-cases` | A subsystem uses another only through its public use cases and ports; never its model internals or tables. | dependency-cruiser rule in the GREEN gate |
-| `llm-never-authorizes` | Every tool call reaches a use case that asks the PDP before reading or changing data. | verification tests per feature; architecture test that every use case calls the PDP |
+| `llm-never-authorizes` | Every tool call reaches a use case that asks the PDP before reading or changing data. | verification tests per feature; the architecture test `tests/verification/architecture/llm-never-authorizes.test.ts`: every tool and every route, run as an employee every decision refuses, answers a refusal naming no customer data and leaves a `Deny` record; a tool or route it does not list fails it |
 | `principal-comes-from-session` | The principal of every decision is the verified session token's subject (or the system principal). No tool argument or message text can set it. | explain-access S05 and S06 |
 | `deny-by-default` | Nothing is allowed unless a role or assignment explicitly grants the permission; policies only add requirements (AU-3). | access-handler and decision-chain unit tests |
 | `every-decision-is-audited` | Every policy decision and every sign-in attempt writes an audit record. | employee-sign-in S01, S02; explain-access S07, S08 |
-| `state-change-needs-confirmation` | No CSR-caused state change is applied without a confirmation bound to its proposal. | change-subscription feature (guard owed) |
+| `state-change-needs-confirmation` | No CSR-caused state change is applied without a confirmation bound to its proposal. | grants-and-approvals S18a (no tool applies a change), S21a and S17a (a confirmation applies the shown change, once) |
 | `policies-are-data` | Authorization rules live in the policy set, not in code branches. | review checklist (guard owed) |
 | `audit-fails-closed` | An action whose audit record cannot be written does not happen (AT-3). | verification test with a failing audit writer |
 | `foreign-keys-point-downward` | Foreign keys follow the layer order; upward links are soft references (CM-15). | schema test over the migrations |

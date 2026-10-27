@@ -40,6 +40,7 @@ export interface PendingApproval {
 /** The approvals a supervisor may decide (SU-12, grants-and-approvals D7). */
 export class ListPendingApprovals {
   readonly #decider: AuthorizationDecider;
+  readonly #audit: AuditRecorder;
   readonly #changeRequests: ChangeRequestRepository;
   readonly #getCustomerAccount: GetCustomerAccount;
   readonly #getInternalAccountNames: GetInternalAccountNames;
@@ -47,12 +48,14 @@ export class ListPendingApprovals {
 
   constructor(dependencies: {
     readonly decider: AuthorizationDecider;
+    readonly audit: AuditRecorder;
     readonly changeRequests: ChangeRequestRepository;
     readonly getCustomerAccount: GetCustomerAccount;
     readonly getInternalAccountNames: GetInternalAccountNames;
     readonly clock: Clock;
   }) {
     this.#decider = dependencies.decider;
+    this.#audit = dependencies.audit;
     this.#changeRequests = dependencies.changeRequests;
     this.#getCustomerAccount = dependencies.getCustomerAccount;
     this.#getInternalAccountNames = dependencies.getInternalAccountNames;
@@ -60,7 +63,7 @@ export class ListPendingApprovals {
   }
 
   /**
-   * @ensures `Forbidden` without `approval.decide` (the list names no account then).
+   * @ensures `Forbidden` without `approval.decide`, with one `Deny` record (the list names no account then).
    * @ensures Otherwise every approval still `Pending` in its deadline on an account the approver may read, earliest
    *          deadline first, with its change, the subject's name, and who requested and confirmed it.
    */
@@ -74,7 +77,25 @@ export class ListPendingApprovals {
       principal: { kind: "Employee", accountId: actor.principalAccountId },
       actionKey: DECIDE,
     });
-    if (gate.outcome !== "Allow") return { kind: "Forbidden" };
+    if (gate.outcome !== "Allow") {
+      // A refusal is recorded (every-decision-is-audited); an allowed listing is not, as the panel lists every
+      // 30 seconds and each approval shown is decided again on `account.read` (discovery 10 of usage-guards).
+      await this.#audit.record({
+        actorAccountId: actor.principalAccountId,
+        sessionId: actor.sessionId,
+        traceId: actor.traceId,
+        actionKey: DECIDE,
+        outcome: gate.outcome,
+        policySetVersion: gate.policySetVersion,
+        subjectAccountId: null,
+        caseId: null,
+        changeRequestId: null,
+        detail: {},
+        participants: [],
+        reasons: gate.reasonCodes,
+      });
+      return { kind: "Forbidden" };
+    }
     const pending = await this.#changeRequests.pendingApprovals(this.#clock.now(), PANEL_LIMIT);
     const names = await this.#getInternalAccountNames.execute(
       pending.flatMap(({ request }) => [

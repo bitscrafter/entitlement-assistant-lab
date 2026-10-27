@@ -164,6 +164,11 @@ export interface Application {
   sweep(): Promise<void>;
   /** The approval process woke for its approval: the decision arrived, or the deadline (D8, D9). */
   approvalProcessWoke(approvalId: Uuid, cause: "decision" | "deadline"): Promise<void>;
+  /**
+   * Every route the application answers, as `METHOD /path` with `{…}` for path parameters: the architecture test of
+   * `llm-never-authorizes` covers each one, so a new route cannot skip it.
+   */
+  routeKeys(): readonly string[];
 }
 
 export interface CaseAgentParts {
@@ -499,6 +504,22 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     },
 
     approvalProcessWoke,
+
+    routeKeys(): readonly string[] {
+      const under = (prefix: string, key: string) => {
+        const [method = "", action = ""] = key.split(" ");
+        return `${method} ${prefix}${action === "" ? "" : `/${action}`}`;
+      };
+      return [
+        ...Object.keys(routes),
+        ...Object.keys(caseRoutes).map((key) => under("/api/cases/{case_id}", key)),
+        ...Object.keys(changeRequestRoutes).map((key) =>
+          under("/api/cases/{case_id}/change-requests/{change_request_id}", key),
+        ),
+        "POST /api/approvals/{approval_id}/decision",
+        `GET ${CASE_AGENT_PATH}{case_id}`,
+      ].sort();
+    },
 
     async fetch(request: Request): Promise<Response> {
       const url = new URL(request.url);
@@ -1381,6 +1402,7 @@ function buildUseCases(
     }),
     listPendingApprovals: new ListPendingApprovals({
       decider: caseWork.decider,
+      audit,
       changeRequests,
       getCustomerAccount: caseWork.getCustomerAccount,
       getInternalAccountNames: new GetInternalAccountNames({ accounts }),
