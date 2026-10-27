@@ -15,10 +15,14 @@
   "durable_objects": {
     "bindings": [
       { "name": "CASE_AGENT", "class_name": "CaseAgentObject" },
-      { "name": "MESSAGE_RATE_LIMITER", "class_name": "MessageRateLimiterObject" }
+      { "name": "MESSAGE_RATE_LIMITER", "class_name": "MessageRateLimiterObject" },
+      { "name": "DAILY_ALLOWANCE", "class_name": "DailyAllowanceObject" }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CaseAgentObject", "MessageRateLimiterObject"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["CaseAgentObject", "MessageRateLimiterObject"] },
+    { "tag": "v2", "new_sqlite_classes": ["DailyAllowanceObject"] }
+  ],
   "workflows": [
     {
       "binding": "APPROVAL_PROCESS",
@@ -27,7 +31,15 @@
     }
   ],
   "triggers": { "crons": ["*/15 * * * *"] },
-  "vars": { "APPROVAL_WINDOW_SECONDS": "259200", "OUTBOX_RETRY_AFTER_SECONDS": "60" },
+  "vars": {
+    "APPROVAL_WINDOW_SECONDS": "259200",
+    "OUTBOX_RETRY_AFTER_SECONDS": "60",
+    // The demo's AI budget (usage-guards D1): every usage cap derives from it; 10000 is Workers AI's daily free
+    // allowance, so nothing is billed past it; "0" turns the assistant off.
+    "AI_NEURONS_PER_DAY": "10000",
+    // The estimated neurons of one model call: calibrate it from the dashboard (neurons used ÷ model calls).
+    "NEURONS_PER_MODEL_CALL": "100"
+  },
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",

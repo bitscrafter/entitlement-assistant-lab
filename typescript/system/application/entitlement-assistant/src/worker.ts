@@ -4,6 +4,7 @@ import { UuidVersion7Generator } from "../../../adapter/identifier/uuid-version7
 import { PostgresConnection } from "../../../adapter/postgres/postgres-connection.ts";
 import { ConsoleSecurityEventLog } from "../../../adapter/security-event-log/console-security-event-log.ts";
 import { createWorkersAI, simulateStreamingMiddleware, wrapLanguageModel } from "../../../external/ai.ts";
+import { SIGN_IN_ATTEMPTS_PER_MINUTE, usageCapsOf } from "../../../kernel/usage-caps.ts";
 import { importHashKey } from "../../../subsystem/attribution/src/infra/audit-record-hash.ts";
 import { type Application, createApplication } from "./application.ts";
 import {
@@ -13,8 +14,10 @@ import {
 } from "./approval-process-workflow.ts";
 import {
   caseAgentObject,
+  DailyAllowanceObject,
   DurableObjectCaseEventsDelivery,
   DurableObjectCaseWebSocketConnections,
+  DurableObjectDailyAllowance,
   DurableObjectMessageRateLimiter,
   type DurableObjectNamespace,
   forwardToCaseAgent,
@@ -38,10 +41,23 @@ interface Environment {
   readonly CASE_AGENT: DurableObjectNamespace;
   readonly MESSAGE_RATE_LIMITER: DurableObjectNamespace;
   readonly APPROVAL_PROCESS: WorkflowBinding;
+  readonly DAILY_ALLOWANCE: DurableObjectNamespace;
+  /** The demo's AI budget in neurons per UTC day (usage-guards D1); every usage cap derives from it; 0 turns it off. */
+  readonly AI_NEURONS_PER_DAY?: string;
+  /** The estimated neurons of one model call, to calibrate from the dashboard (usage-guards D1). */
+  readonly NEURONS_PER_MODEL_CALL?: string;
   /** How long an approval waits for a decision, in seconds (grants-and-approvals D9); 72 hours when unset. */
   readonly APPROVAL_WINDOW_SECONDS?: string;
   /** How old an undelivered outbox message is before the sweep delivers it, in seconds (D6); 60 when unset. */
   readonly OUTBOX_RETRY_AFTER_SECONDS?: string;
+}
+
+/** A whole number from a setting, 0 included; the default when unset or malformed. */
+export function wholeNumberSetting(value: string | undefined, defaultValue: number): number {
+  const number = Number(value);
+  return value !== undefined && value.trim() !== "" && Number.isInteger(number) && number >= 0
+    ? number
+    : defaultValue;
 }
 
 /** A positive whole number of seconds from a setting, in milliseconds; the default when unset or malformed. */
@@ -112,6 +128,16 @@ async function build(environment: Environment): Promise<Application> {
     ),
     caseEventsDelivery: new DurableObjectCaseEventsDelivery(environment.CASE_AGENT),
     approvalProcess: new WorkflowApprovalProcess(environment.APPROVAL_PROCESS, clock),
+    dailyAllowance: new DurableObjectDailyAllowance(environment.DAILY_ALLOWANCE),
+    usageCaps: usageCapsOf({
+      neuronsPerDay: wholeNumberSetting(environment.AI_NEURONS_PER_DAY, 10_000),
+      neuronsPerModelCall: wholeNumberSetting(environment.NEURONS_PER_MODEL_CALL, 100),
+    }),
+    signInRateLimiter: new DurableObjectMessageRateLimiter(
+      environment.MESSAGE_RATE_LIMITER,
+      "sign-in:",
+      SIGN_IN_ATTEMPTS_PER_MINUTE,
+    ),
     approvalWindowMilliseconds: secondsSetting(environment.APPROVAL_WINDOW_SECONDS, 72 * 60 * 60),
     outboxRetryAfterMilliseconds: secondsSetting(environment.OUTBOX_RETRY_AFTER_SECONDS, 60),
   });
@@ -159,4 +185,4 @@ export const CaseAgentObject = caseAgentObject<Environment>({
     }),
 });
 
-export { MessageRateLimiterObject };
+export { DailyAllowanceObject, MessageRateLimiterObject };

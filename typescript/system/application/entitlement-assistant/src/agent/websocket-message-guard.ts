@@ -17,6 +17,8 @@ export const MAXIMUM_FRAME_BYTES = 16 * 1024;
 export const CLOSES = {
   messageTooBig: { code: 1009, reason: "message_too_big" },
   rateLimited: { code: 4429, reason: "rate_limited" },
+  /** The employee's messages for the UTC day are used up (usage-guards D3). */
+  dailyLimit: { code: 4430, reason: "daily_limit" },
   sessionExpired: { code: 4401, reason: "session_expired" },
   caseUnavailable: { code: 4404, reason: "case_unavailable" },
   invalidSession: { code: 4401, reason: "invalid_session" },
@@ -43,6 +45,8 @@ export type GuardDecision =
 
 export interface WebSocketMessageGuardDependencies {
   readonly rateLimiter: MessageRateLimiter;
+  /** Takes one of the employee's messages for the UTC day (usage-guards D3); `Allowed` while the assistant is off. */
+  readonly takeDailyMessage: (accountId: Uuid, at: Date) => Promise<"Allowed" | "Refused">;
   readonly clock: Clock;
   /** Whether the principal may still act, loaded fresh (D10, CM-16). */
   readonly principalMayAct: (accountId: Uuid) => Promise<boolean>;
@@ -67,7 +71,8 @@ export class WebSocketMessageGuard {
    * @ensures Only a chat request reaches the model, rebuilt from `storedMessages` and the newest user message's text:
    *          history, triggers, client tools, and body fields a client sends are ignored.
    * @ensures A frame the SDK would let write the conversation, a tool result or approval, or the state is dropped.
-   * @ensures A chat request past the rate limit closes with 4429, after the token's expiry with 4401
+   * @ensures A chat request past the rate limit closes with 4429; past the employee's messages for the day with 4430
+   *          (usage-guards D3); after the token's expiry with 4401
    *          `session_expired`, and for a principal who may no longer act with 4401 `invalid_session`; the principal
    *          is re-loaded only after the other checks pass.
    * @ensures A stream frame (resume, cancel) is checked for the token's expiry and re-loads the principal (D6, D10),
@@ -97,6 +102,9 @@ export class WebSocketMessageGuard {
     const now = this.#dependencies.clock.now();
     if ((await this.#dependencies.rateLimiter.attempt(session.principalAccountId, now)) === "Refused") {
       return { kind: "Close", close: CLOSES.rateLimited };
+    }
+    if ((await this.#dependencies.takeDailyMessage(session.principalAccountId, now)) === "Refused") {
+      return { kind: "Close", close: CLOSES.dailyLimit };
     }
     const close = await this.#sessionClose(session, now);
     if (close !== null) return { kind: "Close", close };

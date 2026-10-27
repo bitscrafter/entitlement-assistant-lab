@@ -56,6 +56,10 @@ export interface WorkerHarness {
  */
 export async function createWorkerHarness(
   script: readonly ScriptedStep[] = SPEC_SCRIPT,
+  usage: { readonly neuronsPerDay: number; readonly neuronsPerModelCall: number } = {
+    neuronsPerDay: 10_000,
+    neuronsPerModelCall: 100,
+  },
 ): Promise<WorkerHarness> {
   const database: TestDatabase = await createTestDatabase();
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
@@ -79,9 +83,13 @@ export async function createWorkerHarness(
             bindings: [
               { name: "CASE_AGENT", class_name: "CaseAgentObject" },
               { name: "MESSAGE_RATE_LIMITER", class_name: "MessageRateLimiterObject" },
+              { name: "DAILY_ALLOWANCE", class_name: "DailyAllowanceObject" },
             ],
           },
-          migrations: [{ tag: "v1", new_sqlite_classes: ["CaseAgentObject", "MessageRateLimiterObject"] }],
+          migrations: [
+            { tag: "v1", new_sqlite_classes: ["CaseAgentObject", "MessageRateLimiterObject"] },
+            { tag: "v2", new_sqlite_classes: ["DailyAllowanceObject"] },
+          ],
           workflows: [
             {
               binding: "APPROVAL_PROCESS",
@@ -91,6 +99,8 @@ export async function createWorkerHarness(
           ],
           vars: {
             TEST_APPROVAL_WINDOW_SECONDS: "8",
+            TEST_AI_NEURONS_PER_DAY: String(usage.neuronsPerDay),
+            TEST_NEURONS_PER_MODEL_CALL: String(usage.neuronsPerModelCall),
             TEST_LANGUAGE_MODEL_SCRIPT: JSON.stringify(script),
             TEST_APPLICATION_ORIGIN: ORIGIN,
             TEST_SESSION_SIGNING_KEY: JSON.stringify(privateJwk),

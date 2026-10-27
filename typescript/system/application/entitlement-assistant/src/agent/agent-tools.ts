@@ -15,7 +15,10 @@ export class ToolRefusal extends Error {
 }
 
 const isRefusal = (error: unknown): error is Error =>
-  error instanceof Error && (error.name === "ToolRefusal" || error.name === "AI_InvalidToolInputError");
+  error instanceof Error &&
+  (error.name === "ToolRefusal" ||
+    error.name === "AI_InvalidToolInputError" ||
+    error.name === "DailyAllowanceExhausted");
 
 /**
  * The message the model and the browser may see for a failed tool call or turn: a refusal of the arguments as written
@@ -34,6 +37,8 @@ export function shownToolError(error: unknown, traceId: string): string {
  * @ensures Anything else logs `case-agent-turn-failed` with the trace id and the error's message.
  */
 export function turnErrorLogOf(error: unknown, traceId: string): Readonly<Record<string, string | null>> {
+  if (error instanceof Error && error.name === "DailyAllowanceExhausted")
+    return { log: "daily-allowance-exhausted", traceId };
   if (isRefusal(error)) {
     const toolName = (error as { readonly toolName?: unknown }).toolName;
     return { log: "tool-arguments-refused", traceId, tool: typeof toolName === "string" ? toolName : null };

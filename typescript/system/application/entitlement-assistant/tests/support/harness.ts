@@ -1,4 +1,5 @@
 import { FixedClock } from "../../../../adapter/clock/fixed-clock.ts";
+import { InMemoryDailyAllowance } from "../../../../adapter/daily-allowance/in-memory-daily-allowance.ts";
 import { UuidVersion7Generator } from "../../../../adapter/identifier/uuid-version7-generator.ts";
 import { InMemoryMessageRateLimiter } from "../../../../adapter/message-rate-limiter/in-memory-message-rate-limiter.ts";
 import { PostgresConnection } from "../../../../adapter/postgres/postgres-connection.ts";
@@ -6,6 +7,7 @@ import { RecordingSecurityEventLog } from "../../../../adapter/security-event-lo
 import { createTestDatabase, type TestDatabase } from "../../../../adapter/tests/support/database.ts";
 import { generateKeyPair, SignJWT } from "../../../../external/jose.ts";
 import { encodeIdentifier, type IdentifierPrefix, type Uuid } from "../../../../kernel/identifier.ts";
+import { SIGN_IN_ATTEMPTS_PER_MINUTE, usageCapsOf } from "../../../../kernel/usage-caps.ts";
 import { importHashKey } from "../../../../subsystem/attribution/src/infra/audit-record-hash.ts";
 import type { ReadRequest } from "../../../../subsystem/support/src/usecase/read-request.ts";
 import type { ConnectionSession } from "../../src/agent/websocket-message-guard.ts";
@@ -102,6 +104,9 @@ export async function createHarness(): Promise<Harness> {
       deliverDecision: async (approvalId) => void approvalProcess.decisions.push(approvalId),
       terminate: async (approvalId) => void approvalProcess.terminated.push(approvalId),
     },
+    dailyAllowance: new InMemoryDailyAllowance(),
+    usageCaps: usageCapsOf({ neuronsPerDay: 10_000, neuronsPerModelCall: 100 }),
+    signInRateLimiter: new InMemoryMessageRateLimiter(SIGN_IN_ATTEMPTS_PER_MINUTE),
     approvalWindowMilliseconds: 72 * 60 * 60 * 1000,
     outboxRetryAfterMilliseconds: 60 * 1000,
   });
