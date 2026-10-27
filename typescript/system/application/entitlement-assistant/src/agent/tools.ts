@@ -182,6 +182,16 @@ const checkArguments = z.strictObject({ account_id: z.string().max(64), feature_
 const listArguments = z.strictObject({ account_id: z.string().max(64) });
 /** A draft is stored only as the CSR submits it, so it is bounded like the stored summary (D7, D8). */
 const summaryArguments = z.strictObject({ summary: z.string().trim().min(1).max(4000) });
+
+/**
+ * An email address anywhere in a text: a closed case's summary is read by anyone who may read the subject, so it names
+ * no person's email (case-lifecycle D8; discovery 17). Names are not caught: the instructions and the CSR's review
+ * cover them.
+ */
+const EMAIL_IN_TEXT = /[^\s@[\]()<>"'`,;:]+@[^\s@[\]()<>"'`,;:]+\.[A-Za-z]{2,}/;
+
+export const SUMMARY_WITH_EMAIL =
+  "A case summary may not contain an email address: anyone who may read the account reads it. Rewrite it without one.";
 const explainArguments = z.strictObject({
   person_email: z.string().max(320),
   account_id: z.string().max(64),
@@ -570,6 +580,7 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
     async run(argumentsWritten) {
       const parsed = summaryArguments.safeParse(argumentsWritten);
       if (!parsed.success) return { errorText: argumentError(parsed.error) };
+      if (EMAIL_IN_TEXT.test(parsed.data.summary)) return { errorText: SUMMARY_WITH_EMAIL };
       return { output: { result: "drafted", summary: parsed.data.summary } };
     },
   },
