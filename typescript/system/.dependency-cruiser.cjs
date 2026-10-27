@@ -89,6 +89,11 @@ module.exports = {
     exclude: { path: ["\\.wrangler", "ui-dist"] },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: "tsconfig.json" },
-    enhancedResolveOptions: { extensions: [".ts", ".tsx", ".js"] },
+    enhancedResolveOptions: {
+      extensions: [".ts", ".tsx", ".js"],
+      // Packages expose subpaths (agents/react) through `exports`; without these, they would resolve as unknown.
+      exportsFields: ["exports"],
+      conditionNames: ["import", "require", "node", "default", "types"],
+    },
   },
 };

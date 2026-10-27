@@ -1,6 +1,6 @@
 # AI Session — current state
 
-**Updated:** 2026-10-25 (deploy session)
+**Updated:** 2026-10-26 (explain-access P8, CM-19)
 
 ## State
 
@@ -18,13 +18,23 @@
   disabled; production secrets in `.env.production-secrets.json`. All three files are git-ignored, mode 600, and never
   shown in chat. Smoke test passed: sign-in, session, identical refusals (demo password, unknown email, suspended),
   foreign origin 403, `__Host-` cookie with HttpOnly, Secure, SameSite=Strict, CSP and HSTS headers.
-- **Feature explain-access:** its spec exists but predates what employee-sign-in established; it is updated
-  just before it is built (owner rule: specs just in time).
+- **Feature explain-access: P1–P8 built** on branch `feature/explain-access` (last commit cbe8bc6), deployed
+  (version `b39c53a8`). Neon reset, migrated, and reseeded (same generated passwords, fixture day 2026-10-26); the
+  bundled policy set registered and activated as `sys_deployment` (`npm run policies:register`). Live smoke test
+  passed (redirect, sign-in, case, foreign-origin upgrade 403, check and refusal turns, another CSR's case 404).
+  Spec §5 evaluation, 4 messages × 5 runs: tool choice 20/20; answers in words 13/20, then 20/20 after the fix
+  (discoveries 33, 34). State in `tech-docs/features/explain-access/workflow/progress.md`.
 
 ## Next session
 
 1. Owner: keep the production secrets in a password manager.
-2. Update the explain-access spec, owner approval, build.
+2. Explain-access (resume here): after 00:00 UTC, when the free Workers AI allocation resets, run the amended §5
+   evaluation against version `58b37e05` (deployed from d44d6ae): `EVALUATION_ORIGIN=https://entitlement-assistant.jose-luis-rios.workers.dev
+   SEED_PASSWORDS_FILE=.env.seed-passwords npm run eval:live` (25 turns, about 5,000 neurons). Record it as
+   discovery 39, then ask the owner to merge `feature/explain-access` into `main` and close out (AI_WORKFLOW.md §6).
+3. Done for explain-access: GREEN 387 @ d44d6ae; adversarial review round 1 REJECT (fixed), round 2 ACCEPT (minor
+   findings fixed or ruled, discoveries 37, 38); non-AI smoke test of `58b37e05` passed; discoveries reconciled
+   except 36 (the evaluation).
 
 ## Decisions (owner, 2026-10-22)
 
@@ -52,11 +62,40 @@
 - Prompt history and the GitHub remote come at the end; transcripts published redacted under `tech-docs/`.
 - A database that is not local is seeded with generated, easy-to-type passwords (`alex-k7m2-x9qp-4hdr`), never the
   published demo passwords (option A). `neonctl` installed globally.
+- Explain-access spec rulings: D9 WebSocket upgrades need the application's Origin; D10 every message re-loads the
+  principal (close 4401 invalid_session); D11 messages over 16 KiB close with 1009; D12 a principal without
+  account.read is refused before any customer data is read, and a lookup matching nothing is audited
+  (support.no-matching-account, query HMAC only); D13 20 messages per minute per employee, a Durable Object counter
+  behind a rate-limiter port, close 4429 rate_limited; security-event causes CaseNotFound and CaseNotAssigned.
+- Explain-access plan approved with every recommendation: agent tests fall back to a plain class in Node if the
+  Workers pool spike fails; policy registration and activation in this feature; spec cases are test fixtures, not
+  seed; the deployed seed shifts fixture dates to the seeding day; one feature. Terms approved: message rate limiter,
+  connection session, permission gate, policy expression evaluator, scripted language model.
+- RED gate kept with mutations owed for S05c and S08e case C (both proven in P5); S05j and S09a amended; failing
+  tests not yet built are skipped and committed, then enabled in the phase that builds them.
+- The case agent is a hardened `AIChatAgent` (CM-18): the Agents SDK is expected for a Cloudflare application; spike
+  K4 proved a WebSocket message guard in front of the SDK closes the client-history risk. The alternative without the
+  SDK is documented in `tech-docs/design/case-agent-without-agents-sdk.md`. Terms ruled: inbound guard, HTTP request
+  guard, WebSocket message guard, WebSocket message, WebSocket frame; case conversation store names the SDK's storage.
 - Plain HTTP is redirected (308) to the configured HTTPS origin by the Worker, which runs first for every request;
   owner tried the live deployment and approved merging `feature/deploy`.
+
+## Decisions (owner, 2026-10-26)
+
+- Replies show Tools, Answer (formerly Result), and Details built only from tool results (option B); full account
+  ids; a check that finds a feature missing carries its remedy; Cmd+Enter (Ctrl+Enter) sends.
+- Deployments are recorded as the system identity `sys_deployment`, authenticated only by the owner's database
+  credentials in the demo; production would use CI workload identity (production-readiness).
+- Neon reset and reseeded for explain-access with the same passwords (1A).
+- Answer wording fixed (look accounts up first, no tool call as text, "No answer was written; see Details."
+  fallback); spike K5 to compare other Workers AI models.
+- CM-19: gpt-oss-120b (free on Workers AI like Llama); lookup permissive, display strict: the model writes `[acc_…]`
+  and `[email]` references, the screen writes the stored names, for accounts and people. Spec §5 amended. The live
+  evaluation is a committed command, `npm run eval:live`.
+- Review rulings: D14 bounds a lookup (3 characters, 50 decided, 10 listed, `more_matches` from authorized only);
+  no signal may depend on accounts the CSR cannot read (S07d), so every name search shows a fixed notice instead;
+  the email path reads at most 49 role accounts; stream frames re-load the principal.
 
 ## Open
 
 - Feature-spec decisions are approved with each spec.
-- `AI_WORKFLOW.md` §3 runs `depcruise src`, but the package has no `src` at its root, so that step checks nothing;
-  `depcruise .` (as in `npm run check`) is the working command. Not yet fixed.

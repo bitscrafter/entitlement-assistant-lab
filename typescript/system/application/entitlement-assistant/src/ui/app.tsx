@@ -6,8 +6,12 @@ import {
   signIn,
   signOut,
 } from "./authentication-client.ts";
+import { CaseChat } from "./case-chat.tsx";
+import { openCase } from "./cases-client.ts";
 
 const RENEWAL_INTERVAL_MILLISECONDS = 5 * 60 * 1000;
+/** The case the CSR works on, kept for this tab only, so a reload returns to it. */
+const CASE_KEY = "entitlement-assistant.case";
 
 type View =
   | { readonly kind: "Loading" }
@@ -45,8 +49,10 @@ export function App() {
           principal={view.principal}
           onSignOut={async () => {
             await signOut();
+            sessionStorage.removeItem(CASE_KEY);
             setView({ kind: "SignedOut" });
           }}
+          onSessionEnded={() => setView({ kind: "SignedOut" })}
         />
       );
   }
@@ -109,28 +115,51 @@ function SignInForm({ onSignedIn }: { readonly onSignedIn: () => Promise<void> }
 function SignedInPage({
   principal,
   onSignOut,
+  onSessionEnded,
 }: {
   readonly principal: SessionPrincipal;
   readonly onSignOut: () => Promise<void>;
+  readonly onSessionEnded: () => void;
 }) {
+  const [caseId, setCaseId] = useState<string | null>(() => sessionStorage.getItem(CASE_KEY));
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function startCase() {
+    setMessage(null);
+    const outcome = await openCase();
+    if (!outcome.ok) {
+      setMessage(outcome.message);
+      return;
+    }
+    sessionStorage.setItem(CASE_KEY, outcome.caseId);
+    setCaseId(outcome.caseId);
+  }
+
   return (
-    <main className="page">
-      <section className="card">
-        <h1>Signed in as {principal.display_name}</h1>
-        <dl>
-          <dt>Department</dt>
-          <dd>{principal.department}</dd>
-          <dt>Job function</dt>
-          <dd>
-            {principal.job_function}, level {principal.job_level}
-          </dd>
-          <dt>Roles</dt>
-          <dd>{principal.roles.join(", ")}</dd>
-        </dl>
-        <button type="button" onClick={() => void onSignOut()}>
-          Sign out
-        </button>
-      </section>
+    <main className="workspace">
+      <header className="bar">
+        <span>
+          {principal.display_name} · {principal.job_function}, level {principal.job_level}
+        </span>
+        <span className="actions">
+          <button type="button" onClick={() => void startCase()}>
+            New case
+          </button>
+          <button type="button" className="secondary" onClick={() => void onSignOut()}>
+            Sign out
+          </button>
+        </span>
+      </header>
+      {message !== null && (
+        <p className="error" role="alert">
+          {message}
+        </p>
+      )}
+      {caseId === null ? (
+        <p className="hint">Open a case to ask the assistant about a customer's entitlements.</p>
+      ) : (
+        <CaseChat key={caseId} caseId={caseId} onSessionEnded={onSessionEnded} />
+      )}
     </main>
   );
 }

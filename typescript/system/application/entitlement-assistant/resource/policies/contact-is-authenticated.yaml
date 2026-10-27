@@ -1,0 +1,9 @@
+policy_key: contact-is-authenticated
+description: A change the customer asks for needs the contact to be authenticated.
+governed_actions:
+  - subscription.change-plan
+  - subscription.cancel
+  - grant.create
+applies_when: "context.has_contact"
+requires: "context.contact_authenticated"
+unmet_outcome: Deny

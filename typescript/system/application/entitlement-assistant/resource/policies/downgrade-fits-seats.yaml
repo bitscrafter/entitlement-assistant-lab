@@ -1,0 +1,7 @@
+policy_key: downgrade-fits-seats
+description: A plan change must leave enough seats for the members already holding a role.
+governed_actions:
+  - subscription.change-plan
+applies_when: "has(context.target_seat_quota)"
+requires: "resource.seats_in_use <= context.target_seat_quota"
+unmet_outcome: Deny

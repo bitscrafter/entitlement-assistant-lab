@@ -1,0 +1,7 @@
+policy_key: trial-coverage-up-to-14-days
+description: Trial coverage lasts at most 14 days.
+governed_actions:
+  - subscription.change-plan
+applies_when: "context.coverage_source == 'Trial'"
+requires: "context.duration_days <= 14"
+unmet_outcome: Deny

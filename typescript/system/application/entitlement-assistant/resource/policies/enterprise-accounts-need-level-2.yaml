@@ -1,0 +1,7 @@
+policy_key: enterprise-accounts-need-level-2
+description: Enterprise accounts need job level 2 or a supervisor.
+governed_actions:
+  - account.read
+applies_when: "has(resource.plan_key) && resource.plan_key == 'enterprise'"
+requires: "principal.job_level >= 2 || principal.job_function == 'supervisor'"
+unmet_outcome: Deny

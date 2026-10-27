@@ -5,10 +5,12 @@ import {
 } from "../../../adapter/postgres/postgres-connection.ts";
 import { PostgresUnitOfWork } from "../../../adapter/postgres/postgres-unit-of-work.ts";
 import { JoseSessionToken } from "../../../adapter/session-token/jose-session-token.ts";
+import type { Tool } from "../../../external/ai.ts";
 import { z } from "../../../external/zod.ts";
 import { decodeIdentifier, encodeIdentifier, type Uuid } from "../../../kernel/identifier.ts";
 import type { Clock } from "../../../port/clock.ts";
 import type { IdGenerator } from "../../../port/id-generator.ts";
+import type { MessageRateLimiter } from "../../../port/message-rate-limiter.ts";
 import type { SecurityEventCause, SecurityEventLog } from "../../../port/security-event-log.ts";
 import { PostgresRoleRepository } from "../../../subsystem/access/src/infra/postgres-role-repository.ts";
 import { GetSessionPrincipal } from "../../../subsystem/access/src/usecase/get-session-principal.ts";
@@ -22,7 +24,26 @@ import { PostgresEmployeeRepository } from "../../../subsystem/internal-identity
 import { WebCryptoPasswordHasher } from "../../../subsystem/internal-identity/src/infra/web-crypto-password-hasher.ts";
 import { GetEmployeeProfile } from "../../../subsystem/internal-identity/src/usecase/get-employee-profile.ts";
 import { VerifyEmployeeCredential } from "../../../subsystem/internal-identity/src/usecase/verify-employee-credential.ts";
-import { authenticatePrincipal, authenticateSession, originAllowed } from "./http/request-guard.ts";
+import type { PolicySet } from "../../../subsystem/policy/src/model/policy.ts";
+import { PolicySetActivationCheck } from "../../../subsystem/policy/src/usecase/evaluate-policies.ts";
+import { PostgresCaseRepository } from "../../../subsystem/support/src/infra/postgres-case-repository.ts";
+import { CheckEntitlement } from "../../../subsystem/support/src/usecase/check-entitlement.ts";
+import { ExplainAccess } from "../../../subsystem/support/src/usecase/explain-access.ts";
+import { FindCustomerAccount } from "../../../subsystem/support/src/usecase/find-customer-account.ts";
+import { ListEntitlements } from "../../../subsystem/support/src/usecase/list-entitlements.ts";
+import { OpenCase } from "../../../subsystem/support/src/usecase/open-case.ts";
+import { ReadEnforcement } from "../../../subsystem/support/src/usecase/read-enforcement.ts";
+import { agentTools } from "./agent/agent-tools.ts";
+import { REASON_DESCRIPTIONS } from "./agent/reason-descriptions.ts";
+import { type ConnectionSession, WebSocketMessageGuard } from "./agent/websocket-message-guard.ts";
+import type { CaseWorkUseCases } from "./case-work-use-cases.ts";
+import { type CaseWork, composeCaseWork } from "./compose-case-work.ts";
+import {
+  authenticatePrincipal,
+  authenticateSession,
+  isWebSocketUpgrade,
+  originAllowed,
+} from "./http/request-guard.ts";
 import { errorResponse, jsonResponse, noContent } from "./http/responses.ts";
 import { clearedSessionCookie, sessionCookie } from "./http/session-cookie.ts";
 import { traceIdOf } from "./http/trace.ts";
@@ -41,10 +62,40 @@ export interface ApplicationDependencies {
   };
   readonly auditHashKey: { readonly keyId: string; readonly key: CryptoKey };
   readonly identifierHashKey: CryptoKey;
+  /** The policy set bundled into the Worker (policy §6). */
+  readonly policySet: PolicySet;
+  /** Hands an accepted WebSocket upgrade to the case's agent (a Durable Object in the Worker). */
+  readonly forwardToCaseAgent: (
+    request: Request,
+    caseId: Uuid,
+    session: ConnectionSession,
+  ) => Promise<Response>;
 }
+
+export type { CaseWorkUseCases };
 
 export interface Application {
   fetch(request: Request): Promise<Response>;
+  /**
+   * Runs `work` with the use cases on one database connection, in one transaction.
+   *
+   * @ensures What `work` writes commits together, or not at all when it rejects.
+   */
+  withUseCases<Value>(work: (useCases: CaseWorkUseCases) => Promise<Value>): Promise<Value>;
+  /** What the case agent of one case needs from the application, with the adapter only its runtime supplies. */
+  caseAgentParts(caseId: Uuid, adapters: { readonly rateLimiter: MessageRateLimiter }): CaseAgentParts;
+}
+
+export interface CaseAgentParts {
+  /** Decides every WebSocket message before the Agents SDK sees it. */
+  readonly messageGuard: WebSocketMessageGuard;
+  /** The tools of a chat turn, acting for the connection's principal. */
+  readonly tools: (actor: {
+    readonly principalAccountId: Uuid;
+    readonly sessionId: Uuid;
+  }) => Record<string, Tool>;
+  readonly clock: Clock;
+  readonly newTraceId: () => string;
 }
 
 const signInBody = z.strictObject({
@@ -52,6 +103,32 @@ const signInBody = z.strictObject({
   password: z.string().max(1024),
   account_id: z.string().optional(),
 });
+
+/** Every case agent's WebSocket lives under this path, followed by the case id (api.md §8). */
+const CASE_AGENT_PATH = "/agents/case-agent/";
+
+/** Opening a case takes no parameters: the body is exactly an empty object. */
+const emptyBody = z.strictObject({});
+
+/** The fixed error each rejection answers (api.md §3): an unknown case and another's case look the same (D1). */
+function errorCodeOf(cause: SecurityEventCause): "forbidden" | "not_found" | "invalid_session" {
+  switch (cause) {
+    case "ForeignOrigin":
+      return "forbidden";
+    case "CaseNotFound":
+    case "CaseNotAssigned":
+      return "not_found";
+    case "NoSession":
+    case "MalformedToken":
+    case "InvalidSignature":
+    case "UnsupportedAlgorithm":
+    case "WrongIssuer":
+    case "WrongAudience":
+    case "Expired":
+    case "PrincipalInactive":
+      return "invalid_session";
+  }
+}
 
 /** No request of this API needs more; a larger body is refused before any work (api.md §2). */
 const MAXIMUM_BODY_BYTES = 16 * 1024;
@@ -72,12 +149,32 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
   const tokens = new JoseSessionToken(dependencies.sessionSigningKey);
   const passwordHasher = new WebCryptoPasswordHasher();
   const identifierHasher = new HmacIdentifierHasher(dependencies.identifierHashKey);
+  const policySetActivation = new PolicySetActivationCheck();
+
+  /** One database connection and one transaction around `work`, the way every request runs. */
+  async function withAllUseCases<Value>(work: (useCases: UseCases) => Promise<Value>): Promise<Value> {
+    const connection = await dependencies.openDatabase();
+    try {
+      const useCases = buildUseCases(
+        connection,
+        dependencies,
+        tokens,
+        passwordHasher,
+        identifierHasher,
+        policySetActivation,
+      );
+      return await useCases.unitOfWork.run(() => work(useCases));
+    } finally {
+      await connection.close().catch(() => undefined);
+    }
+  }
 
   const routes: Readonly<Record<string, Handler>> = {
     "POST /api/authentication/sign-in": signInHandler,
     "POST /api/authentication/session/renewal": renewalHandler,
     "GET /api/authentication/session": sessionHandler,
     "POST /api/authentication/sign-out": signOutHandler,
+    "POST /api/cases": openCaseHandler,
   };
 
   return {
@@ -86,10 +183,12 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
       const traceId = traceIdOf(request);
       const reject = (cause: SecurityEventCause): Response => {
         dependencies.securityEventLog.record({ cause, method: request.method, path: url.pathname, traceId });
-        return errorResponse(cause === "ForeignOrigin" ? "forbidden" : "invalid_session");
+        return errorResponse(errorCodeOf(cause));
       };
       if (!originAllowed(request, dependencies.applicationOrigin)) return reject("ForeignOrigin");
-      const handler = routes[`${request.method} ${url.pathname}`];
+      const handler =
+        routes[`${request.method} ${url.pathname}`] ??
+        (request.method === "GET" && url.pathname.startsWith(CASE_AGENT_PATH) ? caseAgentHandler : undefined);
       if (handler === undefined) return errorResponse("not_found");
 
       const body = request.method === "GET" ? "" : await request.text().catch(() => null);
@@ -100,7 +199,14 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
       let connection: PostgresConnection | undefined;
       try {
         connection = await dependencies.openDatabase();
-        const useCases = buildUseCases(connection, dependencies, tokens, passwordHasher, identifierHasher);
+        const useCases = buildUseCases(
+          connection,
+          dependencies,
+          tokens,
+          passwordHasher,
+          identifierHasher,
+          policySetActivation,
+        );
         // One transaction per request: every statement acts with the application's role (CM-13).
         return await useCases.unitOfWork.run(() => handler({ request, body, traceId, useCases, reject }));
       } catch (error) {
@@ -109,6 +215,50 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
       } finally {
         await connection?.close().catch(() => undefined);
       }
+    },
+
+    withUseCases<Value>(work: (useCases: CaseWorkUseCases) => Promise<Value>): Promise<Value> {
+      return withAllUseCases(work);
+    },
+
+    caseAgentParts(caseId, adapters): CaseAgentParts {
+      const policyDescriptions = new Map(
+        dependencies.policySet.policies.map((policy) => [`policy.${policy.policyKey}`, policy.description]),
+      );
+      const newTraceId = () => traceIdOf(new Request(dependencies.applicationOrigin));
+      return {
+        clock: dependencies.clock,
+        newTraceId,
+        messageGuard: new WebSocketMessageGuard({
+          rateLimiter: adapters.rateLimiter,
+          clock: dependencies.clock,
+          principalMayAct: async (accountId) => {
+            const mayAct = await withAllUseCases(
+              async (useCases) => (await useCases.loadPrincipal.execute(accountId)).ok,
+            );
+            if (!mayAct) {
+              dependencies.securityEventLog.record({
+                cause: "PrincipalInactive",
+                method: "MESSAGE",
+                path: CASE_AGENT_PATH,
+                traceId: newTraceId(),
+              });
+            }
+            return mayAct;
+          },
+          newMessageId: () => dependencies.idGenerator.newId(),
+        }),
+        tools: (actor) =>
+          agentTools({
+            caseId,
+            actor: () => actor,
+            runUseCases: withAllUseCases,
+            describeReason: (reasonCode) =>
+              policyDescriptions.get(reasonCode) ?? REASON_DESCRIPTIONS[reasonCode] ?? reasonCode,
+            newTraceId,
+            logFailure: (failure) => console.error(JSON.stringify({ log: "case-tool-failed", ...failure })),
+          }),
+      };
     },
   };
 
@@ -148,6 +298,55 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     return noContent({ "set-cookie": sessionCookie(result.value.token, result.value.lifetimeSeconds) });
   }
 
+  async function openCaseHandler({
+    request,
+    body,
+    traceId,
+    useCases,
+    reject,
+  }: RequestContext): Promise<Response> {
+    const authenticated = await authenticatePrincipal(
+      request,
+      tokens,
+      useCases.loadPrincipal,
+      dependencies.clock.now(),
+    );
+    if (!authenticated.ok) return reject(authenticated.failure);
+    if (!(request.headers.get("content-type") ?? "").startsWith("application/json"))
+      return errorResponse("invalid_request");
+    if (!emptyBody.safeParse(parseJson(body)).success) return errorResponse("invalid_request");
+    const result = await useCases.openCase.execute({
+      principalAccountId: authenticated.value.principal.accountId,
+      sessionId: authenticated.value.claims.sessionId,
+      traceId,
+    });
+    if (result.kind === "Forbidden") return errorResponse("forbidden");
+    return jsonResponse(201, { case_id: encodeIdentifier("cse", result.caseId) });
+  }
+
+  /** The WebSocket upgrade to a case agent (api.md §8): only the case's current assignee connects (D1). */
+  async function caseAgentHandler({ request, useCases, reject }: RequestContext): Promise<Response> {
+    if (!isWebSocketUpgrade(request)) return errorResponse("not_found");
+    const authenticated = await authenticatePrincipal(
+      request,
+      tokens,
+      useCases.loadPrincipal,
+      dependencies.clock.now(),
+    );
+    if (!authenticated.ok) return reject(authenticated.failure);
+    const caseId = decodeIdentifier("cse", new URL(request.url).pathname.slice(CASE_AGENT_PATH.length));
+    if (!caseId.ok) return reject("CaseNotFound");
+    const assignment = await useCases.cases.currentAssignee(caseId.value);
+    if (!assignment.exists) return reject("CaseNotFound");
+    if (assignment.assigneeAccountId !== authenticated.value.principal.accountId)
+      return reject("CaseNotAssigned");
+    return dependencies.forwardToCaseAgent(request, caseId.value, {
+      principalAccountId: authenticated.value.principal.accountId,
+      sessionId: authenticated.value.claims.sessionId,
+      expiresAt: authenticated.value.claims.expiresAt,
+    });
+  }
+
   async function sessionHandler({ request, useCases, reject }: RequestContext): Promise<Response> {
     const authenticated = await authenticatePrincipal(
       request,
@@ -180,8 +379,10 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
   }
 }
 
-interface UseCases {
+interface UseCases extends CaseWorkUseCases {
   readonly unitOfWork: PostgresUnitOfWork;
+  readonly caseWork: CaseWork;
+  readonly cases: PostgresCaseRepository;
   readonly loadPrincipal: LoadPrincipal;
   readonly signIn: SignIn;
   readonly renewSession: RenewSession;
@@ -195,6 +396,7 @@ function buildUseCases(
   tokens: JoseSessionToken,
   passwordHasher: WebCryptoPasswordHasher,
   identifierHasher: HmacIdentifierHasher,
+  policySetActivation: PolicySetActivationCheck,
 ): UseCases {
   const { clock, idGenerator: ids } = dependencies;
   const unitOfWork = new PostgresUnitOfWork(connection, { role: APPLICATION_DATABASE_ROLE });
@@ -211,9 +413,23 @@ function buildUseCases(
     accounts,
     getEmployeeProfile: new GetEmployeeProfile({ employees }),
   });
+  const caseWork = composeCaseWork(connection, {
+    clock,
+    loadPrincipal,
+    policySet: dependencies.policySet,
+    policySetActivation,
+  });
+  const enforcement = new ReadEnforcement({
+    decider: caseWork.decider,
+    audit,
+    getCustomerAccount: caseWork.getCustomerAccount,
+  });
+  const cases = new PostgresCaseRepository(connection);
   return {
     unitOfWork,
     loadPrincipal,
+    caseWork,
+    cases,
     signIn: new SignIn({
       verifyEmployeeCredential: new VerifyEmployeeCredential({ employees, hasher: passwordHasher }),
       loadPrincipal,
@@ -231,6 +447,37 @@ function buildUseCases(
       clock,
     }),
     signOut: new SignOut({ audit, unitOfWork }),
+    openCase: new OpenCase({ decider: caseWork.decider, audit, cases, ids, clock }),
+    findCustomerAccount: new FindCustomerAccount({
+      enforcement,
+      identifierHasher,
+      findIndividualByEmail: caseWork.findIndividualByEmail,
+      getIndividuals: caseWork.getIndividuals,
+      getCustomerAccount: caseWork.getCustomerAccount,
+      listAccountRoles: caseWork.listAccountRoles,
+      computeEffectiveEntitlements: caseWork.computeEffectiveEntitlements,
+      clock,
+    }),
+    checkEntitlement: new CheckEntitlement({
+      enforcement,
+      computeEffectiveEntitlements: caseWork.computeEffectiveEntitlements,
+      findLowestPlanIncluding: caseWork.findLowestPlanIncluding,
+      clock,
+    }),
+    listEntitlements: new ListEntitlements({
+      enforcement,
+      computeEffectiveEntitlements: caseWork.computeEffectiveEntitlements,
+      clock,
+    }),
+    explainAccess: new ExplainAccess({
+      enforcement,
+      decider: caseWork.decider,
+      findIndividualByEmail: caseWork.findIndividualByEmail,
+      getCustomerAccount: caseWork.getCustomerAccount,
+      computeEffectiveEntitlements: caseWork.computeEffectiveEntitlements,
+      findLowestPlanIncluding: caseWork.findLowestPlanIncluding,
+      clock,
+    }),
   };
 }
 

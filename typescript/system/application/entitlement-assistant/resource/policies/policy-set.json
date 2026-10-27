@@ -1,0 +1,119 @@
+{
+  "version": "rkvEDOaKfaxXFfMLoiAGjSjD0Gvq50t--dEniyUXHzY",
+  "policies": [
+    {
+      "policyKey": "cancel-needs-contact-or-approval",
+      "description": "A cancellation needs the customer's request or a supervisor's approval.",
+      "governedActions": ["subscription.cancel"],
+      "appliesWhen": "!context.has_contact",
+      "requires": "context.approval_granted",
+      "unmetOutcome": "Conditional",
+      "prerequisites": [
+        {
+          "prerequisiteKind": "Approval",
+          "fulfilledByPermission": "approval.decide"
+        }
+      ]
+    },
+    {
+      "policyKey": "contact-is-authenticated",
+      "description": "A change the customer asks for needs the contact to be authenticated.",
+      "governedActions": ["subscription.change-plan", "subscription.cancel", "grant.create"],
+      "appliesWhen": "context.has_contact",
+      "requires": "context.contact_authenticated",
+      "unmetOutcome": "Deny",
+      "prerequisites": []
+    },
+    {
+      "policyKey": "courtesy-up-to-14-days",
+      "description": "Courtesy coverage lasts at most 14 days.",
+      "governedActions": ["subscription.add-courtesy-term", "subscription.change-plan"],
+      "appliesWhen": "context.coverage_source == 'Courtesy'",
+      "requires": "context.duration_days <= 14",
+      "unmetOutcome": "Deny",
+      "prerequisites": []
+    },
+    {
+      "policyKey": "downgrade-fits-seats",
+      "description": "A plan change must leave enough seats for the members already holding a role.",
+      "governedActions": ["subscription.change-plan"],
+      "appliesWhen": "has(context.target_seat_quota)",
+      "requires": "resource.seats_in_use <= context.target_seat_quota",
+      "unmetOutcome": "Deny",
+      "prerequisites": []
+    },
+    {
+      "policyKey": "enterprise-accounts-need-level-2",
+      "description": "Enterprise accounts need job level 2 or a supervisor.",
+      "governedActions": ["account.read"],
+      "appliesWhen": "has(resource.plan_key) && resource.plan_key == 'enterprise'",
+      "requires": "principal.job_level >= 2 || principal.job_function == 'supervisor'",
+      "unmetOutcome": "Deny",
+      "prerequisites": []
+    },
+    {
+      "policyKey": "grant-quota-up-to-100",
+      "description": "A grant adds at most 100 to a quota.",
+      "governedActions": ["grant.create"],
+      "appliesWhen": "has(context.quota)",
+      "requires": "context.quota <= 100",
+      "unmetOutcome": "Deny",
+      "prerequisites": []
+    },
+    {
+      "policyKey": "grants-up-to-14-days",
+      "description": "Grants longer than 14 days need a supervisor's approval.",
+      "governedActions": ["grant.create"],
+      "appliesWhen": "true",
+      "requires": "context.duration_days <= 14 || context.approval_granted",
+      "unmetOutcome": "Conditional",
+      "prerequisites": [
+        {
+          "prerequisiteKind": "Approval",
+          "fulfilledByPermission": "approval.decide"
+        }
+      ]
+    },
+    {
+      "policyKey": "grants-up-to-90-days",
+      "description": "Grants last at most 90 days.",
+      "governedActions": ["grant.create"],
+      "appliesWhen": "true",
+      "requires": "context.duration_days <= 90",
+      "unmetOutcome": "Deny",
+      "prerequisites": []
+    },
+    {
+      "policyKey": "no-self-approval",
+      "description": "Nobody approves a change they requested or confirmed.",
+      "governedActions": ["approval.decide"],
+      "appliesWhen": "true",
+      "requires": "principal.account_id != context.requester_account_id && principal.account_id != context.confirmer_account_id",
+      "unmetOutcome": "Deny",
+      "prerequisites": []
+    },
+    {
+      "policyKey": "trial-coverage-up-to-14-days",
+      "description": "Trial coverage lasts at most 14 days.",
+      "governedActions": ["subscription.change-plan"],
+      "appliesWhen": "context.coverage_source == 'Trial'",
+      "requires": "context.duration_days <= 14",
+      "unmetOutcome": "Deny",
+      "prerequisites": []
+    },
+    {
+      "policyKey": "upgrade-beyond-pro-needs-contact-or-approval",
+      "description": "An upgrade beyond Pro needs the customer's request or a supervisor's approval.",
+      "governedActions": ["subscription.change-plan"],
+      "appliesWhen": "context.target_tier_rank > 2 && !context.has_contact",
+      "requires": "context.approval_granted",
+      "unmetOutcome": "Conditional",
+      "prerequisites": [
+        {
+          "prerequisiteKind": "Approval",
+          "fulfilledByPermission": "approval.decide"
+        }
+      ]
+    }
+  ]
+}

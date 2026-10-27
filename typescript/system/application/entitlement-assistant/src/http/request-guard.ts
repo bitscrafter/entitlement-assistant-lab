@@ -7,12 +7,19 @@ import type {
 } from "../../../../subsystem/account/src/usecase/load-principal.ts";
 import { readSessionCookie } from "./session-cookie.ts";
 
+/** Whether the request asks to open a WebSocket (RFC 6455 §4.1). */
+export function isWebSocketUpgrade(request: Request): boolean {
+  return (request.headers.get("upgrade") ?? "").toLowerCase() === "websocket";
+}
+
 /**
- * Where an HTTP request may come from (api.md A5): every request that is not a GET carries exactly the
- * application's origin. No other origin is ever allowed, and there is no CORS.
+ * Where an HTTP request may come from (api.md A5): every request that is not a GET, and every WebSocket upgrade,
+ * carries exactly the application's origin. No other origin is ever allowed, and there is no CORS, which does not
+ * cover WebSockets anyway (explain-access D9).
  */
 export function originAllowed(request: Request, applicationOrigin: string): boolean {
-  return request.method === "GET" || request.headers.get("origin") === applicationOrigin;
+  if (request.method === "GET" && !isWebSocketUpgrade(request)) return true;
+  return request.headers.get("origin") === applicationOrigin;
 }
 
 /**

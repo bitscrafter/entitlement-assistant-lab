@@ -1,0 +1,21 @@
+policy_key: downgrade-fits-seats
+cases:
+  - name: seats in use equal the target quota
+    given:
+      resource:
+        seats_in_use: 25
+      context:
+        target_seat_quota: 25
+    then: true
+  - name: seats in use above the target quota
+    given:
+      resource:
+        seats_in_use: 26
+      context:
+        target_seat_quota: 25
+    then: false
+  - name: an unlimited target
+    given:
+      resource:
+        seats_in_use: 500
+    then: true

@@ -1,0 +1,7 @@
+policy_key: grants-up-to-90-days
+description: Grants last at most 90 days.
+governed_actions:
+  - grant.create
+applies_when: "true"
+requires: "context.duration_days <= 90"
+unmet_outcome: Deny

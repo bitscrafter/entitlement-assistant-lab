@@ -1,0 +1,98 @@
+@startuml agent-connection
+title Case agent connection (feature explain-access, S05a–S05m, S06a, S13)
+
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+autonumber "<b>00"
+
+actor "Employee (CSR)" as employee
+
+box "Browser" #F4F8FF
+  participant "Chat UI\n(React, agents/react)" as ui
+  participant "Cookie jar" as jar
+end box
+
+box "Cloudflare network" #FFF7EC
+  participant "Worker\nfetch handler" as worker
+  participant "Case agent cse_alex_1\n«Durable Object, one per case»" as agent
+  participant "Language model\n«port; Workers AI,\ngpt-oss-120b»" as model
+  participant "Read use case\n«Support: FindCustomerAccount,\nCheckEntitlement, …»" as usecase
+  participant "PDP\n«AuthorizationDecider»" as pdp
+end box
+
+database "PostgreSQL\n(through Hyperdrive)" as postgres
+
+== Open a case (S05a–S05d) ==
+
+employee -> ui : start a case
+ui -> worker : POST /api/cases {}\nOrigin, Cookie T (exp 15:20)
+worker -> worker : Origin matches? (else 403)\nT valid? (else 401)
+worker -> usecase : OpenCase(principal iac_alex)
+usecase -> pdp : decide case.open
+pdp -> postgres : load the principal fresh, its roles and permissions
+usecase -> postgres : INSERT support_case, case_assignment (assignee iac_alex);\naudit case.open Allow, Succeeded
+worker --> ui : 201 { case_id: cse_alex_1 }
+
+== Connect (S05e–S05h, D1, D9) ==
+
+ui -> worker : GET /agents/case-agent/cse_alex_1\nUpgrade: websocket, Origin, Cookie T
+activate worker
+note right of jar
+  The cookie travels only in this handshake.
+  After it, frames carry no headers and no cookie.
+end note
+worker -> worker : Origin equals the application's origin? (D9, else 403)\nT valid? (else 401)
+worker -> postgres : principal active? assignee of cse_alex_1?\n(no such case and not the assignee: the same 404, D1)
+worker -> agent : hand over the upgrade with the verified session:\nprincipal iac_alex, token expires 15:20
+deactivate worker
+activate agent
+agent -> agent : keep the session with this connection (server-side only;\nthe client cannot write it); set a timer for 15:20
+agent --> ui : 101 Switching Protocols; the stored conversation (S13)
+note over agent
+  One agent per case: every connection to cse_alex_1 reaches this
+  instance (a second tab opens a second connection, with its own session
+  and timer). Between connections it sleeps; the conversation stays stored.
+end note
+
+== A chat turn (S06a, S07–S12 through tools) ==
+
+employee -> ui : "Does Acme have SSO?"
+ui -> agent : user message frame
+agent -> agent : in order: over 16 KiB? (D11: close 1009)\nover 20 messages a minute for this employee? (D13: close 4429)\npast the token's expiry? (close 4401 session_expired)
+agent -> postgres : re-load the principal (D10: inactive → close 4401 invalid_session)
+agent -> model : conversation + tool definitions
+model --> agent : tool call check_entitlement\n{ account_id: acc_acme, feature_key: sso }
+agent -> agent : validate the arguments strictly\n(an unknown field such as acting_as is rejected, S06b)
+agent -> usecase : CheckEntitlement(principal from the connection, never from the model)
+usecase -> pdp : decide account.read on acc_acme (AU-4)
+pdp -> postgres : principal, roles, policies, the account's attributes
+usecase -> postgres : subscription, terms, add-ons, grants;\naudit account.read Allow (detail.use_case, detail.tool_call_id)
+usecase --> agent : entitled · sources plan:business
+agent -> model : the tool result
+model --> agent : "Yes. Acme Corp has SSO through its Business plan."
+agent --> ui : tool call, tool result, streamed reply
+ui --> employee : the reply and the tool trace
+
+== Renewal does not reach the open connection (S05j) ==
+
+ui -> worker : 15:10 POST /api/authentication/session/renewal (Cookie T)
+worker --> ui : 204 + Set-Cookie T2 (exp 15:40)
+ui -> jar : the browser stores T2
+note right of agent
+  The open connection still holds T's expiry:
+  nothing reaches it from the cookie jar.
+end note
+
+== Expiry and reconnect (S05i, S05j, S13) ==
+
+agent -> agent : 15:20 the timer fires
+agent --> ui : close 4401 session_expired
+deactivate agent
+ui -> worker : GET /agents/case-agent/cse_alex_1\nUpgrade: websocket, Origin, Cookie T2
+worker -> worker : the same checks as on connect
+worker -> agent : hand over with principal iac_alex, expires 15:40
+activate agent
+agent --> ui : 101; the same conversation, no tool re-run,\nno call to the model (S13)
+deactivate agent
+
+@enduml

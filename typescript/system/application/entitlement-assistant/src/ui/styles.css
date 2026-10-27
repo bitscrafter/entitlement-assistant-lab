@@ -81,3 +81,173 @@ dt {
 dd {
   margin: 0;
 }
+
+.workspace {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+button.secondary {
+  background: #52606d;
+}
+
+.chat {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.message {
+  background: #ffffff;
+  border: 1px solid #d9e2ec;
+  border-radius: 0.6rem;
+  padding: 0.75rem 1rem;
+}
+
+.message.user {
+  background: #fff7ec;
+}
+
+.text {
+  margin: 0.25rem 0;
+  white-space: pre-wrap;
+}
+
+.tool summary {
+  cursor: pointer;
+  color: #52606d;
+  font-size: 0.85rem;
+}
+
+.tool pre {
+  margin: 0.4rem 0;
+  padding: 0.5rem;
+  background: #f5f7fa;
+  border-radius: 0.4rem;
+  font-size: 0.8rem;
+  overflow-x: auto;
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+}
+
+textarea {
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #bcccdc;
+  border-radius: 0.4rem;
+  resize: vertical;
+}
+
+.reply {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.reply h2 {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #52606d;
+}
+
+.tools > summary {
+  cursor: pointer;
+  color: #52606d;
+  font-size: 0.85rem;
+}
+
+.tools ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+}
+
+.account {
+  border-left: 3px solid #d9e2ec;
+  padding: 0.25rem 0 0.25rem 0.75rem;
+  margin: 0.4rem 0;
+}
+
+.account h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+}
+
+.account code,
+.message code {
+  font-size: 0.8rem;
+  color: #52606d;
+  user-select: all;
+}
+
+.account dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0 0 0.3rem;
+  font-size: 0.9rem;
+}
+
+.account dt {
+  color: #52606d;
+}
+
+.account dd {
+  margin: 0;
+}
+
+.lines {
+  margin: 0;
+  padding-left: 1rem;
+  font-size: 0.9rem;
+}
+
+.lines .included {
+  color: #1f6f43;
+}
+
+.lines .missing {
+  color: #9b2c2c;
+}
+
+.refusal {
+  color: #9b2c2c;
+}
+
+.notice {
+  color: #555;
+  font-size: 0.85rem;
+}
+
+kbd {
+  font: inherit;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}

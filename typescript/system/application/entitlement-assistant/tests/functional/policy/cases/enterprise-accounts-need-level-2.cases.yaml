@@ -1,0 +1,40 @@
+policy_key: enterprise-accounts-need-level-2
+cases:
+  - name: a level-1 representative reading an Enterprise account
+    given:
+      principal:
+        job_level: 1
+        job_function: representative
+      resource:
+        plan_key: enterprise
+    then: false
+  - name: a level-2 representative reading an Enterprise account
+    given:
+      principal:
+        job_level: 2
+        job_function: representative
+      resource:
+        plan_key: enterprise
+    then: true
+  - name: a level-1 supervisor reading an Enterprise account
+    given:
+      principal:
+        job_level: 1
+        job_function: supervisor
+      resource:
+        plan_key: enterprise
+    then: true
+  - name: a level-1 representative reading a Business account
+    given:
+      principal:
+        job_level: 1
+        job_function: representative
+      resource:
+        plan_key: business
+    then: true
+  - name: a level-1 representative reading an account that never had a term
+    given:
+      principal:
+        job_level: 1
+        job_function: representative
+    then: true

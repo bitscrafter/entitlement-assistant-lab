@@ -1,0 +1,10 @@
+policy_key: grants-up-to-14-days
+description: Grants longer than 14 days need a supervisor's approval.
+governed_actions:
+  - grant.create
+applies_when: "true"
+requires: "context.duration_days <= 14 || context.approval_granted"
+unmet_outcome: Conditional
+prerequisites:
+  - prerequisite_kind: Approval
+    fulfilled_by_permission: approval.decide

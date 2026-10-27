@@ -35,6 +35,10 @@
 | **MCP adapter** | External AI clients reach the same use cases through an MCP server behind OAuth; it needs client registration, scopes mapped to permissions, and per-client audit attribution. |
 | **API limits and evolution** | Rate limits per endpoint and per employee, versioning of endpoints and tools, pagination beyond fixed limits, and webhooks for external systems. |
 | **Data residency** | Some customers require their data to stay in a given region. The system of record is a single database in one region. |
+| **Model capacity** | The demo runs on Workers AI's free allocation (10,000 neurons a day, roughly 50 assistant turns); past it, every turn fails until 00:00 UTC. Production needs a paid plan, a budget per employee or per case, and a model choice re-evaluated as the catalog changes (ADR CM-19). |
+| **Open connections after reassignment** | A case's assignee is checked when a connection opens. Once cases can be reassigned, a connection held by the previous assignee keeps working until its token expires; reassignment would need to close it. |
+| **Open connections after sign-out** | Session tokens are stateless, so signing out does not close an open agent connection; it lasts until the token expires (at most 30 minutes). Revocation needs a session list the agent checks, or a signal to the agent. |
+| **Case agent lifecycle under load** | The case agent's hibernation and wake-up (connections re-attached, scheduled expiries kept) cannot be forced in the local test runtime; it is reviewed, not tested. It also needs a test of SDK upgrades: the agent's hardening relies on the Agents SDK replacing `onMessage` in its constructor. |
 
 ## 2. Customer Identity
 
@@ -120,7 +124,7 @@
 | **Conversation retention, export, and privacy** | Conversations contain personal data. How long they are kept, how they are exported, and how they are erased are unanswered. |
 | **External ticketing systems** | Support organizations already run ticketing tools; cases would need to link to them. |
 | **Approval escalation** | One supervisor seeds the demo, so a supervisor's own over-limit requests can never be approved; real teams need queues, escalation, and backup approvers. |
-| **Insider enumeration** | Lookups by name or email reveal which accounts exist. Bulk-lookup detection and rate limits for employees are missing. |
+| **Insider enumeration** | Lookups by name or email reveal which accounts exist. The demo audits every lookup, including one that matches nothing (with the query's HMAC, explain-access D12), leaves out candidates a policy denies, and limits each employee to 20 messages a minute (D13), and bounds each lookup: at least 3 characters, at most 50 accounts decided and 10 listed (D14). A search cut at 50 can answer with one readable account while others lie past the cut; the screen says so with every name search, but a search that applies authorization before its limit would remove the gap. Still missing: detection of bulk-lookup patterns in the audit trail, and a limit on lookups rather than messages (one message can make several tool calls). |
 | **LLM-written text stored as data** | Case summaries and conversations are untrusted text that may reach later prompts or screens. |
 
 ## 8. Account
@@ -129,7 +133,7 @@
 | --- | --- |
 | **Password hashing strength** | Workers' WebCrypto caps PBKDF2 at 100,000 iterations, below current guidance for PBKDF2-SHA256. Production would use Argon2id (WebAssembly, or a dedicated service) or delegate employee sign-in to the company's identity provider (OIDC with phishing-resistant MFA). |
 | **Several accounts per identity** | Accounts are limited to one per identity. Several accounts need declaring the account at sign-in, a default-account preference, and switching (a new token, with step-up where the target account requires it). |
-| **Workload credentials for system accounts** | System accounts act inside the application. Processes running elsewhere need verifiable credentials. |
+| **Workload credentials for system accounts** | System accounts act inside the application. Processes running elsewhere need verifiable credentials. Deployments are recorded as `sys_deployment`, but are authenticated only by the database owner's credentials; production runs them from CI with a workload identity (for example, a signed OIDC token exchanged for a short-lived credential) that maps to `sys_deployment`. |
 | **Ending sessions** | Sessions end only by expiry or sign-out clearing the cookie. Revoking a session (a lost laptop, a terminated employee) before expiry needs a revocation list by `sid` checked per request; today the principal re-check catches suspensions and inactive identities, not a stolen token of an active employee. |
 | **`OrganizationMember` accounts after leaving** | The category is immutable and each customer has one account, so an individual who leaves an organization cannot subscribe personally until several accounts per customer are allowed. |
 

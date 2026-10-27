@@ -1,0 +1,10 @@
+policy_key: upgrade-beyond-pro-needs-contact-or-approval
+description: An upgrade beyond Pro needs the customer's request or a supervisor's approval.
+governed_actions:
+  - subscription.change-plan
+applies_when: "context.target_tier_rank > 2 && !context.has_contact"
+requires: "context.approval_granted"
+unmet_outcome: Conditional
+prerequisites:
+  - prerequisite_kind: Approval
+    fulfilled_by_permission: approval.decide

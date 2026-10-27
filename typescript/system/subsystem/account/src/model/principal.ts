@@ -1,17 +1,8 @@
 import type { Uuid } from "../../../../kernel/identifier.ts";
 
-export type HoldReason =
-  | "OperationalSuspension"
-  | "CustomerRemoved"
-  | "NoActiveMembership"
-  | "InternalIdentityInactive";
+import { type HoldReason, holdReasonCodes } from "./hold.ts";
 
-const HOLD_REASON_CODES: Readonly<Record<HoldReason, string>> = {
-  OperationalSuspension: "account.operational-suspension",
-  CustomerRemoved: "account.customer-removed",
-  NoActiveMembership: "account.no-active-membership",
-  InternalIdentityInactive: "account.internal-identity-inactive",
-};
+export type { HoldReason };
 
 /** The employee a session acts for, loaded fresh for every request (CM-16). */
 export interface EmployeePrincipal {
@@ -33,7 +24,5 @@ export function principalRefusalReasons(
   holds: readonly HoldReason[],
   identityActive: boolean,
 ): readonly string[] {
-  const reasons = new Set(holds.map((hold) => HOLD_REASON_CODES[hold]));
-  if (!identityActive) reasons.add(HOLD_REASON_CODES.InternalIdentityInactive);
-  return [...reasons].sort();
+  return holdReasonCodes(identityActive ? holds : [...holds, "InternalIdentityInactive"]);
 }

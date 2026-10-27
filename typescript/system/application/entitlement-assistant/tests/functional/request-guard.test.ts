@@ -28,6 +28,29 @@ describe("originAllowed", () => {
   });
 });
 
+describe("originAllowed for WebSocket upgrades", () => {
+  const upgrade = (origin?: string) =>
+    new Request(`${ORIGIN}/agents/case-agent/x`, {
+      headers: {
+        Upgrade: "websocket",
+        Connection: "Upgrade",
+        ...(origin === undefined ? {} : { Origin: origin }),
+      },
+    });
+
+  test("ensures an upgrade with the application's origin is allowed", () => {
+    expect(originAllowed(upgrade(ORIGIN), ORIGIN)).toBe(true);
+  });
+
+  test.each([
+    ["no origin", undefined],
+    ["another site", "https://attacker.example"],
+    ["plain HTTP", "http://app.entitlement-assistant.example"],
+  ])("ensures an upgrade from %s is refused, although it is a GET", (_name, origin) => {
+    expect(originAllowed(upgrade(origin), ORIGIN)).toBe(false);
+  });
+});
+
 describe("httpsRedirect", () => {
   test("ensures a plain-HTTP request to an HTTPS application is redirected with 308 to the same path and query", () => {
     const redirect = httpsRedirect(

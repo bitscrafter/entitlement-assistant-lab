@@ -29,11 +29,14 @@ database "PostgreSQL" as postgres
 == Load the application ==
 
 employee -> ui : open https://<app-origin>/
-ui -> assets : GET / , GET /assets/app.js
-note right of assets
-  Served directly from Cloudflare's network;
-  the Worker script does not run for static files.
+ui -> worker : GET / , GET /assets/app.js
+note right of worker
+  The Worker runs first for every request:
+  plain HTTP is redirected (308) to the
+  application's HTTPS origin; other paths
+  than /api and /agents go to the assets.
 end note
+worker -> assets : env.ASSETS.fetch(request)
 assets --> ui : index.html, JavaScript bundle
 ui -> worker : GET /api/authentication/session (no cookie yet)
 worker --> ui : 401 Unauthorized (not audited: no identity; security event log)

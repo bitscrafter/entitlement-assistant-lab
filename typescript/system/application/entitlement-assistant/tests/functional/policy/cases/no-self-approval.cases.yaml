@@ -1,0 +1,26 @@
+policy_key: no-self-approval
+cases:
+  - name: the requester approves
+    given:
+      principal:
+        account_id: iac_sam
+      context:
+        requester_account_id: iac_sam
+        confirmer_account_id: iac_alex
+    then: false
+  - name: the confirmer approves
+    given:
+      principal:
+        account_id: iac_sam
+      context:
+        requester_account_id: iac_alex
+        confirmer_account_id: iac_sam
+    then: false
+  - name: another supervisor approves
+    given:
+      principal:
+        account_id: iac_sam
+      context:
+        requester_account_id: iac_alex
+        confirmer_account_id: iac_alex
+    then: true
