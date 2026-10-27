@@ -13,7 +13,7 @@ import type { CaseWebSocketConnections } from "./case-websocket-connections.ts";
 /** At most this many of the case's latest events are given to the model (D21). */
 const MAXIMUM_EVENTS_TOLD = 30;
 
-/** The instructions of one turn: the standing instructions, the case's events, oldest first, and the case line (D22). */
+/** The instructions of one turn: the standing instructions, the case's events, oldest first, and the case state line (D22). */
 export function turnInstructions(events: readonly { readonly text: string }[], state: string): string {
   const told = events.slice(-MAXIMUM_EVENTS_TOLD);
   const eventLines =

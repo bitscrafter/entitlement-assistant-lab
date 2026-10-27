@@ -115,8 +115,13 @@ glossary in the change that first uses it.
 | **Case WebSocket connections** | The open WebSocket connections of a case's agent, one per browser tab with the case open; closed together, with `4404 case_unavailable`, when the case closes. |
 | **Case event** | One line in a case's conversation that records a lifecycle action taken in the case panel or from a card ("Subject set: «Acme Corp» (Alex, at 15:02)."), written by the server from the action's audit record, never from the browser or the model; the CSR sees it in the timeline, the assistant is told it as a fact (case-lifecycle D21). |
 | **Case events delivery** | The port (`CaseEventsDelivery`) through which the application, once an action commits, has the case's agent append the case's events it does not hold yet; a lost delivery is repaired when a connection opens or a turn starts (case-lifecycle D21). |
-| **Case line** | The one-line state of a case the assistant is told at each turn: case number, subject, contact and their roles, contact authentication; accounts the CSR may not read are never named (case-lifecycle D22). |
+| **Case state line** | The one-line state of a case the assistant is told at each turn: case number, subject, contact and their roles, contact authentication; accounts the CSR may not read are never named (case-lifecycle D22). |
 | **Case account name** | The name of an account as stored when a lifecycle action named it, kept by Support for the case's events, outside the audit chain, which names accounts by id only (AT-7; case-lifecycle D21). |
+| **Change request card** | The card in the chat drawn from a prepared change request: its kind, parameters, entitlement diff, preview decision, and Confirm and Cancel (grants-and-approvals D1). |
+| **Approvals panel** | The collapsible section at the top of the workspace where a supervisor lists pending approvals and approves or denies them (SU-12; grants-and-approvals D7). |
+| **Approval process** | The durable process of one approval (a Cloudflare Workflow): it waits for the decision or the deadline, then has the system apply or expire the change (grants-and-approvals D6). |
+| **Transactional outbox** | Messages written in the same transaction as the change they are about, then delivered to their destination at least once, after commit and by a scheduled sweep (`outbox_message`; grants-and-approvals D6). |
+| **Outbox message** | One message of the transactional outbox: its destination, type, the id it is about, and a payload of ids and codes only. |
 | **MCP (Model Context Protocol)** | An open protocol through which an AI client discovers and calls tools exposed by a separate server. |
 | **JWT (JSON Web Token)** | A compact, signed token carrying claims; verifiable without a database lookup. |
 | **CEL (Common Expression Language)** | A side-effect-free, type-checked expression language; used for policy predicates. |

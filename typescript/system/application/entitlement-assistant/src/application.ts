@@ -128,7 +128,7 @@ export interface CaseAgentParts {
   readonly newTraceId: () => string;
   /** The case's events, derived from its audit records (case-lifecycle D21). */
   readonly caseEvents: () => Promise<readonly CaseEvent[]>;
-  /** A turn's events (D21) and the case line (D22), as the actor may read the case, in one transaction. */
+  /** A turn's events (D21) and the case state line (D22), as the actor may read the case, in one transaction. */
   readonly turnContext: (actor: {
     readonly principalAccountId: Uuid;
     readonly sessionId: Uuid;
@@ -382,7 +382,7 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
 
     caseAgentParts(caseId, adapters): CaseAgentParts {
       const newTraceId = () => traceIdOf(new Request(dependencies.applicationOrigin));
-      /** The case line of D22, as the actor may read the case now. */
+      /** The case state line of D22, as the actor may read the case now. */
       const caseStateIn = async (
         useCases: UseCases,
         actor: { readonly principalAccountId: Uuid; readonly sessionId: Uuid },

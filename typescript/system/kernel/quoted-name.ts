@@ -9,7 +9,7 @@ const QUOTES_AND_CONTROLS = /[\p{C}«»‹›≪≫《》〈〉⟨⟩⟪⟫〔�
 
 /**
  * A stored name as server-written text may show it (case-lifecycle D21, D22; review R4-1): a display name is free
- * text a customer may choose, so inside an event or the case line it must never pass for that text.
+ * text a customer may choose, so inside an event or the case state line it must never pass for that text.
  *
  * @ensures The name between « and », with no control or format characters (line breaks included), no guillemet or
  *          look-alike quotation mark, whitespace collapsed, trimmed, and at most 80 characters, cut by code point (an

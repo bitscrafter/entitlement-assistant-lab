@@ -90,5 +90,6 @@
 | **Status** | Accepted · 2026-10-25 · decided by the owner |
 | **Context** | A `Denied` answer confirms that something exists. |
 | **Rationale** | Existence is disclosed only to a proven, legitimate principal with a reason to know it. |
+| **Amendments** | 2026-10-27 — a refused **change** discloses every reason (contact permission, holds, entitlement rules, policies) to a CSR who may read the subject; a CSR who may not read it still gets `404` (grants-and-approvals D17). |
 | **Related** | • [AU-4](#au-4-every-use-case-touching-a-subject-passes-the-accountread-gate)<br>• [AN-5](account.md#an-5-a-session-acts-as-one-declared-account) |
 | **Alternatives** | • Always `Denied`: confirms existence to anyone.<br>• Always `NotFound`: a legitimate CSR cannot tell an escalation case from a typo. |
