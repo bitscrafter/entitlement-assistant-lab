@@ -433,3 +433,12 @@ describe("replyViewOf, a person's own account", () => {
     expect(byName.ownAccounts).toEqual([]);
   });
 });
+
+describe("resolveReferences with a typographic hyphen (explain-access discovery 40)", () => {
+  test("ensures an id written with a non-breaking hyphen still resolves to its account", () => {
+    const written = `[${LABS.replace("-", "\u2011")}] is on the free plan.`;
+    expect(resolveReferences(written, new Map([[LABS, "Acme Labs"]]), new Map())).toBe(
+      "Acme Labs is on the free plan.",
+    );
+  });
+});

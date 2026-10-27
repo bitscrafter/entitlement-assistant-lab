@@ -180,7 +180,7 @@ const TOOL_CALL_TEXT = /\{\s*"name"\s*:\s*"[A-Za-z_]+"\s*,\s*"parameters"\s*:/;
  * How the model names an account or a person: a reference in square brackets, `[acc_…]` or `[carol@acme.com]`. The
  * screen writes each one as the database stores it, so a name in the answer is never the model's spelling (ADR CM-19).
  */
-const REFERENCE = /\[(acc_[A-Za-z0-9_-]{22}|[^\s[\]@]+@[^\s[\]@]+)\]/g;
+const REFERENCE = /\[(acc_[A-Za-z0-9_\-\u2010-\u2015\u2212]{22}|[^\s[\]@]+@[^\s[\]@]+)\]/g;
 
 /** Shown for a reference to an account or person that no tool of this reply returned. */
 export const UNKNOWN_ACCOUNT = "(an account not in this reply's results)";
@@ -200,11 +200,13 @@ export function resolveReferences(
   accounts: ReadonlyMap<string, string>,
   people: ReadonlyMap<string, string>,
 ): string {
-  return text.replace(REFERENCE, (_whole, reference: string) =>
-    reference.startsWith("acc_") && !reference.includes("@")
+  return text.replace(REFERENCE, (_whole, written: string) => {
+    // The model sometimes writes an id's hyphen as a typographic one (U+2010–U+2015, U+2212): the id is the same.
+    const reference = written.replace(/[\u2010-\u2015\u2212]/g, "-");
+    return reference.startsWith("acc_") && !reference.includes("@")
       ? (accounts.get(reference) ?? UNKNOWN_ACCOUNT)
-      : (people.get(reference.toLowerCase()) ?? UNKNOWN_PERSON),
-  );
+      : (people.get(reference.toLowerCase()) ?? UNKNOWN_PERSON);
+  });
 }
 
 const asRecord = (value: unknown): Json | null =>

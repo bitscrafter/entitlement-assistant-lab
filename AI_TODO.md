@@ -4,11 +4,12 @@
 
 1. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
 2. At the end: GitHub remote (owner, 2026-10-25).
-3. Live checks when Workers AI allows (or after the Workers Paid plan): a full explain-access §5 run (discovery 39 was partial) and the case-lifecycle live check (discovery 16 deferred).
-4. Next (owner, 2026-10-27): rather than a new feature, make what exists deployable and demoable, so the owner can demo the app and submit the Cloudflare job application.
-5. Later (owner, 2026-10-27): documentation of the solution's viewpoints with videos and a live player: ER diagram, sequence and state diagrams, security decisions, principles.
+3. Next (owner, 2026-10-27): rather than a new feature, make what exists deployable and demoable, so the owner can demo the app and submit the Cloudflare job application.
+4. Later (owner, 2026-10-27): documentation of the solution's viewpoints with videos and a live player: ER diagram, sequence and state diagrams, security decisions, principles.
 
 ## Completed
+
+- Live checks complete (2026-10-27, Workers Paid): explain-access §5 25/25 turns (discovery 40), case-lifecycle live check passed (discovery 16).
 
 - Usage guards (2026-10-27): daily AI budget from one setting, per-employee daily messages, bounded turns, sign-in per IP, kill switch, `npm run demo:reset`, reviewer accounts `cf-` and `bc-`; merged to `main` and deployed.
 
