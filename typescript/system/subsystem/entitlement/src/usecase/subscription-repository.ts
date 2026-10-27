@@ -1,5 +1,5 @@
 import type { Uuid } from "../../../../kernel/identifier.ts";
-import type { Subscription } from "../model/effective-entitlements.ts";
+import type { EntitlementGrant, Subscription } from "../model/effective-entitlements.ts";
 
 export interface SubscriptionRepository {
   /**
@@ -7,4 +7,10 @@ export interface SubscriptionRepository {
    *          null when the account never subscribed.
    */
   latestOf(accountId: Uuid): Promise<Subscription | null>;
+
+  /**
+   * @ensures Every grant of the feature on the account, across all its subscriptions, that was still granting at or
+   *          after `since` (ended or not), by start (grants-and-approvals D5).
+   */
+  grantsOf(accountId: Uuid, featureKey: string, since: Date): Promise<readonly EntitlementGrant[]>;
 }

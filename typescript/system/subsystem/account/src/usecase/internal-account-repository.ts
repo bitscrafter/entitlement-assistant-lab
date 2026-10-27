@@ -17,4 +17,7 @@ export interface InternalAccountRepository {
 
   /** @ensures The reasons of every hold on the account that has not been released. */
   unreleasedHolds(accountId: Uuid): Promise<readonly HoldReason[]>;
+
+  /** @ensures The account of the system identity with this name (`grant-expiry`, `approval-process`), or null. */
+  systemAccountIdNamed(name: string): Promise<Uuid | null>;
 }

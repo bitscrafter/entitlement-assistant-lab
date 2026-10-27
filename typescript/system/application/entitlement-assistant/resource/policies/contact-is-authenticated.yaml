@@ -4,6 +4,7 @@ governed_actions:
   - subscription.change-plan
   - subscription.cancel
   - grant.create
+  - grant.revoke
 applies_when: "context.has_contact"
 requires: "context.contact_authenticated"
 unmet_outcome: Deny

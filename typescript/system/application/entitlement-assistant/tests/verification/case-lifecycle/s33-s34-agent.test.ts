@@ -139,6 +139,10 @@ describe("case-lifecycle in the case agent", () => {
       "explain_access",
       "find_customer_account",
       "list_entitlements",
+      // grants-and-approvals adds the preparing tools; none of them changes the case or applies anything (D1).
+      "prepare_grant",
+      "prepare_grant_extension",
+      "prepare_grant_revocation",
       "propose_case_subject",
     ]);
     const outputs = Object.fromEntries(connection.toolOutputs().map((output) => [output.toolCallId, output]));

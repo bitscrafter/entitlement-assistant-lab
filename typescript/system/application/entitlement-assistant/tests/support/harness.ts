@@ -47,6 +47,13 @@ export interface Harness {
   readonly searchRateLimiter: InMemoryMessageRateLimiter;
   /** Every case whose events the application delivered after an action (case-lifecycle D21). */
   readonly deliveredCaseEvents: readonly Uuid[];
+  /** What the approval process was asked to do (grants-and-approvals D6); `failStarts` loses the next starts. */
+  readonly approvalProcess: {
+    readonly started: { readonly approvalId: Uuid; readonly expiresAt: Date }[];
+    readonly decisions: Uuid[];
+    readonly terminated: Uuid[];
+    failStarts: boolean;
+  };
   readonly close: () => Promise<void>;
 }
 
@@ -59,6 +66,12 @@ export async function createHarness(): Promise<Harness> {
   const closedCaseConnections: Uuid[] = [];
   const searchRateLimiter = new InMemoryMessageRateLimiter();
   const deliveredCaseEvents: Uuid[] = [];
+  const approvalProcess = {
+    started: [] as { approvalId: Uuid; expiresAt: Date }[],
+    decisions: [] as Uuid[],
+    terminated: [] as Uuid[],
+    failStarts: false,
+  };
   const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
   const owner = await PostgresConnection.open(database.connectionString);
   const application = createApplication({
@@ -78,6 +91,19 @@ export async function createHarness(): Promise<Harness> {
     caseWebSocketConnections: { closeAll: async (caseId) => void closedCaseConnections.push(caseId) },
     searchRateLimiter,
     caseEventsDelivery: { deliver: async (caseId) => void deliveredCaseEvents.push(caseId) },
+    approvalProcess: {
+      start: async (approvalId, expiresAt) => {
+        if (approvalProcess.failStarts) throw new Error("the approval process could not be reached");
+        if (approvalProcess.started.some((started) => started.approvalId === approvalId))
+          return "AlreadyStarted";
+        approvalProcess.started.push({ approvalId, expiresAt });
+        return "Started";
+      },
+      deliverDecision: async (approvalId) => void approvalProcess.decisions.push(approvalId),
+      terminate: async (approvalId) => void approvalProcess.terminated.push(approvalId),
+    },
+    approvalWindowMilliseconds: 72 * 60 * 60 * 1000,
+    outboxRetryAfterMilliseconds: 60 * 1000,
   });
   return {
     application,
@@ -90,6 +116,7 @@ export async function createHarness(): Promise<Harness> {
     closedCaseConnections,
     searchRateLimiter,
     deliveredCaseEvents,
+    approvalProcess,
     close: async () => {
       await owner.close();
       await database.drop();

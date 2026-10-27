@@ -5,6 +5,8 @@ import type { CustomerAccount, CustomerAccountRepository } from "./customer-acco
 export interface CustomerAccountView {
   readonly accountId: Uuid;
   readonly displayName: string;
+  /** Advanced by every change applied to the account (SU-4). */
+  readonly version: number;
   readonly accountCategory: "Standalone" | "OrganizationMember";
   readonly customerId: Uuid;
   readonly customerKind: "Organization" | "Individual";
@@ -45,6 +47,7 @@ function toView(account: CustomerAccount): CustomerAccountView {
   return {
     accountId: account.accountId,
     displayName: account.displayName,
+    version: account.version,
     accountCategory: account.accountCategory,
     customerId: account.customerId,
     customerKind: account.customerKind,

@@ -1,5 +1,5 @@
 policy_key: grant-quota-up-to-100
-description: A grant adds at most 100 to a quota.
+description: Grants add at most 100 to a quota at any time, counted together.
 governed_actions:
   - grant.create
 applies_when: "has(context.quota)"

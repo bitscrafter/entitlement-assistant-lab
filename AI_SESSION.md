@@ -28,7 +28,7 @@
 - **Feature case-lifecycle: built** on branch `feature/case-lifecycle` (from `feature/explain-access`; last commit
   c164cc2; GREEN 537 @ c164cc2), deployed (version `418de419`; Neon migrated through `support/003`). Spec approved
   with three amendments (D18–D22: the case panel's account search, closing by the assignee, guidance, case events
-  in the conversation, the case line); adversarial review: 6 rounds, every finding fixed or ruled (discoveries 8–15).
+  in the conversation, the case state line); adversarial review: 6 rounds, every finding fixed or ruled (discoveries 8–15).
   State in `tech-docs/features/case-lifecycle/workflow/progress.md`.
 
 ## Next session
@@ -44,7 +44,7 @@
    (`0c06f4f0`), smoke test passed. The live checks are the one open item of their close-out.
 4. For the owner's review: case-lifecycle discoveries 1–15 (judgment calls made autonomously), the glossary terms
    added (case panel, case assignee check, case WebSocket connections, server WebSocket message, case event, case
-   events delivery, case line, case account name).
+   events delivery, case state line, case account name).
 5. At the end: prompt history export (redacted, under `tech-docs/`), GitHub remote.
 
 ## Decisions (owner, 2026-10-22)

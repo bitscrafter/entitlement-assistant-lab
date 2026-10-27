@@ -19,6 +19,15 @@
     ]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CaseAgentObject", "MessageRateLimiterObject"] }],
+  "workflows": [
+    {
+      "binding": "APPROVAL_PROCESS",
+      "name": "entitlement-assistant-approval-process",
+      "class_name": "ApprovalProcessWorkflow"
+    }
+  ],
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "vars": { "APPROVAL_WINDOW_SECONDS": "259200", "OUTBOX_RETRY_AFTER_SECONDS": "60" },
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",

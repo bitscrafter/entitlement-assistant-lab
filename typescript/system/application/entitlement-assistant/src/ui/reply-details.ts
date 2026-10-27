@@ -78,6 +78,94 @@ export interface ReplyView {
   readonly ownAccounts: readonly string[];
   /** Refusals that name no account (not found, denied by policy), in plain words. */
   readonly refusals: readonly string[];
+  /** Change requests the assistant prepared: the CSR confirms or cancels each on its card (grants-and-approvals D1). */
+  readonly changeRequests: readonly ChangeRequestCard[];
+}
+
+/** A prepared change request as its card shows it (grants-and-approvals D1, D2). */
+export interface ChangeRequestCard {
+  readonly changeRequestId: string;
+  /** `Grant`, `Extend grant`, or `Revoke grant`, with what it asks: `Audit log export · 7 days`. */
+  readonly title: string;
+  readonly reason: string;
+  /** The entitlement diff in words, one line per changed feature. */
+  readonly changes: readonly string[];
+  readonly preview: "Allow" | "Conditional" | "Deny";
+  /** The preview's reasons, as a CSR reads them (D17). */
+  readonly reasons: readonly string[];
+}
+
+const KIND_WORDS: Readonly<Record<string, string>> = {
+  CreateGrant: "Grant",
+  ExtendGrant: "Extend grant",
+  RevokeGrant: "Revoke grant",
+};
+
+/** A diff's quota as words: `unlimited`, a number, or nothing for an unmetered feature. */
+const quotaWords = (value: unknown): string =>
+  value === "unlimited" ? "unlimited" : typeof value === "number" ? String(value) : "";
+
+/**
+ * The entitlement diff in words (D1): `Adds Audit log export`, `Seats: 3 → 13`, `Removes Seats`; a change of sources
+ * only reads as the sources it will have.
+ */
+export function diffLines(diff: unknown): readonly string[] {
+  const operations = Array.isArray(diff) ? diff.map(asRecord).filter((operation) => operation !== null) : [];
+  const before = new Map<string, Json>();
+  const lines: string[] = [];
+  for (const operation of operations) {
+    const feature = titleOf(asString(operation.path).slice(1));
+    const value = asRecord(operation.value);
+    switch (operation.op) {
+      case "test":
+        if (value !== null) before.set(asString(operation.path), value);
+        break;
+      case "add":
+        lines.push(
+          `Adds ${feature}${quotaWords(value?.quota) === "" ? "" : ` · ${quotaWords(value?.quota)}`}`,
+        );
+        break;
+      case "remove":
+        lines.push(`Removes ${feature}`);
+        break;
+      case "replace": {
+        const was = quotaWords(before.get(asString(operation.path))?.quota);
+        const becomes = quotaWords(value?.quota);
+        lines.push(
+          was !== becomes
+            ? `${feature}: ${was} → ${becomes}`
+            : `${feature}: from ${asStrings(value?.sources).map(sourceLabel).join(", ")}`,
+        );
+        break;
+      }
+    }
+  }
+  return lines;
+}
+
+function changeCardOf(changeRequest: Json): ChangeRequestCard | null {
+  const changeRequestId = asString(changeRequest.change_request_id);
+  if (changeRequestId === "") return null;
+  const parameters = asRecord(changeRequest.parameters) ?? {};
+  const preview = asRecord(changeRequest.preview) ?? {};
+  const outcome = asString(preview.outcome);
+  const featureKey = asString(parameters.feature_key);
+  const days = typeof parameters.duration_days === "number" ? parameters.duration_days : null;
+  const asked = [
+    featureKey === "" ? asString(parameters.grant_id) : titleOf(featureKey),
+    typeof parameters.quota === "number" ? `+${parameters.quota}` : "",
+    days === null ? "" : `${days} ${days === 1 ? "day" : "days"}`,
+  ].filter((part) => part !== "");
+  return {
+    changeRequestId,
+    title: `${KIND_WORDS[asString(changeRequest.change_kind)] ?? "Change"}: ${asked.join(" · ")}`,
+    reason: asString(parameters.reason),
+    changes: diffLines(changeRequest.diff),
+    preview: outcome === "Allow" || outcome === "Conditional" ? outcome : "Deny",
+    reasons: Array.isArray(preview.reasons)
+      ? preview.reasons.map((reason) => asString(asRecord(reason)?.description))
+      : [],
+  };
 }
 
 type Json = Readonly<Record<string, unknown>>;
@@ -140,7 +228,7 @@ export function sourceLabel(source: string): string {
   const [kind = "", key = ""] = source.split(":");
   if (kind === "plan") return `${titleOf(key)} plan`;
   if (kind === "addon") return `${titleOf(key)} add-on`;
-  return `grant ${key}`;
+  return key === "new" ? "the new grant" : `grant ${key}`;
 }
 
 function termOf(account: Json): string | null {
@@ -217,6 +305,7 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
     if (accountId !== "" && !ownAccounts.includes(accountId)) ownAccounts.push(accountId);
   };
   let draftedSummary: string | null = null;
+  const changeRequests: ChangeRequestCard[] = [];
 
   const cardFor = (account: Json) => {
     const accountId = asString(account.account_id);
@@ -370,6 +459,12 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
       case "drafted":
         draftedSummary = asString(output.summary);
         break;
+      case "prepared": {
+        const card = changeCardOf(asRecord(output.change_request) ?? {});
+        if (card !== null && !changeRequests.some((known) => known.changeRequestId === card.changeRequestId))
+          changeRequests.push(card);
+        break;
+      }
       default:
         break;
     }
@@ -395,5 +490,6 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
       ...(notFound && !resolved ? ["No account matched, or it is not one you may read."] : []),
       ...policyDenials,
     ],
+    changeRequests,
   };
 }

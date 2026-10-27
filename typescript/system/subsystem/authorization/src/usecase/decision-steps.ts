@@ -26,6 +26,7 @@ const CASE_LIFECYCLE_ACTIONS: ReadonlySet<string> = new Set([
 const ACTIONS_ALLOWED_ON_SUSPENDED_SUBJECTS: ReadonlySet<string> = new Set([
   "account.read",
   "audit.read",
+  "change-request.cancel",
   ...CASE_LIFECYCLE_ACTIONS,
 ]);
 
@@ -41,8 +42,32 @@ export function allowedOnSuspendedSubject(actionKey: string): boolean {
  * @ensures `case.open` for a case lifecycle key; the action key itself otherwise.
  */
 export function governingPermissionOf(actionKey: string): string {
-  return CASE_LIFECYCLE_ACTIONS.has(actionKey) ? "case.open" : actionKey;
+  if (CASE_LIFECYCLE_ACTIONS.has(actionKey)) return "case.open";
+  return GOVERNED_BY[actionKey] ?? actionKey;
 }
+
+/** Actions held through another action's permission: revoking a grant is part of granting (grants-and-approvals D12). */
+const GOVERNED_BY: Readonly<Record<string, string>> = {
+  "grant.revoke": "grant.create",
+  // Canceling a change request is handling the case (grants-and-approvals D14).
+  "change-request.cancel": "case.open",
+  // The approval process expires what it would otherwise apply (grants-and-approvals D9).
+  "approval.expire": "change-request.apply",
+};
+
+/** The grant changes (grants-and-approvals D1): judged by the entitlement step's grant rules (EN-4). */
+const GRANT_CREATING_ACTIONS: ReadonlySet<string> = new Set(["grant.create"]);
+
+/**
+ * The customer permission a contact needs for the employee action done at their request (SU-8, grants-and-approvals
+ * D3): only these actions are asked for by a contact.
+ */
+const CUSTOMER_PERMISSION_OF: Readonly<Record<string, string>> = {
+  "grant.create": "grant.request",
+  "grant.revoke": "grant.request",
+  "subscription.change-plan": "subscription.request-plan-change",
+  "subscription.cancel": "subscription.request-cancellation",
+};
 
 /** `feature.<feature_key>.<operation>` names a feature action; the feature key is its middle part. */
 export function featureKeyOf(actionKey: string): string | null {
@@ -91,16 +116,21 @@ export class AccessStep implements DecisionStep {
             { kind: "Employee", employee: principal.employee },
             attributes.now,
           )
-        : principal.kind === "Individual" && attributes.request.subjectAccountId !== null
+        : principal.kind === "System"
           ? await this.#loadPrincipalPermissions.execute(
-              {
-                kind: "Individual",
-                accountId: principal.account.accountId,
-                contextAccountId: attributes.request.subjectAccountId,
-              },
+              { kind: "System", accountId: principal.accountId },
               attributes.now,
             )
-          : new Map<string, readonly string[]>();
+          : principal.kind === "Individual" && attributes.request.subjectAccountId !== null
+            ? await this.#loadPrincipalPermissions.execute(
+                {
+                  kind: "Individual",
+                  accountId: principal.account.accountId,
+                  contextAccountId: attributes.request.subjectAccountId,
+                },
+                attributes.now,
+              )
+            : new Map<string, readonly string[]>();
     const roles = holdings.get(governingPermissionOf(attributes.request.actionKey));
     const finding: Finding =
       roles === undefined
@@ -115,16 +145,55 @@ export class AccessStep implements DecisionStep {
   }
 }
 
-/** The contact access step (SU-8): a contact's customer permission; no action in this feature has a contact. */
+/**
+ * The contact access step (SU-8): a change asked for by the case's contact needs the contact to hold the matching
+ * customer permission in the subject. A contact with holds holds nothing (AC-6). No finding without a contact, or for
+ * an action a contact does not ask for.
+ */
 export class ContactAccessStep implements DecisionStep {
-  async decide() {
-    return { finding: null, stops: false };
+  readonly #loadPrincipalPermissions: LoadPrincipalPermissions;
+
+  constructor(loadPrincipalPermissions: LoadPrincipalPermissions) {
+    this.#loadPrincipalPermissions = loadPrincipalPermissions;
+  }
+
+  async decide(attributes: DecisionAttributes) {
+    const { contactAccountId, subjectAccountId, actionKey } = attributes.request;
+    const customerPermission = CUSTOMER_PERMISSION_OF[actionKey];
+    if (contactAccountId === undefined || contactAccountId === null || customerPermission === undefined)
+      return { finding: null, stops: false };
+    if (subjectAccountId === null)
+      throw new Error("A contact's request was decided without a subject account.");
+    const contact = await attributes.contact();
+    const roles =
+      contact === null || contact.holdReasonCodes.length > 0
+        ? undefined
+        : (
+            await this.#loadPrincipalPermissions.execute(
+              { kind: "Individual", accountId: contactAccountId, contextAccountId: subjectAccountId },
+              attributes.now,
+            )
+          ).get(customerPermission);
+    const finding: Finding =
+      roles === undefined
+        ? {
+            source: "contact-access",
+            outcome: "Deny",
+            reasonCodes: ["access.contact-permission-not-held"],
+            grantedByRoles: [],
+          }
+        : { source: "contact-access", outcome: "Allow", reasonCodes: [], grantedByRoles: roles };
+    return { finding, stops: false };
   }
 }
 
-/** The entitlement step: a feature action needs the subject entitled to the feature (EN-6). */
+/**
+ * The entitlement step: a feature action needs the subject entitled to the feature (EN-6); a grant must change what
+ * the subject has (EN-4).
+ */
 export class EntitlementStep implements DecisionStep {
   async decide(attributes: DecisionAttributes) {
+    if (GRANT_CREATING_ACTIONS.has(attributes.request.actionKey)) return decideGrantChange(attributes);
     const featureKey = featureKeyOf(attributes.request.actionKey);
     if (featureKey === null) return { finding: null, stops: false };
     const subject = await attributes.subject();
@@ -164,6 +233,28 @@ export class EntitlementStep implements DecisionStep {
   }
 }
 
+/** The grant rules (EN-4) over the subject's entitlements now; a grant without a feature is a caller's error. */
+async function decideGrantChange(attributes: DecisionAttributes) {
+  const featureKey = attributes.request.context?.featureKey;
+  if (featureKey === undefined) throw new Error("A grant was decided without its feature.");
+  const subject = await attributes.subject();
+  if (subject === null) throw new Error("A grant was decided without a subject account.");
+  const reasonCodes = attributes.checkGrantEligibility.execute(subject, {
+    featureKey,
+    quota: attributes.request.context?.quota ?? null,
+    extendsGrantId: attributes.request.context?.extendsGrantId ?? null,
+  });
+  const finding: Finding = {
+    source: "entitlement",
+    outcome: reasonCodes.length === 0 ? "Allow" : "Deny",
+    reasonCodes,
+    sources: [],
+    coveringTermSource: subject.effective.kind === "Effective" ? subject.effective.coveringTerm.source : null,
+    facts: subject.effective.kind === "None" ? subject.effective.facts : {},
+  };
+  return { finding, stops: false };
+}
+
 /** The policy step: every applicable policy (PO-3), over attributes the PIP loaded from trusted data (AU-5). */
 export class PolicyStep implements DecisionStep {
   readonly #evaluatePolicies: EvaluatePolicies;
@@ -192,7 +283,11 @@ export class PolicyStep implements DecisionStep {
         : (await this.#getCatalog.execute()).plans.find(
             (candidate) => candidate.planKey === subject.latestPlanKey,
           );
-    const featureKey = featureKeyOf(attributes.request.actionKey);
+    const context = attributes.request.context ?? {};
+    const featureKey = featureKeyOf(attributes.request.actionKey) ?? context.featureKey ?? null;
+    const durationDays = await attributes.daysGranted();
+    const quota = (await attributes.quotaGranted()) ?? context.quota;
+    const contactAccountId = attributes.request.contactAccountId ?? null;
     return {
       principal:
         principal.kind === "Employee"
@@ -204,7 +299,9 @@ export class PolicyStep implements DecisionStep {
               job_function: principal.employee.jobFunctionKey,
               job_level: principal.employee.jobLevel,
             }
-          : { account_id: attributes.request.principal.accountId, account_kind: "Customer" },
+          : principal.kind === "System"
+            ? { account_id: principal.accountId, account_kind: "Internal", identity_kind: "System" }
+            : { account_id: attributes.request.principal.accountId, account_kind: "Customer" },
       resource:
         subject === null
           ? {}
@@ -218,6 +315,17 @@ export class PolicyStep implements DecisionStep {
       context: {
         action_key: attributes.request.actionKey,
         ...(featureKey === null ? {} : { feature_key: featureKey }),
+        ...(quota === undefined ? {} : { quota }),
+        ...(durationDays === null ? {} : { duration_days: durationDays }),
+        has_contact: contactAccountId !== null,
+        contact_authenticated: contactAccountId !== null && context.contactAuthenticated === true,
+        approval_granted: context.approvalGranted === true,
+        ...(context.requesterAccountId === undefined
+          ? {}
+          : { requester_account_id: context.requesterAccountId }),
+        ...(context.confirmerAccountId === undefined
+          ? {}
+          : { confirmer_account_id: context.confirmerAccountId }),
       },
       environment: { now: attributes.now },
     };

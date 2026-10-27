@@ -364,3 +364,65 @@ button.inline {
   border-left: 2px solid #bcccdc;
   padding-left: 0.5rem;
 }
+
+/* A prepared change request in a reply: what it does, its preview, and the CSR's buttons (grants-and-approvals D1). */
+.change-request {
+  border-left: 3px solid #f0b429;
+  padding: 0.25rem 0 0.25rem 0.75rem;
+  margin: 0.4rem 0;
+}
+
+.change-request h3,
+.approval h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+}
+
+.change-request .reason,
+.approval .reason {
+  margin: 0 0 0.3rem;
+  font-size: 0.9rem;
+  color: #52606d;
+}
+
+.change-request .status {
+  margin: 0.2rem 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* The approvals panel: collapsible, at the top of the workspace, for supervisors only (D7). */
+.approvals {
+  background: #ffffff;
+  border: 1px solid #d9e2ec;
+  border-radius: 6px;
+  margin: 0.5rem 1rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.approvals summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.approvals ul {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.approval {
+  border-left: 3px solid #f0b429;
+  padding: 0.25rem 0 0.25rem 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.approval p {
+  margin: 0.15rem 0;
+}
+
+.approval select,
+.approval input {
+  font: inherit;
+  padding: 0.25rem 0.4rem;
+}

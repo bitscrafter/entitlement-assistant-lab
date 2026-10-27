@@ -36,6 +36,9 @@ resource_operations:
   - permission: grant.create
     held_by: Employee
     description: Grant a feature to a subscription until an expiry.
+  - permission: grant.revoke
+    held_by: Employee
+    description: End an active grant before its expiry; held through grant.create.
   - permission: grant.record-expiry
     held_by: System
     description: Record the end of an expired grant.

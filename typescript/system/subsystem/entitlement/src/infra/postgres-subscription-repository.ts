@@ -1,6 +1,6 @@
 import type { PostgresConnection } from "../../../../adapter/postgres/postgres-connection.ts";
 import type { Uuid } from "../../../../kernel/identifier.ts";
-import type { Subscription, TermSource } from "../model/effective-entitlements.ts";
+import type { EntitlementGrant, Subscription, TermSource } from "../model/effective-entitlements.ts";
 import type { SubscriptionRepository } from "../usecase/subscription-repository.ts";
 
 export class PostgresSubscriptionRepository implements SubscriptionRepository {
@@ -8,6 +8,31 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
 
   constructor(connection: PostgresConnection) {
     this.#connection = connection;
+  }
+
+  async grantsOf(accountId: Uuid, featureKey: string, since: Date): Promise<readonly EntitlementGrant[]> {
+    const rows = await this.#connection.query<{
+      grant_id: Uuid;
+      feature_key: string;
+      quota: number | null;
+      starts_at: Date;
+      expires_at: Date;
+      ended_at: Date | null;
+    }>(
+      `SELECT g.grant_id, g.feature_key, g.quota, g.starts_at, g.expires_at, g.ended_at
+         FROM entitlement_grant g JOIN subscription s USING (subscription_id)
+        WHERE s.account_id = $1 AND g.feature_key = $2 AND least(g.expires_at, coalesce(g.ended_at, g.expires_at)) > $3
+        ORDER BY g.starts_at, g.grant_id`,
+      [accountId, featureKey, since],
+    );
+    return rows.map((grant) => ({
+      grantId: grant.grant_id,
+      featureKey: grant.feature_key,
+      quota: grant.quota,
+      startsAt: grant.starts_at,
+      expiresAt: grant.expires_at,
+      endedAt: grant.ended_at,
+    }));
   }
 
   /** @relies-on db: subscription_one_in_force (at most one subscription not ended per account) */

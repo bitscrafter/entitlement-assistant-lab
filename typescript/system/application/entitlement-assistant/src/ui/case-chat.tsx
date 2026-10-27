@@ -1,11 +1,13 @@
 import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { useAgent } from "agents/react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { renewSession } from "./authentication-client.ts";
 import { CasePanel } from "./case-panel.tsx";
 import { type CaseActionOutcome, setCaseContact, setCaseSubject } from "./cases-client.ts";
+import { type ChangeRequestState, changeRequestAction, getChangeRequest } from "./changes-client.ts";
 import {
   type AccountCard,
+  type ChangeRequestCard,
   type DetailLine,
   NAME_SEARCH_NOTICE,
   type ReplyPart,
@@ -118,7 +120,7 @@ export function CaseChat({
                 ) : view === null || view === undefined ? (
                   <p className="text">{textOf(message.parts as readonly ReplyPart[])}</p>
                 ) : (
-                  <Reply view={view} actions={caseActions} />
+                  <Reply view={view} actions={caseActions} caseId={caseId} />
                 )}
               </li>
             );
@@ -178,7 +180,15 @@ function textOf(parts: readonly ReplyPart[]): string {
     .join("");
 }
 
-function Reply({ view, actions }: { readonly view: ReplyView; readonly actions: CaseActions }) {
+function Reply({
+  view,
+  actions,
+  caseId,
+}: {
+  readonly view: ReplyView;
+  readonly actions: CaseActions;
+  readonly caseId: string;
+}) {
   const calls = view.tools.reduce((total, tool) => total + tool.times, 0);
   return (
     <div className="reply">
@@ -207,6 +217,14 @@ function Reply({ view, actions }: { readonly view: ReplyView; readonly actions: 
         <section>
           <h2>Answer</h2>
           <p className="text">{view.text}</p>
+        </section>
+      )}
+      {view.changeRequests.length > 0 && (
+        <section>
+          <h2>Change requests</h2>
+          {view.changeRequests.map((card) => (
+            <ChangeRequestCardView key={card.changeRequestId} caseId={caseId} card={card} />
+          ))}
         </section>
       )}
       {(view.accounts.length > 0 ||
@@ -356,4 +374,102 @@ function DetailLineView({ line }: { readonly line: DetailLine }) {
         </>
       );
   }
+}
+
+const PREVIEW_WORDS: Readonly<Record<ChangeRequestCard["preview"], string>> = {
+  Allow: "Allowed: confirming applies it now.",
+  Conditional: "Needs a supervisor's approval: confirming sends it for approval.",
+  Deny: "Refused as it stands:",
+};
+
+const STATUS_WORDS: Readonly<Record<string, string>> = {
+  AwaitingConfirmation: "Awaiting your confirmation",
+  AwaitingApproval: "Awaiting a supervisor's approval",
+  Applied: "Applied",
+  Refused: "Refused",
+  Canceled: "Canceled",
+  Expired: "Expired: no supervisor decided in time",
+};
+
+/**
+ * The change request card (grants-and-approvals D1, D2): what the assistant prepared, its preview, and Confirm and
+ * Cancel, which call the endpoints; the card reads the request again after each click, so it shows the server's
+ * status, never the model's.
+ */
+function ChangeRequestCardView({
+  caseId,
+  card,
+}: {
+  readonly caseId: string;
+  readonly card: ChangeRequestCard;
+}) {
+  const [state, setState] = useState<ChangeRequestState | null>(null);
+  const [messages, setMessages] = useState<readonly string[]>([]);
+  const [working, setWorking] = useState(false);
+  const reload = useCallback(
+    () => getChangeRequest(caseId, card.changeRequestId).then(setState),
+    [caseId, card.changeRequestId],
+  );
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  async function act(action: "confirmation" | "cancellation") {
+    setWorking(true);
+    const outcome = await changeRequestAction(caseId, card.changeRequestId, action);
+    setMessages(outcome.ok ? [] : outcome.messages);
+    await reload();
+    setWorking(false);
+  }
+
+  const status = state?.status ?? "AwaitingConfirmation";
+  return (
+    <div className="change-request">
+      <h3>{card.title}</h3>
+      {card.reason !== "" && <p className="reason">Reason: {card.reason}</p>}
+      {card.changes.length > 0 && (
+        <ul className="lines">
+          {card.changes.map((change) => (
+            <li key={change}>{change}</li>
+          ))}
+        </ul>
+      )}
+      {status === "AwaitingConfirmation" && (
+        <p className={card.preview === "Deny" ? "refusal" : "hint"}>
+          {PREVIEW_WORDS[card.preview]} {card.preview === "Deny" ? card.reasons.join(" ") : ""}
+        </p>
+      )}
+      <p className="status">
+        {STATUS_WORDS[status] ?? status}
+        {state?.approval !== null && state?.approval !== undefined && status === "AwaitingApproval"
+          ? ` until ${state.approval.expires_at.slice(0, 16).replace("T", " ")} UTC`
+          : ""}
+      </p>
+      {messages.map((message) => (
+        <p key={message} className="error" role="alert">
+          {message}
+        </p>
+      ))}
+      {status === "AwaitingConfirmation" && (
+        <div className="row-actions">
+          <button
+            type="button"
+            className="inline"
+            disabled={working}
+            onClick={() => void act("confirmation")}
+          >
+            Confirm
+          </button>
+          <button
+            type="button"
+            className="secondary inline"
+            disabled={working}
+            onClick={() => void act("cancellation")}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }

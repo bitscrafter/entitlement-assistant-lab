@@ -2,11 +2,13 @@ import { z } from "../../../../external/zod.ts";
 import type { EntitlementSource, ReasonFacts } from "../../../../kernel/entitlement.ts";
 import { decodeIdentifier, encodeIdentifier, type Uuid } from "../../../../kernel/identifier.ts";
 import type { Remedy } from "../../../../subsystem/product/src/usecase/find-lowest-plan-including.ts";
+import type { ChangeAsked } from "../../../../subsystem/support/src/model/change-request.ts";
 import {
   type AccountSummary,
   type FindCustomerAccountResult,
   MINIMUM_QUERY_LENGTH,
 } from "../../../../subsystem/support/src/usecase/find-customer-account.ts";
+import type { PrepareChangeRequestResult } from "../../../../subsystem/support/src/usecase/prepare-change-request.ts";
 import type {
   AccountContext,
   NotCaseSubject,
@@ -14,6 +16,7 @@ import type {
   ReadRequest,
 } from "../../../../subsystem/support/src/usecase/read-request.ts";
 import type { CaseWorkUseCases } from "../case-work-use-cases.ts";
+import { diffBody, parametersBody } from "../change-request-body.ts";
 import { ERRORS } from "../http/responses.ts";
 
 /** A tool as the model is told about it. */
@@ -185,6 +188,93 @@ const explainArguments = z.strictObject({
   feature_key: catalogKey,
   operation: catalogKey,
 });
+
+/** A change's free-text reason, kept as the CSR's record of why (never acted on): bounded like a short note. */
+const changeReason = z.string().trim().min(1).max(500);
+/** A grant lasts whole days; the policies decide how many may be granted (grants-and-approvals D5). */
+const durationDays = z.number().int().min(1).max(365);
+const grantArguments = z.strictObject({
+  feature_key: catalogKey,
+  quota: z.number().int().min(1).max(100000).optional(),
+  duration_days: durationDays,
+  reason: changeReason,
+});
+const revocationArguments = z.strictObject({ grant_id: z.string().max(64), reason: changeReason });
+const extensionArguments = z.strictObject({
+  grant_id: z.string().max(64),
+  duration_days: durationDays,
+  reason: changeReason,
+});
+
+const grantIdParameter = {
+  type: "string",
+  description:
+    "A grant id of the case's account, as list_entitlements or check_entitlement shows it (grt_…).",
+};
+const reasonParameter = {
+  type: "string",
+  description: "Why, in the representative's words, at most 500 characters.",
+};
+const durationParameter = { type: "integer", minimum: 1, maximum: 365, description: "How many days." };
+
+/** A grant id as the model writes it (`grt_…`); null when it is not one. */
+function grantIdOf(written: string): Uuid | null {
+  const decoded = decodeIdentifier("grt", written);
+  return decoded.ok ? decoded.value : null;
+}
+
+const NOT_THIS_ACCOUNTS_GRANT = "This grant is not one of the case's account.";
+
+/** Prepares a change on the case's subject and answers as the change request card is drawn (D1, D2). */
+async function prepareChange(change: ChangeAsked, context: ToolContext): Promise<ToolOutcome> {
+  const caseId = context.request.caseId;
+  if (caseId === null) return { errorText: "Changes are prepared in a case." };
+  const result: PrepareChangeRequestResult = await context.runUseCases((useCases) =>
+    useCases.prepareChangeRequest.execute({ ...context.request, caseId, change }),
+  );
+  switch (result.kind) {
+    case "Prepared": {
+      const prepared = result.changeRequest;
+      return {
+        output: {
+          result: "prepared",
+          change_request: {
+            change_request_id: encodeIdentifier("chg", prepared.changeRequestId),
+            change_kind: prepared.kind,
+            status: prepared.status,
+            parameters: parametersBody(prepared.change),
+            diff: diffBody(prepared.diff),
+            preview: {
+              outcome: prepared.preview.outcome,
+              reasons: reasonsOf(prepared.preview.reasonCodes, context.describeReason),
+            },
+          },
+        },
+      };
+    }
+    case "SubjectNotSet":
+      return { errorText: "Set the case's subject before preparing a change." };
+    case "UnknownFeature":
+      return { errorText: "This feature is not in the catalog." };
+    case "GrantNotFound":
+      return { errorText: NOT_THIS_ACCOUNTS_GRANT };
+    case "GrantExtended":
+      return {
+        errorText: `This grant was extended; the active grant is ${encodeIdentifier("grt", result.currentGrantId)}: prepare the change on that one.`,
+      };
+    case "GrantNotActive":
+      return { errorText: "This grant is not active." };
+    case "GrantExpired":
+      return { errorText: "This grant has expired: prepare a new grant." };
+    case "CaseNotFound":
+    case "CaseNotAssigned":
+      return { errorText: "This case is closed." };
+    case "Forbidden":
+      return { output: NOT_FOUND };
+    default:
+      return { output: refusal(result, context.describeReason) };
+  }
+}
 
 /** The tools of the case agent (api.md §9): one per use case, translation only (A1). */
 export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
@@ -388,6 +478,81 @@ export const CASE_TOOLS: Readonly<Record<string, CaseTool>> = {
           },
         },
       };
+    },
+  },
+  prepare_grant: {
+    definition: {
+      name: "prepare_grant",
+      description:
+        "Prepare a temporary grant of a feature to the case's account, for the representative to confirm on a card. It changes nothing by itself. Give a quota only for a metered feature such as seats.",
+      parameters: {
+        type: "object",
+        properties: {
+          feature_key: featureKeyParameter,
+          quota: { type: "integer", minimum: 1, description: "Added quota, for a metered feature only." },
+          duration_days: durationParameter,
+          reason: reasonParameter,
+        },
+        required: ["feature_key", "duration_days", "reason"],
+        additionalProperties: false,
+      },
+    },
+    async run(argumentsWritten, context) {
+      const parsed = grantArguments.safeParse(argumentsWritten);
+      if (!parsed.success) return { errorText: argumentError(parsed.error) };
+      return prepareChange(
+        {
+          kind: "CreateGrant",
+          featureKey: parsed.data.feature_key,
+          ...(parsed.data.quota === undefined ? {} : { quota: parsed.data.quota }),
+          durationDays: parsed.data.duration_days,
+          reason: parsed.data.reason,
+        },
+        context,
+      );
+    },
+  },
+  prepare_grant_revocation: {
+    definition: {
+      name: "prepare_grant_revocation",
+      description:
+        "Prepare ending an active grant of the case's account now, for the representative to confirm on a card. It changes nothing by itself.",
+      parameters: {
+        type: "object",
+        properties: { grant_id: grantIdParameter, reason: reasonParameter },
+        required: ["grant_id", "reason"],
+        additionalProperties: false,
+      },
+    },
+    async run(argumentsWritten, context) {
+      const parsed = revocationArguments.safeParse(argumentsWritten);
+      if (!parsed.success) return { errorText: argumentError(parsed.error) };
+      const grantId = grantIdOf(parsed.data.grant_id);
+      if (grantId === null) return { errorText: NOT_THIS_ACCOUNTS_GRANT };
+      return prepareChange({ kind: "RevokeGrant", grantId, reason: parsed.data.reason }, context);
+    },
+  },
+  prepare_grant_extension: {
+    definition: {
+      name: "prepare_grant_extension",
+      description:
+        "Prepare extending an active grant of the case's account by some days, for the representative to confirm on a card. It changes nothing by itself. An expired grant is not extended: prepare a new grant.",
+      parameters: {
+        type: "object",
+        properties: { grant_id: grantIdParameter, duration_days: durationParameter, reason: reasonParameter },
+        required: ["grant_id", "duration_days", "reason"],
+        additionalProperties: false,
+      },
+    },
+    async run(argumentsWritten, context) {
+      const parsed = extensionArguments.safeParse(argumentsWritten);
+      if (!parsed.success) return { errorText: argumentError(parsed.error) };
+      const grantId = grantIdOf(parsed.data.grant_id);
+      if (grantId === null) return { errorText: NOT_THIS_ACCOUNTS_GRANT };
+      return prepareChange(
+        { kind: "ExtendGrant", grantId, durationDays: parsed.data.duration_days, reason: parsed.data.reason },
+        context,
+      );
     },
   },
   draft_case_summary: {
