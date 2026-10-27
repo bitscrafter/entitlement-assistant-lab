@@ -5,9 +5,11 @@
 1. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
 2. At the end: GitHub remote (owner, 2026-10-25).
 3. Live evaluations of explain-access (§5) and case-lifecycle, once Workers AI answers again (its free allocation still refused calls at 01:12 UTC on 2026-10-27, though the dashboard showed 0 used): record as explain-access discovery 39 and case-lifecycle discovery 16.
-4. Next feature: grants-and-approvals (S15, S17, S18, S21–S26), spec first.
+4. Grants-and-approvals: once Workers AI answers, the live smoke test of the change flow (prepare, confirm, a 30-day grant approved by Morgan, a denial, revoke, extend) and the card and approvals panel in the browser; then the owner's review of discoveries 3–32 (vocabulary in 18) and the merge to `main`.
 
 ## Completed
+
+- Grants-and-approvals built, reviewed twice, committed on `feature/grants-and-approvals` (`0ef4f28`), deployed (`ff293743`, 2026-10-27) after a Neon reset and reseed with Morgan; GREEN 606.
 
 - Explain-access and case-lifecycle merged into `main` (2026-10-27): 7d64a27, 16d63fc; GREEN 537 on `main`; deployed from `main` (`0c06f4f0`); smoke test passed.
 
