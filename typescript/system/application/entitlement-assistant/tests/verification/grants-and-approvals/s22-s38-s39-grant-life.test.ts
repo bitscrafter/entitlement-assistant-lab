@@ -122,6 +122,26 @@ describe("grants-and-approvals a grant's life", () => {
     expect(await entitled(harness, "acc_initech", "audit-log-export")).toMatchObject({ kind: "Entitled" });
   });
 
+  test("live check ensures a change on an extended grant names the grant that replaced it", async () => {
+    const original = await sevenDayGrant();
+    const extension = await prepare(harness, "iac_alex", {
+      kind: "ExtendGrant",
+      grantId: original.grant_id,
+      durationDays: 3,
+      reason: "A few more days.",
+    });
+    expect((await changeAction(harness, "iac_alex", preparedId(extension), "confirmation")).status).toBe(200);
+    const current = (await grantsOf(harness.owner, "acc_initech")).find((grant) => grant.ended_at === null);
+
+    const revocation = await prepare(harness, "iac_alex", {
+      kind: "RevokeGrant",
+      grantId: original.grant_id,
+      reason: "No longer needed.",
+    });
+
+    expect(revocation).toEqual({ kind: "GrantExtended", currentGrantId: current?.grant_id });
+  });
+
   test("scenario 39b ensures extending past 14 days in all needs an approval", async () => {
     await givenGrantCase(harness, { subject: "acc_hooli", contact: "acc_gavin" });
 

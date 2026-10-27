@@ -40,6 +40,8 @@ export type PrepareChangeRequestResult =
   | { readonly kind: "UnknownFeature" }
   | { readonly kind: "GrantNotFound" }
   | { readonly kind: "GrantNotActive" }
+  /** The grant was extended: the change names the grant that replaced it, still active (D13). */
+  | { readonly kind: "GrantExtended"; readonly currentGrantId: Uuid }
   | { readonly kind: "GrantExpired" }
   | CaseRefusal
   | ActionRefusal;
@@ -117,7 +119,8 @@ export class PrepareChangeRequest {
    * @ensures The permission gate first (`gateChange`): nothing about the grant or the catalog is read before it.
    * @ensures A revocation or extension names a grant of the subject (`GrantNotFound` otherwise); a revocation needs it
    *          active (`GrantNotActive`); an extension needs it not expired (`GrantExpired`) and not ended otherwise
-   *          (`GrantNotActive`) (D12, D13). A new grant names a catalog feature (`UnknownFeature`).
+   *          (`GrantNotActive`) (D12, D13); one that was extended names its active successor (`GrantExtended`, so the
+   *          assistant can prepare the change again on it). A new grant names a catalog feature (`UnknownFeature`).
    * @ensures Otherwise the preview decision (D2): with the case's contact and their authentication now. A principal
    *          who may read the subject gets the request stored `AwaitingConfirmation` whatever the preview, with the
    *          subject's version and the entitlement diff; one who may not is refused as for a read.
@@ -145,6 +148,10 @@ export class PrepareChangeRequest {
       grant = await this.#getGrant.execute(change.grantId);
       if (grant === null || grant.accountId !== subjectAccountId) return { kind: "GrantNotFound" };
       const expired = grant.endReason === "Expired" || (grant.endedAt === null && at >= grant.expiresAt);
+      if (grant.endReason === "Extended") {
+        const latest = await this.#getGrant.latestOf(grant);
+        if (isActive(latest, at)) return { kind: "GrantExtended", currentGrantId: latest.grantId };
+      }
       if (change.kind === "ExtendGrant" && expired) return { kind: "GrantExpired" };
       if (!isActive(grant, at)) return { kind: "GrantNotActive" };
     }

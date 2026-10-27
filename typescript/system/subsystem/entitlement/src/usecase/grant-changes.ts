@@ -17,6 +17,22 @@ export class GetGrant {
   execute(grantId: Uuid): Promise<StoredGrant | null> {
     return this.#grants.find(grantId);
   }
+
+  /**
+   * The grant an extension chain ends in (D13: a chain has at most one active grant).
+   *
+   * @ensures The last grant extending this one, through every extension; the grant itself when none extends it.
+   */
+  async latestOf(grant: StoredGrant): Promise<StoredGrant> {
+    let latest = grant;
+    // A chain is short; the bound only guards against a cycle that the unique index already rules out.
+    for (let step = 0; step < 100; step += 1) {
+      const next = await this.#grants.extensionOf(latest.grantId);
+      if (next === null) return latest;
+      latest = next;
+    }
+    return latest;
+  }
 }
 
 /**

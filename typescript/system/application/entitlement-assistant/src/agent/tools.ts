@@ -258,6 +258,10 @@ async function prepareChange(change: ChangeAsked, context: ToolContext): Promise
       return { errorText: "This feature is not in the catalog." };
     case "GrantNotFound":
       return { errorText: NOT_THIS_ACCOUNTS_GRANT };
+    case "GrantExtended":
+      return {
+        errorText: `This grant was extended; the active grant is ${encodeIdentifier("grt", result.currentGrantId)}: prepare the change on that one.`,
+      };
     case "GrantNotActive":
       return { errorText: "This grant is not active." };
     case "GrantExpired":

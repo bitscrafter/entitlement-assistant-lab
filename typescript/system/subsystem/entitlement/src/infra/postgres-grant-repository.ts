@@ -83,6 +83,13 @@ export class PostgresGrantRepository implements GrantRepository {
     return rows.length === 1;
   }
 
+  async extensionOf(grantId: Uuid): Promise<StoredGrant | null> {
+    const [row] = await this.#connection.query<GrantRow>(`${SELECT_GRANT} WHERE g.extends_grant_id = $1`, [
+      grantId,
+    ]);
+    return row === undefined ? null : toGrant(row);
+  }
+
   async expiredNotEnded(at: Date, limit: number): Promise<readonly StoredGrant[]> {
     const rows = await this.#connection.query<GrantRow>(
       `${SELECT_GRANT} WHERE g.ended_at IS NULL AND g.expires_at <= $1 ORDER BY g.expires_at, g.grant_id LIMIT $2`,

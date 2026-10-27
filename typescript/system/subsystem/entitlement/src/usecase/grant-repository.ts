@@ -52,4 +52,7 @@ export interface GrantRepository {
 
   /** @ensures At most `limit` grants not ended whose expiry is at or before `at`, earliest expiry first. */
   expiredNotEnded(at: Date, limit: number): Promise<readonly StoredGrant[]>;
+
+  /** @ensures The grant that extends this one (`extends_grant_id`), or null. */
+  extensionOf(grantId: Uuid): Promise<StoredGrant | null>;
 }
