@@ -1,0 +1,112 @@
+@startuml case-lifecycle
+title The life of a case — who acts at each step, and what the step is for\n(the assistant proposes; only the CSR's click changes the case)
+
+skinparam activityBackgroundColor #FFFFFF
+skinparam activityBorderColor #2688D4
+skinparam arrowColor #2688D4
+skinparam noteBackgroundColor #FCF3D0
+skinparam noteBorderColor #C0A040
+skinparam swimlaneBorderColor #A0A0A0
+
+|CSR|
+start
+:Open a case
+(**POST /api/cases**);
+|Server|
+:**case.open**: the case is assigned to the CSR;
+note right
+  Purpose: one customer matter, owned by one CSR
+  (SU-1, SU-14); only the assignee acts in it.
+end note
+
+|CSR|
+:Ask about an account in the chat
+("Does Acme Corp have SSO?");
+|Assistant|
+:Find the account; propose it as the case's subject
+(tool **propose_case_subject**);
+|Server|
+:**account.read** decision on the account (audited),
+the tool result carries the name as stored;
+note right
+  Purpose: fix which account the case is about,
+  so every question and change has one account
+  context and one audit trail. Text the model
+  reads never chooses it.
+end note
+if (May the CSR read it?) then (yes)
+  :Account card with **Set as case subject**;
+else (no)
+  :Refused as any read (AU-6): no card,
+  the case keeps no subject;
+  detach
+endif
+
+|CSR|
+:Click **Set as case subject**
+(**PUT …/subject**);
+|Server|
+:**case.set-subject**: account.read on it again,
+assignee check; set once (a second: 409);
+
+|CSR|
+:Look up the person on the line by email,
+click **Set as contact** on their own account
+(**PUT …/contact**);
+|Server|
+:**case.set-contact**: an individual's own account,
+any earlier authentication is cleared;
+note right
+  Purpose: record who is asking, so a change they
+  ask for is checked against what they may request
+  in the account (SU-8). Identification only:
+  a claim, not yet proof.
+end note
+
+|CSR|
+:Ask the contact the security questions
+on file, outside the system;
+:Record the outcome
+(**POST …/contact-authentication**, kind **Knowledge**);
+|Server|
+if (Passed?) then (yes)
+  :**case.authenticate-contact**: kind, CSR, time recorded;
+else (no)
+  :409 **contact_authentication_failed**, audited;
+endif
+note right
+  Purpose: record how sure we are that the contact
+  is who they claim to be, before anything they ask
+  for can change the account (grants-and-approvals).
+end note
+
+|CSR|
+:Work the case in the chat;
+|Assistant|
+:Check, list, explain — on the subject only;
+note right
+  Purpose: a case stays about one account;
+  only finding accounts crosses accounts.
+end note
+:Draft a case summary
+(tool **draft_case_summary**: kept in the case agent);
+
+|CSR|
+:Review and edit the draft in the case panel,
+choose a reason (**Resolved**, **Abandoned**),
+click **Close case** (**POST …/closure**);
+|Server|
+:**case.close**, in one transaction:
+pending change requests and approvals canceled
+(from grants-and-approvals), the assignment ended,
+the reviewed summary stored on the case;
+:Open connections closed (**4404 case_unavailable**);
+note right
+  Purpose: nothing stays pending, and the database
+  keeps what the case was about and how it ended.
+  From now on the case answers 404 to everyone:
+  it has no assignee (SU-14, explain-access D1).
+end note
+stop
+
+@enduml

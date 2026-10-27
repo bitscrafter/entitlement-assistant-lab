@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Uuid } from "../../../../kernel/identifier.ts";
-import { ToolRefusal, turnErrorLogOf } from "../../src/agent/agent-tools.ts";
+import { agentTools, ToolRefusal, turnErrorLogOf } from "../../src/agent/agent-tools.ts";
 import { finalStepAnswersInWords } from "../../src/agent/instructions.ts";
 import { CASE_TOOLS, type ToolContext } from "../../src/agent/tools.ts";
 import type { CaseWorkUseCases } from "../../src/case-work-use-cases.ts";
@@ -137,7 +137,7 @@ describe("the case tools, as the review of round 2 asked", () => {
       { query: "northwind" },
       contextAnswering({ kind: "Ambiguous", candidates: [], moreMatches: true }),
     );
-    expect(outcome).toEqual({ output: { result: "Ambiguous", candidates: [], more_matches: true } });
+    expect(outcome).toEqual({ output: { result: "ambiguous", candidates: [], more_matches: true } });
   });
 
   test("ensures an explanation reports the person's stored email, not the one the model wrote", async () => {
@@ -160,5 +160,32 @@ describe("the case tools, as the review of round 2 asked", () => {
       }),
     );
     expect(outcome).toMatchObject({ output: { person_email: "carol@acme.com" } });
+  });
+});
+
+describe("agentTools in a closed case (review R4)", () => {
+  test("ensures no tool runs once the case is no longer assigned to the actor", async () => {
+    const ran: string[] = [];
+    const tools = agentTools({
+      caseId: ALEX,
+      actor: () => ({ principalAccountId: ALEX, sessionId: ALEX }),
+      runUseCases: async () => {
+        ran.push("use case");
+        return { kind: "NotFound" } as never;
+      },
+      describeReason: (code) => code,
+      newTraceId: () => "4bf92f3577b34da6a3ce929d0e0e4736",
+      caseStillAssigned: async () => false,
+      logFailure: () => undefined,
+    });
+    const execute = tools.find_customer_account?.execute as (
+      input: unknown,
+      options: unknown,
+    ) => Promise<unknown>;
+
+    await expect(execute({ query: "Initech" }, { toolCallId: "call_1" })).rejects.toThrow(
+      "This case is closed.",
+    );
+    expect(ran).toEqual([]);
   });
 });

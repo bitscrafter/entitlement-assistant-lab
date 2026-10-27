@@ -1,6 +1,6 @@
 # AI Session — current state
 
-**Updated:** 2026-10-26 (explain-access P8, CM-19)
+**Updated:** 2026-10-27 (case-lifecycle built; live evaluations waiting for Workers AI)
 
 ## State
 
@@ -25,16 +25,26 @@
   Spec §5 evaluation, 4 messages × 5 runs: tool choice 20/20; answers in words 13/20, then 20/20 after the fix
   (discoveries 33, 34). State in `tech-docs/features/explain-access/workflow/progress.md`.
 
+- **Feature case-lifecycle: built** on branch `feature/case-lifecycle` (from `feature/explain-access`; last commit
+  c164cc2; GREEN 537 @ c164cc2), deployed (version `418de419`; Neon migrated through `support/003`). Spec approved
+  with three amendments (D18–D22: the case panel's account search, closing by the assignee, guidance, case events
+  in the conversation, the case line); adversarial review: 6 rounds, every finding fixed or ruled (discoveries 8–15).
+  State in `tech-docs/features/case-lifecycle/workflow/progress.md`.
+
 ## Next session
 
 1. Owner: keep the production secrets in a password manager.
-2. Explain-access (resume here): after 00:00 UTC, when the free Workers AI allocation resets, run the amended §5
-   evaluation against version `58b37e05` (deployed from d44d6ae): `EVALUATION_ORIGIN=https://entitlement-assistant.jose-luis-rios.workers.dev
-   SEED_PASSWORDS_FILE=.env.seed-passwords npm run eval:live` (25 turns, about 5,000 neurons). Record it as
-   discovery 39, then ask the owner to merge `feature/explain-access` into `main` and close out (AI_WORKFLOW.md §6).
-3. Done for explain-access: GREEN 387 @ d44d6ae; adversarial review round 1 REJECT (fixed), round 2 ACCEPT (minor
-   findings fixed or ruled, discoveries 37, 38); non-AI smoke test of `58b37e05` passed; discoveries reconciled
-   except 36 (the evaluation).
+2. Resume here: the live evaluations wait for Workers AI's free allocation, which had not reset at 00:05 UTC on
+   2026-10-27 (a probe runs every 10 minutes). Then: `EVALUATION_ORIGIN=https://entitlement-assistant.jose-luis-rios.workers.dev
+   SEED_PASSWORDS_FILE=.env.seed-passwords npm run eval:live` (explain-access §5, 25 turns), and the case-lifecycle
+   live check (`/tmp/case-lifecycle-live.mjs`, run from `typescript/system`: proposal, case events and line, draft).
+   Record both (explain-access discovery 39, case-lifecycle discovery 16).
+3. Then, as the owner approved: merge `feature/explain-access`, then `feature/case-lifecycle`, into `main`; GREEN
+   gate on `main`; deploy from `main`; close out both features (AI_WORKFLOW.md §6).
+4. For the owner's review: case-lifecycle discoveries 1–15 (judgment calls made autonomously), the glossary terms
+   added (case panel, case assignee check, case WebSocket connections, server WebSocket message, case event, case
+   events delivery, case line, case account name).
+5. At the end: prompt history export (redacted, under `tech-docs/`), GitHub remote.
 
 ## Decisions (owner, 2026-10-22)
 
@@ -92,6 +102,12 @@
 - CM-19: gpt-oss-120b (free on Workers AI like Llama); lookup permissive, display strict: the model writes `[acc_…]`
   and `[email]` references, the screen writes the stored names, for accounts and people. Spec §5 amended. The live
   evaluation is a committed command, `npm run eval:live`.
+- Case-lifecycle (2026-10-26): grants-and-approvals before change-subscription; lookups permissive, display strict;
+  contact authentication by kind and method (Knowledge: SecurityQuestion, AccountDetails; production: SupportPasscode,
+  OneTimeCode), valid 30 minutes; the case panel left of the chat; the case panel's account search (rate-limited);
+  closing by the current assignee without `account.read`; guidance for reassignment and disclosure; case events in
+  the conversation derived from the audit trail (the database as the outbox; Cloudflare Queues at scale); the case
+  line at each turn; the audit volume of per-turn case reads accepted; the owner reviews port and term names.
 - Review rulings: D14 bounds a lookup (3 characters, 50 decided, 10 listed, `more_matches` from authorized only);
   no signal may depend on accounts the CSR cannot read (S07d), so every name search shows a fixed notice instead;
   the email path reads at most 49 role accounts; stream frames re-load the principal.

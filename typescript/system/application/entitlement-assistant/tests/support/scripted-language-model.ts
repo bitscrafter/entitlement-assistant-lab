@@ -45,6 +45,25 @@ export class ScriptedLanguageModel {
     return this.model.doStreamCalls.length;
   }
 
+  /** The system instructions of the model's last call. */
+  get lastInstructions(): string {
+    const calls = this.model.doStreamCalls as readonly {
+      prompt?: readonly { role: string; content: unknown }[];
+    }[];
+    const prompt = calls.at(-1)?.prompt ?? [];
+    return prompt
+      .filter((message) => message.role === "system")
+      .map((message) => String(message.content))
+      .join("\n");
+  }
+
+  /** The names of the tools the agent offered the model at its first call, sorted. */
+  get offeredTools(): readonly string[] {
+    const tools =
+      (this.model.doStreamCalls[0] as { tools?: readonly { name: string }[] } | undefined)?.tools ?? [];
+    return tools.map((tool) => tool.name).sort();
+  }
+
   #partsOf(step: ScriptedStep | undefined): unknown[] {
     const answer = step ?? { text: this.#fallbackReply, toolCalls: [] };
     return [

@@ -13,6 +13,7 @@ import {
   type AccountContext,
   accountContextOf,
   type EntitlementSource,
+  type NotCaseSubject,
   type ReadRefusal,
   type ReadRequest,
   type ReasonFacts,
@@ -42,7 +43,8 @@ export type ExplainAccessResult =
       readonly facts: ReasonFacts;
       readonly remedy: Remedy | null;
     }
-  | ReadRefusal;
+  | ReadRefusal
+  | NotCaseSubject;
 
 /** Why a person can or cannot use a feature operation in an account (explain-access D5). */
 export class ExplainAccess {
@@ -73,6 +75,7 @@ export class ExplainAccess {
   }
 
   /**
+   * @ensures In a case whose subject is set, another account is `NotCaseSubject`, before anything is read (D6).
    * @ensures Read through the enforcement template: the employee's `account.read` decision on the subject is the
    *          only audit record (AT-3); the person's evaluated decision is not their action, so it is not audited (D5).
    * @ensures The person's decision runs through the same decision chain as a real one (AU-1), for
@@ -88,6 +91,8 @@ export class ExplainAccess {
       readonly operation: string;
     },
   ): Promise<ExplainAccessResult> {
+    if (await this.#enforcement.outsideCaseSubject(request, request.accountId))
+      return { kind: "NotCaseSubject" };
     return this.#enforcement.read(request, "ExplainAccess", request.accountId, async () => {
       const person = await this.#findIndividualByEmail.execute(request.personEmail);
       if (person === null) return { kind: "NotFound" };

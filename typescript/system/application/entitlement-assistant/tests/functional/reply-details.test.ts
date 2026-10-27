@@ -40,7 +40,7 @@ describe("replyViewOf", () => {
         "check_entitlement",
         { feature_key: "sso", account_id: ACME },
         {
-          result: "Entitled",
+          result: "entitled",
           account: acmeAccount,
           feature_key: "sso",
           quota: null,
@@ -51,7 +51,7 @@ describe("replyViewOf", () => {
         "check_entitlement",
         { feature_key: "sso", account_id: LABS },
         {
-          result: "NotEntitled",
+          result: "not_entitled",
           account: labsAccount,
           feature_key: "sso",
           reasons: [
@@ -106,7 +106,7 @@ describe("replyViewOf", () => {
   });
 
   test("ensures identical tool calls are listed once with how many times", () => {
-    const same = tool("find_customer_account", { query: "Acme" }, { result: "Ambiguous", candidates: [] });
+    const same = tool("find_customer_account", { query: "Acme" }, { result: "ambiguous", candidates: [] });
     const view = replyViewOf([
       same,
       same,
@@ -124,7 +124,7 @@ describe("replyViewOf", () => {
         "find_customer_account",
         { query: "acme" },
         {
-          result: "Ambiguous",
+          result: "ambiguous",
           candidates: [{ account_id: ACME, display_name: "Acme Corp", own_account: false, roles: [] }],
         },
       ),
@@ -154,7 +154,7 @@ describe("replyViewOf", () => {
         "explain_access",
         {},
         {
-          result: "Explained",
+          result: "explained",
           account: acmeAccount,
           person_email: "carol@acme.com",
           feature_key: "api-access",
@@ -225,7 +225,7 @@ describe("replyViewOf, what a reply reports", () => {
     "check_entitlement",
     { feature_key: "sso", account_id: ACME },
     {
-      result: "Entitled",
+      result: "entitled",
       account: acmeAccount,
       feature_key: "sso",
       quota: null,
@@ -236,7 +236,7 @@ describe("replyViewOf, what a reply reports", () => {
     "find_customer_account",
     { query: "Acme" },
     {
-      result: "Ambiguous",
+      result: "ambiguous",
       candidates: [
         { account_id: ACME, display_name: "Acme Corp", own_account: false, roles: [] },
         { account_id: LABS, display_name: "Acme Labs", own_account: false, roles: [] },
@@ -290,7 +290,7 @@ describe("replyViewOf, names in the answer", () => {
       operation: "create-token",
     },
     {
-      result: "Explained",
+      result: "explained",
       account: acmeAccount,
       person_email: "carol@acme.com",
       outcome: "Deny",
@@ -313,7 +313,7 @@ describe("replyViewOf, names in the answer", () => {
         "find_customer_account",
         { query: "Acme" },
         {
-          result: "Ambiguous",
+          result: "ambiguous",
           candidates: [
             { account_id: ACME, display_name: "Acme Corp", roles: [] },
             { account_id: LABS, display_name: "Acme Labs", roles: [] },
@@ -343,7 +343,7 @@ describe("replyViewOf, review round 1", () => {
         "find_customer_account",
         { query: "Acme Corp" },
         {
-          result: "Found",
+          result: "found",
           account: { ...acmeAccount, owners_and_admins: ["jane@acme.com"] },
         },
       ),
@@ -359,7 +359,7 @@ describe("replyViewOf, review round 1", () => {
           "find_customer_account",
           { query: "acme" },
           {
-            result: "Ambiguous",
+            result: "ambiguous",
             candidates: [{ account_id: ACME, display_name: "Acme Corp", own_account: false, roles: [] }],
             more_matches: more,
           },
@@ -371,7 +371,7 @@ describe("replyViewOf, review round 1", () => {
 
 describe("replyViewOf, the name-search notice", () => {
   const lookup = (query: string, output: unknown) => tool("find_customer_account", { query }, output);
-  const found = { result: "Found", account: acmeAccount };
+  const found = { result: "found", account: acmeAccount };
 
   test("ensures a search by part of a name is noticed, whatever it found", () => {
     const views = [
@@ -384,5 +384,52 @@ describe("replyViewOf, the name-search notice", () => {
   test("ensures a lookup by email or account id is not a name search", () => {
     const views = [replyViewOf([lookup("jane@acme.com", found)]), replyViewOf([lookup(ACME, found)])];
     expect(views.map((view) => view.nameSearch)).toEqual([false, false]);
+  });
+});
+
+describe("replyViewOf, case lifecycle (case-lifecycle D1, D8)", () => {
+  test("ensures a proposed subject shows as a card, offered once, and named as stored", () => {
+    const proposed = tool(
+      "propose_case_subject",
+      { account_id: ACME },
+      {
+        result: "proposed",
+        account: { account_id: ACME, display_name: "Acme Corp", plan_key: "business" },
+      },
+    );
+    const view = replyViewOf([proposed, proposed, { type: "text", text: `[${ACME}] looks right.` }]);
+    expect(view.proposedSubjects).toEqual([ACME]);
+    expect(view.accounts.map((card) => card.accountId)).toEqual([ACME]);
+    expect(view.text).toBe("Acme Corp looks right.");
+  });
+
+  test("ensures the last drafted summary is offered for review", () => {
+    const drafted = (summary: string) =>
+      tool("draft_case_summary", { summary }, { result: "drafted", summary });
+    expect(replyViewOf([drafted("First."), drafted("Second.")]).draftedSummary).toBe("Second.");
+    expect(replyViewOf([]).draftedSummary).toBeNull();
+  });
+});
+
+describe("replyViewOf, a person's own account", () => {
+  test("ensures a lookup by email offers the person's own account, and a lookup by name does not", () => {
+    const byEmail = replyViewOf([
+      tool(
+        "find_customer_account",
+        { query: "jane@acme.com" },
+        {
+          result: "ambiguous",
+          candidates: [
+            { account_id: LABS, display_name: "Jane Doe", own_account: true, roles: ["owner"] },
+            { account_id: ACME, display_name: "Acme Corp", own_account: false, roles: ["admin"] },
+          ],
+        },
+      ),
+    ]);
+    const byName = replyViewOf([
+      tool("find_customer_account", { query: "Acme Corp" }, { result: "found", account: acmeAccount }),
+    ]);
+    expect(byEmail.ownAccounts).toEqual([LABS]);
+    expect(byName.ownAccounts).toEqual([]);
   });
 });

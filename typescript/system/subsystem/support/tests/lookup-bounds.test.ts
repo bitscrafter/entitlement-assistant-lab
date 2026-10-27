@@ -12,6 +12,7 @@ import { GetCustomerAccount } from "../../account/src/usecase/get-customer-accou
 import type { FindIndividualByEmail } from "../../customer-identity/src/usecase/find-individual-by-email.ts";
 import type { GetIndividuals } from "../../customer-identity/src/usecase/get-individuals.ts";
 import type { ComputeEffectiveEntitlements } from "../../entitlement/src/usecase/compute-effective-entitlements.ts";
+import type { CaseRepository } from "../src/usecase/case-repository.ts";
 import { FindCustomerAccount, MAXIMUM_DECIDED } from "../src/usecase/find-customer-account.ts";
 import { ReadEnforcement } from "../src/usecase/read-enforcement.ts";
 
@@ -52,7 +53,12 @@ function lookupOfPersonWithRoles(roleAccounts: number) {
     roleKey: "admin",
   }));
   const find = new FindCustomerAccount({
-    enforcement: new ReadEnforcement({ decider: allowingDecider, audit, getCustomerAccount }),
+    enforcement: new ReadEnforcement({
+      decider: allowingDecider,
+      audit,
+      getCustomerAccount,
+      cases: {} as CaseRepository,
+    }),
     identifierHasher: { hash: async () => "h".repeat(22) },
     findIndividualByEmail: { execute: async () => ({ customerId: OWN }) } as unknown as FindIndividualByEmail,
     getIndividuals: { execute: async () => [] } as unknown as GetIndividuals,

@@ -51,7 +51,8 @@ entity "**support_case**" as support_case {
 	contact_account_id : uuid
 	contact_customer_kind : text = 'Individual'
 	contact_authenticated_at : timestamptz
-	contact_authentication_kind : text (KnowledgeFactor | OneTimeCode)
+	contact_authentication_kind : text (Knowledge | Possession)
+	contact_authentication_method : text (SecurityQuestion | AccountDetails | SupportPasscode | OneTimeCode)
 	contact_authenticated_by : uuid
 	* opened_at : timestamptz
 	* opened_by : uuid

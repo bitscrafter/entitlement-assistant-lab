@@ -109,6 +109,14 @@ glossary in the change that first uses it.
 | **WebSocket** | A long-lived, two-way connection between the browser and the server, opened by one HTTP request (the *upgrade*) and kept open afterwards. The case agent's chat runs over one. |
 | **WebSocket message** | One message sent over an open WebSocket, in either direction (RFC 6455). With the Agents SDK each message is a small JSON text, such as `{"type":"cf_agent_use_chat_request", …}`. It is not an HTTP request: it carries no headers and no cookie. |
 | **WebSocket frame** | The unit a WebSocket message travels in on the wire (RFC 6455): a message is one or more frames. |
+| **Server WebSocket message** | A WebSocket message the server sends to the browser: part of a streamed reply, a tool result, or a close with its code (`4401`, `4404`, …). |
+| **Case panel** | The part of the UI left of the chat that shows the case (subject, contact, contact authentication, past cases) and holds every button that changes it; the model can propose, never click (api.md A2). |
+| **Case assignee check** | Support's check, before any case action, that the caller is the case's current assignee; otherwise the case answers as a missing one. The WebSocket upgrade applies the same rule. |
+| **Case WebSocket connections** | The open WebSocket connections of a case's agent, one per browser tab with the case open; closed together, with `4404 case_unavailable`, when the case closes. |
+| **Case event** | One line in a case's conversation that records a lifecycle action taken in the case panel or from a card ("Subject set: «Acme Corp» (Alex, at 15:02)."), written by the server from the action's audit record, never from the browser or the model; the CSR sees it in the timeline, the assistant is told it as a fact (case-lifecycle D21). |
+| **Case events delivery** | The port (`CaseEventsDelivery`) through which the application, once an action commits, has the case's agent append the case's events it does not hold yet; a lost delivery is repaired when a connection opens or a turn starts (case-lifecycle D21). |
+| **Case line** | The one-line state of a case the assistant is told at each turn: case number, subject, contact and their roles, contact authentication; accounts the CSR may not read are never named (case-lifecycle D22). |
+| **Case account name** | The name of an account as stored when a lifecycle action named it, kept by Support for the case's events, outside the audit chain, which names accounts by id only (AT-7; case-lifecycle D21). |
 | **MCP (Model Context Protocol)** | An open protocol through which an AI client discovers and calls tools exposed by a separate server. |
 | **JWT (JSON Web Token)** | A compact, signed token carrying claims; verifiable without a database lookup. |
 | **CEL (Common Expression Language)** | A side-effect-free, type-checked expression language; used for policy predicates. |
@@ -212,15 +220,17 @@ decision and change is recorded in the audit chain (AT-3, AT-4).
 
 Scenarios are grouped into **features**; each feature is cohesive and deployable on its own, and its
 authoritative statement is its verification spec. Scenario ids (S01, S02, …) are stable across documents.
-Features are built in the order listed; each depends on the ones before it.
+Features are built in the order listed; each depends on the ones before it. Grants and approvals come before
+plan changes (owner, 2026-10-26): a grant is the simplest change, and an approval waited on by a durable
+process covers the assignment's workflow component; it carries the change-request core (S15, S17, S18).
 
 | Order | Feature | Scenarios | Depends on | Spec |
 | --- | --- | --- | --- | --- |
 | 1 | employee-sign-in | S01–S03, S04a–S04f | — | [`features/employee-sign-in/employee-sign-in.verification-spec.md`](features/employee-sign-in/employee-sign-in.verification-spec.md) |
 | 2 | explain-access | S05a–S13 | employee-sign-in | [`features/explain-access/explain-access.verification-spec.md`](features/explain-access/explain-access.verification-spec.md) |
 | 3 | case-lifecycle | S27, S33, S34 | explain-access | planned |
-| 4 | change-subscription | S14–S20, S16a, S16b | case-lifecycle | planned |
-| 5 | grants-and-approvals | S21–S26 | change-subscription | planned |
+| 4 | grants-and-approvals | S15, S17, S18, S21–S26 | case-lifecycle | planned |
+| 5 | change-subscription | S14, S16, S16a, S16b, S19, S20 | grants-and-approvals | planned |
 | — | candidate features | S28–S32 | — | — |
 
 The seeded dataset is the one in the explain-access spec: customers Acme, Acme Labs, Initech, Globex,
@@ -282,30 +292,30 @@ catalog of the `standard` plan ladder, and the starting policy set.
 | S27 | **Contact authentication**: the CSR records how the contact was authenticated; changes for an unauthenticated contact are denied (`policy.contact-is-authenticated`). |
 | S34 | **Close a case**: pending change requests and approvals are canceled; the case summary is drafted and reviewed. |
 
-### Feature change-subscription
-
-| Id | Scenario |
-| --- | --- |
-| S14 | **Plan change with confirmation** (table-driven): an upgrade to a `Paid` plan with `Trial` coverage, a downgrade to the `Free` plan, and a cancellation (`CancelSubscription`, with an authenticated contact). Each change request shows its entitlement diff; after confirmation it is applied, effective entitlements change, and the audit chain records it. A target equal to the current plan is refused (`entitlement.plan-unchanged`). |
-| S15 | **Change request canceled** by the CSR, or by closing the case: nothing changes. |
-| S16 | **Change request refused** (table-driven): the CSR lacks the permission (`access.permission-not-held`); the subject account is suspended (`account.operational-suspension`); the downgrade does not fit the seats in use (`policy.downgrade-fits-seats`); the contact lacks the customer permission (`access.contact-permission-not-held`); the contact is not authenticated (`policy.contact-is-authenticated`); the coverage exceeds 14 days (`policy.trial-coverage-up-to-14-days`); the CSR is not the case's assignee (`support.not-case-assignee`). |
-| S16a | **Stale change request**: the subject account changed after the request; it ends `Canceled` (`support.stale-change-request`) and a fresh one is prepared. |
-| S16b | **Upgrade beyond Pro, or a cancellation, without a contact** is `Conditional` on an approval (`policy.upgrade-beyond-pro-needs-contact-or-approval`, `policy.cancel-needs-contact-or-approval`). |
-| S17 | **Confirmation is idempotent**: confirmed twice, applied once. |
-| S18 | **The LLM cannot apply a change**: a state-changing tool only creates a change request. |
-| S19 | **Prompt injection in customer data has no authority.** |
-| S20 | **Account history** (`audit.read`, behind the `account.read` gate): audit records with actor, participants, outcome, and reason codes. |
-
 ### Feature grants-and-approvals
 
 | Id | Scenario |
 | --- | --- |
+| S15 | **Change request canceled** by the CSR, or by closing the case: nothing changes. |
+| S17 | **Confirmation is idempotent**: confirmed twice, applied once. |
+| S18 | **The LLM cannot apply a change**: a state-changing tool only creates a change request. |
 | S21 | **Grant within 14 days**: allowed; the grant belongs to the subscription and ends on its own. |
 | S22 | **Grant expires**: ignored from its expiry instant; `sys_grant_expiry` records the end. |
 | S23 | **Grant beyond 14 days**: `Conditional` on an approval (`policy.grants-up-to-14-days`); a process instance waits. |
 | S24 | **Supervisor decides** in the approvals panel: approved, the confirmer's decision re-run, the stored diff re-checked, and the change applied by `sys_approval_process` (SU-15); or denied with a decision reason. The case is notified. |
 | S25 | **No self-approval**: neither the requester nor the confirmer may decide (`policy.no-self-approval`). |
 | S26 | **Approval expires**: the approval and the change request become `Expired`; the case is notified. |
+
+### Feature change-subscription
+
+| Id | Scenario |
+| --- | --- |
+| S14 | **Plan change with confirmation** (table-driven): an upgrade to a `Paid` plan with `Trial` coverage, a downgrade to the `Free` plan, and a cancellation (`CancelSubscription`, with an authenticated contact). Each change request shows its entitlement diff; after confirmation it is applied, effective entitlements change, and the audit chain records it. A target equal to the current plan is refused (`entitlement.plan-unchanged`). |
+| S16 | **Change request refused** (table-driven): the CSR lacks the permission (`access.permission-not-held`); the subject account is suspended (`account.operational-suspension`); the downgrade does not fit the seats in use (`policy.downgrade-fits-seats`); the contact lacks the customer permission (`access.contact-permission-not-held`); the contact is not authenticated (`policy.contact-is-authenticated`); the coverage exceeds 14 days (`policy.trial-coverage-up-to-14-days`); the CSR is not the case's assignee (`support.not-case-assignee`). |
+| S16a | **Stale change request**: the subject account changed after the request; it ends `Canceled` (`support.stale-change-request`) and a fresh one is prepared. |
+| S16b | **Upgrade beyond Pro, or a cancellation, without a contact** is `Conditional` on an approval (`policy.upgrade-beyond-pro-needs-contact-or-approval`, `policy.cancel-needs-contact-or-approval`). |
+| S19 | **Prompt injection in customer data has no authority.** |
+| S20 | **Account history** (`audit.read`, behind the `account.read` gate): audit records with actor, participants, outcome, and reason codes. |
 
 ### Candidate features
 

@@ -111,6 +111,9 @@ decision (Alex confirmed); record 3 is SU-15's re-run of that decision; record 4
 | `support.no-matching-account` | Support | an account lookup matched no account |
 | `support.case-closed` | Support | the case is closed |
 | `support.contact-authentication-failed` | Support | the contact did not pass authentication |
+| `support.contact-not-a-person` | Support | the contact must be a person's own account |
+| `support.contact-not-set` | Support | the case has no contact |
+| `support.subject-already-set` | Support | the case's subject is already set |
 | `support.approval-denied` | Support | an approver denied the change |
 | `support.approval-expired` | Support | the approval was not decided in time |
 

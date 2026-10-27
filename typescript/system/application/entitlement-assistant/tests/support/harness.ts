@@ -41,6 +41,12 @@ export interface Harness {
   readonly rateLimiter: InMemoryMessageRateLimiter;
   /** Every upgrade the application handed to a case agent. */
   readonly forwardedUpgrades: readonly { readonly caseId: Uuid; readonly session: ConnectionSession }[];
+  /** Every case whose WebSocket connections the application closed (case-lifecycle D7). */
+  readonly closedCaseConnections: readonly Uuid[];
+  /** The case panel's account search counter (case-lifecycle D18). */
+  readonly searchRateLimiter: InMemoryMessageRateLimiter;
+  /** Every case whose events the application delivered after an action (case-lifecycle D21). */
+  readonly deliveredCaseEvents: readonly Uuid[];
   readonly close: () => Promise<void>;
 }
 
@@ -50,6 +56,9 @@ export async function createHarness(): Promise<Harness> {
   const clock = new FixedClock(at("15:00:00"));
   const securityEvents = new RecordingSecurityEventLog();
   const forwardedUpgrades: { caseId: Uuid; session: ConnectionSession }[] = [];
+  const closedCaseConnections: Uuid[] = [];
+  const searchRateLimiter = new InMemoryMessageRateLimiter();
+  const deliveredCaseEvents: Uuid[] = [];
   const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
   const owner = await PostgresConnection.open(database.connectionString);
   const application = createApplication({
@@ -66,6 +75,9 @@ export async function createHarness(): Promise<Harness> {
       forwardedUpgrades.push({ caseId, session });
       return new Response(null, { status: 204 });
     },
+    caseWebSocketConnections: { closeAll: async (caseId) => void closedCaseConnections.push(caseId) },
+    searchRateLimiter,
+    caseEventsDelivery: { deliver: async (caseId) => void deliveredCaseEvents.push(caseId) },
   });
   return {
     application,
@@ -75,6 +87,9 @@ export async function createHarness(): Promise<Harness> {
     owner,
     rateLimiter: new InMemoryMessageRateLimiter(),
     forwardedUpgrades,
+    closedCaseConnections,
+    searchRateLimiter,
+    deliveredCaseEvents,
     close: async () => {
       await owner.close();
       await database.drop();

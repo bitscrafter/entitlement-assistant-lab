@@ -11,6 +11,7 @@ import {
   accountContextOf,
   type CoveringTerm,
   type EntitlementSource,
+  type NotCaseSubject,
   type Quota,
   type ReadRefusal,
   type ReadRequest,
@@ -33,7 +34,8 @@ export type CheckEntitlementResult =
       /** What would include the feature, when its plan and add-ons do not (PR-10); null for any other reason. */
       readonly remedy: Remedy | null;
     }
-  | ReadRefusal;
+  | ReadRefusal
+  | NotCaseSubject;
 
 /** Whether a customer account is entitled to one feature, with every source, or why not (EN-6). */
 export class CheckEntitlement {
@@ -55,6 +57,7 @@ export class CheckEntitlement {
   }
 
   /**
+   * @ensures In a case whose subject is set, another account is `NotCaseSubject`, before anything is read (D6).
    * @ensures Read through the enforcement template: gate, subject, one audited `account.read` decision (AU-4).
    * @ensures Entitled with the feature's quota, every source, and the covering term; otherwise every reason, with facts,
    *          and a remedy when the feature is not included.
@@ -63,6 +66,8 @@ export class CheckEntitlement {
   async execute(
     request: ReadRequest & { readonly accountId: Uuid; readonly featureKey: string },
   ): Promise<CheckEntitlementResult> {
+    if (await this.#enforcement.outsideCaseSubject(request, request.accountId))
+      return { kind: "NotCaseSubject" };
     return this.#enforcement.read(request, "CheckEntitlement", request.accountId, async () => {
       const computed = await this.#computeEffectiveEntitlements.execute({
         accountId: request.accountId,

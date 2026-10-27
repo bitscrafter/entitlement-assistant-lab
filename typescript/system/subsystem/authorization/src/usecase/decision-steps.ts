@@ -11,8 +11,38 @@ export interface DecisionStep {
   ): Promise<{ readonly finding: Finding | null; readonly stops: boolean }>;
 }
 
-/** Employees still read a suspended account; every other action on it stops (AC-6). */
-const READS_ALLOWED_ON_SUSPENDED_SUBJECTS: ReadonlySet<string> = new Set(["account.read", "audit.read"]);
+/** The case lifecycle keys (SU-9): they act on the case, not on the account they name. */
+const CASE_LIFECYCLE_ACTIONS: ReadonlySet<string> = new Set([
+  "case.set-subject",
+  "case.set-contact",
+  "case.authenticate-contact",
+  "case.close",
+]);
+
+/**
+ * Employees still read a suspended account, and still handle a case about it or with it as the contact; every
+ * other action on it stops (AC-6; case-lifecycle S33j, S27i).
+ */
+const ACTIONS_ALLOWED_ON_SUSPENDED_SUBJECTS: ReadonlySet<string> = new Set([
+  "account.read",
+  "audit.read",
+  ...CASE_LIFECYCLE_ACTIONS,
+]);
+
+/** @ensures Whether an action may proceed on a subject account that has holds. */
+export function allowedOnSuspendedSubject(actionKey: string): boolean {
+  return ACTIONS_ALLOWED_ON_SUSPENDED_SUBJECTS.has(actionKey);
+}
+
+/**
+ * The permission that governs an action (AU-3): its own key, except the case lifecycle keys, held through
+ * `case.open` (SU-14, case-lifecycle D11).
+ *
+ * @ensures `case.open` for a case lifecycle key; the action key itself otherwise.
+ */
+export function governingPermissionOf(actionKey: string): string {
+  return CASE_LIFECYCLE_ACTIONS.has(actionKey) ? "case.open" : actionKey;
+}
 
 /** `feature.<feature_key>.<operation>` names a feature action; the feature key is its middle part. */
 export function featureKeyOf(actionKey: string): string | null {
@@ -35,7 +65,7 @@ export class AccountStep implements DecisionStep {
     }
     const subject = await attributes.subject();
     const subjectHolds = subject?.account.holdReasonCodes ?? [];
-    if (subjectHolds.length > 0 && !READS_ALLOWED_ON_SUSPENDED_SUBJECTS.has(attributes.request.actionKey)) {
+    if (subjectHolds.length > 0 && !allowedOnSuspendedSubject(attributes.request.actionKey)) {
       return {
         finding: { source: "account", outcome: "Deny", reasonCodes: subjectHolds } as const,
         stops: true,
@@ -71,7 +101,7 @@ export class AccessStep implements DecisionStep {
               attributes.now,
             )
           : new Map<string, readonly string[]>();
-    const roles = holdings.get(attributes.request.actionKey);
+    const roles = holdings.get(governingPermissionOf(attributes.request.actionKey));
     const finding: Finding =
       roles === undefined
         ? {

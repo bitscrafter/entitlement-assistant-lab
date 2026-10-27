@@ -155,12 +155,12 @@
 
 |  |  |
 | :--- | :--- |
-| **Decision** | Before a contact can ask for changes, the CSR authenticates them against something already registered:<br>• `contact_authenticated_at`, `contact_authentication_kind` (`KnowledgeFactor`, `OneTimeCode`), `contact_authenticated_by` on the case<br>• policy `contact-is-authenticated`, active from the change-subscription feature<br>• a customer-requested change also needs the contact's customer permission (SU-8) |
+| **Decision** | Before a contact can ask for changes, the CSR authenticates them against something already registered:<br>• `contact_authenticated_at`, `contact_authentication_kind` (`Knowledge`, `Possession`), `contact_authentication_method`, `contact_authenticated_by` on the case<br>• policy `contact-is-authenticated`, active from the grants-and-approvals feature<br>• a customer-requested change also needs the contact's customer permission (SU-8) |
 | **Status** | Accepted · 2026-10-25 · decided by the owner |
 | **Context** | "Verification" usually means identity proofing at registration; checking a known person against registered factors is authentication (caller authentication in contact centers). |
 | **Related** | [SU-8](#su-8-a-customer-requested-change-needs-two-permissions) |
 | **Alternatives** | Deferring authentication to a stretch scenario: contacts merely identified could ask for changes. |
-| **Amendments** | 2026-10-25 — changing the contact clears the authentication columns; authentication belongs to one contact. |
+| **Amendments** | 2026-10-25 — changing the contact clears the authentication columns; authentication belongs to one contact.<br>2026-10-26 — kind and method (case-lifecycle D4): kinds are factor categories (`Knowledge`, `Possession`); methods `SecurityQuestion`, `AccountDetails`, `SupportPasscode` (Knowledge), `OneTimeCode` (Possession); a password is never a method. An authentication is valid for 30 minutes (D5). |
 
 ---
 
@@ -206,6 +206,7 @@
 | **Decision** | Every case action (set subject or contact, authenticate the contact, prepare, confirm, cancel, close) requires the actor to be the case's current assignee:<br>• Support's PEP template supplies `context.actor_is_assignee`<br>• otherwise `Deny` with `support.not-case-assignee`<br>• lifecycle action keys are governed by permissions: `case.*` by `case.open` (and assignee); confirm and cancel by the change kind's employee permission; `case.reassign` by `case.reassign`; `approval.expire` by `change-request.apply` |
 | **Status** | Accepted · 2026-10-25 · decided by the owner |
 | **Context** | The assignee was checked only when connecting; lifecycle keys had no governing permission and could never pass default deny. |
+| **Amendments** | 2026-10-26 — a caller who is not the case's assignee is answered as for a missing case, with a `CaseNotAssigned` security event and no audit record (explain-access D1, case-lifecycle D10); `support.not-case-assignee` is kept for a decision that does involve the assignee rule. |
 | **Related** | • [SU-9](#su-9-case-lifecycle-steps-are-use-cases-confirmed-outside-the-llm)<br>• [AU-3](authorization.md#au-3-default-deny-lives-in-the-access-step) |
 
 ---

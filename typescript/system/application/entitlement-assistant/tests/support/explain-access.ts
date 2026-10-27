@@ -11,7 +11,15 @@ const FIXTURES = fileURLToPath(new URL("../../resource/seed/fixtures.yaml", impo
 /** Every alias the fixtures and the specs use, by the UUID it stands for. */
 const ALIAS_OF: ReadonlyMap<string, string> = (() => {
   const names = new Set(readFileSync(FIXTURES, "utf8").match(/\b[a-z]+_[a-z0-9_]+\b/g) ?? []);
-  for (const extra of ["cse_alex_1", "cse_alex_2", "cse_blair_1", "cse_missing"]) names.add(extra);
+  for (const extra of [
+    "cse_alex_1",
+    "cse_alex_2",
+    "cse_blair_1",
+    "cse_blair_2",
+    "cse_blair_3",
+    "cse_missing",
+  ])
+    names.add(extra);
   return new Map([...names].map((name) => [seededUuid(name), name]));
 })();
 

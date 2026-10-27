@@ -7,6 +7,7 @@ import type {
   GetCustomerAccount,
 } from "../../../account/src/usecase/get-customer-account.ts";
 import { disclose } from "../model/disclosure.ts";
+import type { CaseRepository } from "./case-repository.ts";
 import type { ReadRefusal, ReadRequest } from "./read-request.ts";
 
 /** The action every read of a subject account is decided as (AU-4). */
@@ -20,15 +21,29 @@ export class ReadEnforcement {
   readonly #decider: AuthorizationDecider;
   readonly #audit: AuditRecorder;
   readonly #getCustomerAccount: GetCustomerAccount;
+  readonly #cases: CaseRepository;
 
   constructor(dependencies: {
     readonly decider: AuthorizationDecider;
     readonly audit: AuditRecorder;
     readonly getCustomerAccount: GetCustomerAccount;
+    readonly cases: CaseRepository;
   }) {
     this.#decider = dependencies.decider;
     this.#audit = dependencies.audit;
     this.#getCustomerAccount = dependencies.getCustomerAccount;
+    this.#cases = dependencies.cases;
+  }
+
+  /**
+   * The subject rule (case-lifecycle D6): once a case's subject is set, a read in the case is of the subject only.
+   *
+   * @ensures True exactly when the request is made in a case whose subject is set and is not `accountId`.
+   */
+  async outsideCaseSubject(request: ReadRequest, accountId: Uuid): Promise<boolean> {
+    if (request.caseId === null) return false;
+    const subjectAccountId = (await this.#cases.find(request.caseId))?.subjectAccountId ?? null;
+    return subjectAccountId !== null && subjectAccountId !== accountId;
   }
 
   /**

@@ -70,6 +70,12 @@ export interface ReplyView {
    * depends only on the query the CSR's turn sent, never on what the search found, so it reveals nothing (AU-6).
    */
   readonly nameSearch: boolean;
+  /** Accounts the assistant proposed as the case's subject; the CSR sets one with a click (case-lifecycle D1). */
+  readonly proposedSubjects: readonly string[];
+  /** The latest summary the assistant drafted, for the CSR to review when closing (D8); null when none. */
+  readonly draftedSummary: string | null;
+  /** Accounts a lookup by email showed as the person's own: the ones the CSR may set as the contact (D3). */
+  readonly ownAccounts: readonly string[];
   /** Refusals that name no account (not found, denied by policy), in plain words. */
   readonly refusals: readonly string[];
 }
@@ -183,6 +189,9 @@ function stateOf(part: ReplyPart): ToolCallView["state"] {
  * @ensures `choices` lists the accounts of a several-match lookup that the reply did not go on to show as a card;
  *          `moreMatches` is whether a lookup listed fewer than it matched; `nameSearch` is whether a lookup's query
  *          was part of a name (neither an email nor an account id).
+ * @ensures `proposedSubjects` lists each account a `proposed` result named, once; `draftedSummary` is the last
+ *          `drafted` summary, or null.
+ * @ensures `ownAccounts` lists each account a lookup by email showed as the person's own, once.
  * @ensures A "not found" is reported only when nothing in the reply resolved to an account or a choice; a policy
  *          denial is always reported.
  */
@@ -202,6 +211,12 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
   };
   let moreMatches = false;
   let nameSearch = false;
+  const proposedSubjects: string[] = [];
+  const ownAccounts: string[] = [];
+  const ownAccount = (accountId: string) => {
+    if (accountId !== "" && !ownAccounts.includes(accountId)) ownAccounts.push(accountId);
+  };
+  let draftedSummary: string | null = null;
 
   const cardFor = (account: Json) => {
     const accountId = asString(account.account_id);
@@ -225,6 +240,8 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
     }
     if (!part.type.startsWith("tool-")) continue;
     const toolName = part.type.slice("tool-".length);
+    const lookupByEmail =
+      toolName === "find_customer_account" && asString(asRecord(part.input)?.query).includes("@");
     if (toolName === "find_customer_account") {
       const query = asString(asRecord(part.input)?.query).trim();
       if (query !== "" && !query.includes("@") && !query.startsWith("acc_")) nameSearch = true;
@@ -260,16 +277,19 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
     }
     const account = asRecord(output.account);
     switch (output.result) {
-      case "Found":
+      case "found":
         if (account !== null) {
           cardFor(account);
           for (const email of asStrings(account.owners_and_admins)) knowPerson(email);
+          // A lookup by email that found one account found the person's own (explain-access §3).
+          if (lookupByEmail) ownAccount(asString(account.account_id));
         }
         break;
-      case "Ambiguous":
+      case "ambiguous":
         if (output.more_matches === true) moreMatches = true;
         for (const candidate of Array.isArray(output.candidates) ? output.candidates : []) {
           const record = asRecord(candidate) ?? {};
+          if (record.own_account === true) ownAccount(asString(record.account_id));
           choices.push({
             accountId: asString(record.account_id),
             displayName: asString(record.display_name),
@@ -277,7 +297,7 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
           });
         }
         break;
-      case "Entitled":
+      case "entitled":
         if (account !== null) {
           cardFor(account).lines.push({
             kind: "feature",
@@ -290,7 +310,7 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
           });
         }
         break;
-      case "NotEntitled":
+      case "not_entitled":
         if (account !== null) {
           cardFor(account).lines.push({
             kind: "feature",
@@ -303,7 +323,7 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
           });
         }
         break;
-      case "Listed":
+      case "listed":
         if (account !== null) {
           const card = cardFor(account);
           const entries = Array.isArray(output.entries) ? output.entries : [];
@@ -323,7 +343,7 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
           }
         }
         break;
-      case "Explained":
+      case "explained":
         if (account !== null) {
           const findings = Array.isArray(output.findings) ? output.findings : [];
           const access = findings.map(asRecord).find((finding) => finding?.kind === "access");
@@ -339,6 +359,16 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
             remedy: remedyOf(output),
           });
         }
+        break;
+      case "proposed":
+        if (account !== null) {
+          cardFor(account);
+          const accountId = asString(account.account_id);
+          if (!proposedSubjects.includes(accountId)) proposedSubjects.push(accountId);
+        }
+        break;
+      case "drafted":
+        draftedSummary = asString(output.summary);
         break;
       default:
         break;
@@ -358,6 +388,9 @@ export function replyViewOf(parts: readonly ReplyPart[]): ReplyView {
     choices: remainingChoices,
     moreMatches,
     nameSearch,
+    proposedSubjects,
+    draftedSummary,
+    ownAccounts,
     refusals: [
       ...(notFound && !resolved ? ["No account matched, or it is not one you may read."] : []),
       ...policyDenials,
