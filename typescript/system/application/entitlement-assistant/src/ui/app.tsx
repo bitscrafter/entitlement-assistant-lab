@@ -1,4 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { ApprovalsPanel } from "./approvals-panel.tsx";
 import {
   currentPrincipal,
   renewSession,
@@ -150,6 +151,7 @@ function SignedInPage({
           </button>
         </span>
       </header>
+      <ApprovalsPanel />
       {message !== null && (
         <p className="error" role="alert">
           {message}

@@ -48,4 +48,23 @@ export class LoadPrincipal {
       jobLevel: profile.jobLevel,
     });
   }
+
+  /**
+   * Loads a system identity's account for a decision (grants-and-approvals D8, D10).
+   *
+   * @ensures Succeeds only for a system identity's internal account with no unreleased hold.
+   */
+  async system(accountId: Uuid): Promise<Result<{ readonly accountId: Uuid }, PrincipalRefusal>> {
+    const account = await this.#accounts.findById(accountId);
+    if (account === null || account.identityKind !== "System") return failure({ kind: "UnknownAccount" });
+    const holds = await this.#accounts.unreleasedHolds(accountId);
+    const reasons = principalRefusalReasons(holds, true);
+    if (reasons.length > 0) return failure({ kind: "MayNotAct", reasons });
+    return success({ accountId });
+  }
+
+  /** @ensures The account of the system identity with this name, or null (grants-and-approvals D8, D10). */
+  systemAccountIdNamed(name: string): Promise<Uuid | null> {
+    return this.#accounts.systemAccountIdNamed(name);
+  }
 }

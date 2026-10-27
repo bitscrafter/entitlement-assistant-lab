@@ -14,6 +14,9 @@ export interface RoleRepository {
    */
   employeeRoles(employee: EmployeeJobAttributes, now: Date): Promise<readonly string[]>;
 
+  /** @ensures The roles assigned to a system identity's account and in force at `now`, sorted. */
+  systemRoles(accountId: Uuid, now: Date): Promise<readonly string[]>;
+
   /** @ensures Each role's permissions, for every role among `roleKeys`. */
   rolePermissions(roleKeys: readonly string[]): Promise<ReadonlyMap<string, readonly string[]>>;
 

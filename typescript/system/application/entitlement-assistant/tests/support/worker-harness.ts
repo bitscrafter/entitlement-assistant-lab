@@ -82,7 +82,15 @@ export async function createWorkerHarness(
             ],
           },
           migrations: [{ tag: "v1", new_sqlite_classes: ["CaseAgentObject", "MessageRateLimiterObject"] }],
+          workflows: [
+            {
+              binding: "APPROVAL_PROCESS",
+              name: "approval-process-under-test",
+              class_name: "ApprovalProcessWorkflow",
+            },
+          ],
           vars: {
+            TEST_APPROVAL_WINDOW_SECONDS: "8",
             TEST_LANGUAGE_MODEL_SCRIPT: JSON.stringify(script),
             TEST_APPLICATION_ORIGIN: ORIGIN,
             TEST_SESSION_SIGNING_KEY: JSON.stringify(privateJwk),

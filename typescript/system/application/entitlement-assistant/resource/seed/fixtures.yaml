@@ -53,6 +53,17 @@ employees:
     job_function: supervisor
     job_level: 1
     password: sam-demo-password
+  - identity: emp_morgan
+    account: iac_morgan
+    status: Active
+    email: morgan@provider.example
+    given_name: Morgan
+    family_name: Lee
+    display_name: Morgan
+    department: customer-support
+    job_function: supervisor
+    job_level: 2
+    password: morgan-demo-password
   - identity: emp_drew
     account: iac_drew
     status: Active

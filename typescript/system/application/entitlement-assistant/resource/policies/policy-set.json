@@ -1,5 +1,5 @@
 {
-  "version": "rkvEDOaKfaxXFfMLoiAGjSjD0Gvq50t--dEniyUXHzY",
+  "version": "-DTHb-j1qombJTWgYgI0i0XdPMwXZQpvfJTAaQiCwdc",
   "policies": [
     {
       "policyKey": "cancel-needs-contact-or-approval",
@@ -18,7 +18,7 @@
     {
       "policyKey": "contact-is-authenticated",
       "description": "A change the customer asks for needs the contact to be authenticated.",
-      "governedActions": ["subscription.change-plan", "subscription.cancel", "grant.create"],
+      "governedActions": ["subscription.change-plan", "subscription.cancel", "grant.create", "grant.revoke"],
       "appliesWhen": "context.has_contact",
       "requires": "context.contact_authenticated",
       "unmetOutcome": "Deny",
@@ -53,7 +53,7 @@
     },
     {
       "policyKey": "grant-quota-up-to-100",
-      "description": "A grant adds at most 100 to a quota.",
+      "description": "Grants add at most 100 to a quota at any time, counted together.",
       "governedActions": ["grant.create"],
       "appliesWhen": "has(context.quota)",
       "requires": "context.quota <= 100",

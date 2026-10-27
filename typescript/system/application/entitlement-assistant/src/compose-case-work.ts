@@ -4,6 +4,7 @@ import { PostgresRoleRepository } from "../../../subsystem/access/src/infra/post
 import { ListAccountRoles } from "../../../subsystem/access/src/usecase/list-account-roles.ts";
 import { LoadPrincipalPermissions } from "../../../subsystem/access/src/usecase/load-principal-permissions.ts";
 import { PostgresCustomerAccountRepository } from "../../../subsystem/account/src/infra/postgres-customer-account-repository.ts";
+import { AccountVersions } from "../../../subsystem/account/src/usecase/account-versions.ts";
 import { GetCustomerAccount } from "../../../subsystem/account/src/usecase/get-customer-account.ts";
 import type { LoadPrincipal } from "../../../subsystem/account/src/usecase/load-principal.ts";
 import { Decide } from "../../../subsystem/authorization/src/usecase/decide.ts";
@@ -13,6 +14,7 @@ import { GetIndividuals } from "../../../subsystem/customer-identity/src/usecase
 import { HasActiveMembership } from "../../../subsystem/customer-identity/src/usecase/has-active-membership.ts";
 import { PostgresSubscriptionRepository } from "../../../subsystem/entitlement/src/infra/postgres-subscription-repository.ts";
 import { ComputeEffectiveEntitlements } from "../../../subsystem/entitlement/src/usecase/compute-effective-entitlements.ts";
+import { JudgeGrantChange } from "../../../subsystem/entitlement/src/usecase/judge-grant-change.ts";
 import { CelPolicyExpressionEvaluator } from "../../../subsystem/policy/src/infra/cel-policy-expression-evaluator.ts";
 import { PostgresPolicySetRepository } from "../../../subsystem/policy/src/infra/postgres-policy-set-repository.ts";
 import type { PolicySet } from "../../../subsystem/policy/src/model/policy.ts";
@@ -42,16 +44,16 @@ export function composeCaseWork(
 ) {
   const { clock } = dependencies;
   const customers = new PostgresCustomerRepository(connection);
-  const getCustomerAccount = new GetCustomerAccount({
-    accounts: new PostgresCustomerAccountRepository(connection),
-  });
+  const customerAccounts = new PostgresCustomerAccountRepository(connection);
+  const getCustomerAccount = new GetCustomerAccount({ accounts: customerAccounts });
   const hasActiveMembership = new HasActiveMembership({ customers });
   const roles = new PostgresRoleRepository(connection);
   const getCatalog = new GetCatalog({ catalogs: new PostgresCatalogRepository(connection) });
+  const subscriptions = new PostgresSubscriptionRepository(connection);
   const computeEffectiveEntitlements = new ComputeEffectiveEntitlements({
     getCustomerAccount,
     getCatalog,
-    subscriptions: new PostgresSubscriptionRepository(connection),
+    subscriptions,
   });
   const evaluatePolicies = new EvaluatePolicies({
     policySet: dependencies.policySet,
@@ -69,13 +71,16 @@ export function composeCaseWork(
       hasActiveMembership,
     }),
     computeEffectiveEntitlements,
+    judgeGrantChange: new JudgeGrantChange({ subscriptions }),
     evaluatePolicies,
     getCatalog,
     clock,
   });
   return {
     decider,
+    getCatalog,
     getCustomerAccount,
+    accountVersions: new AccountVersions({ accounts: customerAccounts }),
     computeEffectiveEntitlements,
     findLowestPlanIncluding: new FindLowestPlanIncluding({ getCatalog }),
     findIndividualByEmail: new FindIndividualByEmail({ customers }),

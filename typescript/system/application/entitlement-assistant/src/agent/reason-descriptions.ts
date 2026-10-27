@@ -12,4 +12,12 @@ export const REASON_DESCRIPTIONS: Readonly<Record<string, string>> = {
   "entitlement.subscription-canceled": "The account's subscription was canceled.",
   "entitlement.no-covering-term": "No paid or free term covers today: the last one has ended.",
   "entitlement.feature-not-included": "The account's plan, add-ons, and grants do not include it.",
+  "access.contact-permission-not-held":
+    "The contact holds no role in this account that lets them ask for it.",
+  "entitlement.feature-already-included": "The account already has this feature.",
+  "entitlement.quota-on-unmetered-feature": "This feature has no quota: grant it without one.",
+  "entitlement.quota-required-on-metered-feature": "This feature is metered: say how much quota to add.",
+  "support.stale-change-request": "The account changed since the request was prepared.",
+  "support.approval-denied": "A supervisor denied the approval.",
+  "support.approval-expired": "No supervisor decided in time.",
 };

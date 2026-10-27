@@ -8,6 +8,7 @@ import type { LoadPrincipalPermissions } from "../../../access/src/usecase/load-
 import type { GetCustomerAccount } from "../../../account/src/usecase/get-customer-account.ts";
 import type { LoadPrincipal } from "../../../account/src/usecase/load-principal.ts";
 import type { ComputeEffectiveEntitlements } from "../../../entitlement/src/usecase/compute-effective-entitlements.ts";
+import type { JudgeGrantChange } from "../../../entitlement/src/usecase/judge-grant-change.ts";
 import type { EvaluatePolicies } from "../../../policy/src/usecase/evaluate-policies.ts";
 import type { GetCatalog } from "../../../product/src/usecase/get-catalog.ts";
 import { combineFindings } from "./decision.ts";
@@ -30,6 +31,7 @@ export class Decide implements AuthorizationDecider {
     readonly loadPrincipal: LoadPrincipal;
     readonly getCustomerAccount: GetCustomerAccount;
     readonly computeEffectiveEntitlements: ComputeEffectiveEntitlements;
+    readonly judgeGrantChange: JudgeGrantChange;
   };
   readonly #clock: Clock;
 
@@ -38,6 +40,7 @@ export class Decide implements AuthorizationDecider {
     readonly getCustomerAccount: GetCustomerAccount;
     readonly loadPrincipalPermissions: LoadPrincipalPermissions;
     readonly computeEffectiveEntitlements: ComputeEffectiveEntitlements;
+    readonly judgeGrantChange: JudgeGrantChange;
     readonly evaluatePolicies: EvaluatePolicies;
     readonly getCatalog: GetCatalog;
     readonly clock: Clock;
@@ -46,7 +49,7 @@ export class Decide implements AuthorizationDecider {
     this.#steps = [
       new AccountStep(),
       this.#accessStep,
-      new ContactAccessStep(),
+      new ContactAccessStep(dependencies.loadPrincipalPermissions),
       new EntitlementStep(),
       new PolicyStep(dependencies.evaluatePolicies, dependencies.getCatalog),
     ];

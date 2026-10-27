@@ -1,7 +1,11 @@
 import type { Uuid } from "../../../../kernel/identifier.ts";
 import type { JsonObject } from "../../../../kernel/json.ts";
 import type { AuditRecorder } from "../../../../port/audit-recorder.ts";
-import type { AuthorizationDecider, Decision } from "../../../../port/authorization-decider.ts";
+import type {
+  AuthorizationDecider,
+  Decision,
+  DecisionContext,
+} from "../../../../port/authorization-decider.ts";
 import type {
   CustomerAccountView,
   GetCustomerAccount,
@@ -106,7 +110,7 @@ export class CaseActionEnforcement {
     actionKey: string,
     accountId: Uuid | null,
     work: (account: CustomerAccountView | null, decision: Decision) => Promise<WorkOutcome<Result>>,
-    options: { readonly readsAccount: boolean } = { readsAccount: true },
+    options: { readonly readsAccount: boolean; readonly changeRequestId?: Uuid } = { readsAccount: true },
   ): Promise<{ readonly kind: "Acted"; readonly outcome: WorkOutcome<Result> } | ActionRefusal> {
     const principal = { kind: "Employee", accountId: request.principalAccountId } as const;
     // The account this action reads, so decides `account.read` on: none for closing (D19), which only names it.
@@ -116,7 +120,17 @@ export class CaseActionEnforcement {
       reasons: readonly string[],
       policySetVersion: string,
       detail: JsonObject = {},
-    ) => this.#record(request, actionKey, accountId, outcome, reasons, policySetVersion, detail);
+    ) =>
+      this.#record(
+        request,
+        actionKey,
+        accountId,
+        outcome,
+        reasons,
+        policySetVersion,
+        detail,
+        options.changeRequestId ?? null,
+      );
     const gate = combineDecisions(
       await this.#decider.decidePermission({ principal, actionKey }),
       ...(readAccountId === null
@@ -152,6 +166,159 @@ export class CaseActionEnforcement {
     return { kind: "Acted", outcome };
   }
 
+  /**
+   * The first half of a change's enforcement (grants-and-approvals D16, D17): the permission gate, before the change
+   * request or its grant is read.
+   *
+   * @ensures Without the change's governing permission or `account.read`, `NotFound` with one `Deny` record, before
+   *          any customer data is read; an account that does not exist is `NotFound`, with no record.
+   * @ensures Otherwise the subject account, for `decideChange`.
+   */
+  async gateChange(
+    request: CaseActionRequest,
+    actionKey: string,
+    accountId: Uuid,
+  ): Promise<{ readonly kind: "Readable"; readonly account: CustomerAccountView } | ActionRefusal> {
+    const principal = { kind: "Employee", accountId: request.principalAccountId } as const;
+    const gate = combineDecisions(
+      await this.#decider.decidePermission({ principal, actionKey }),
+      await this.#decider.decidePermission({ principal, actionKey: READ }),
+    );
+    if (gate.outcome !== "Allow") {
+      await this.#record(
+        request,
+        actionKey,
+        accountId,
+        gate.outcome,
+        gate.reasonCodes,
+        gate.policySetVersion,
+        {},
+        null,
+      );
+      return { kind: "NotFound" };
+    }
+    const account = await this.#getCustomerAccount.execute(accountId);
+    return account === null ? { kind: "NotFound" } : { kind: "Readable", account };
+  }
+
+  /**
+   * A read of a change request (grants-and-approvals D17; review R1-4): decided fresh, as any read of its subject.
+   *
+   * @ensures `gateChange` first; then `account.read` on the subject decided and recorded, naming the request.
+   * @ensures `Readable` only when it allows; otherwise refused as any read (`disclose`).
+   */
+  async readChange(
+    request: CaseActionRequest,
+    actionKey: string,
+    accountId: Uuid,
+    changeRequestId: Uuid,
+  ): Promise<{ readonly kind: "Readable" } | ActionRefusal> {
+    const gate = await this.gateChange(request, actionKey, accountId);
+    if (gate.kind !== "Readable") return gate;
+    const read = await this.#decider.decide({
+      principal: { kind: "Employee", accountId: request.principalAccountId },
+      actionKey: READ,
+      subjectAccountId: accountId,
+    });
+    await this.#audit.record({
+      actorAccountId: request.principalAccountId,
+      sessionId: request.sessionId,
+      traceId: request.traceId,
+      actionKey: READ,
+      outcome: read.outcome,
+      policySetVersion: read.policySetVersion,
+      subjectAccountId: accountId,
+      caseId: request.caseId,
+      changeRequestId,
+      detail: {},
+      participants: [],
+      reasons: read.reasonCodes,
+    });
+    if (read.outcome === "Allow") return { kind: "Readable" };
+    const disclosure = disclose(read, true);
+    return disclosure.kind === "Denied" ? disclosure : { kind: "NotFound" };
+  }
+
+  /**
+   * The second half (D2, D16, D17): the change's decision with its context and contact, combined with `account.read`.
+   *
+   * @ensures One record of the combined decision under `actionKey`, naming the change request and the contact.
+   * @ensures A principal the read decision refuses is refused as for any read (`disclose`): the change is not decided
+   *          for them.
+   * @ensures `Preview`: `work` runs on any decision the principal may read the subject for (D2). `Enforce`: `work`
+   *          runs on `Allow` and `Conditional`; a `Deny` is `Denied` with every reason (D17).
+   * @ensures `work`'s outcome is recorded under `recordAs`, naming the change request.
+   */
+  async decideChange<Result>(
+    request: CaseActionRequest,
+    change: {
+      readonly actionKey: string;
+      readonly recordAs: string;
+      readonly accountId: Uuid;
+      readonly changeRequestId: Uuid;
+      readonly contactAccountId: Uuid | null;
+      readonly context: DecisionContext;
+      readonly mode: "Preview" | "Enforce";
+    },
+    work: (decision: Decision) => Promise<WorkOutcome<Result>>,
+  ): Promise<{ readonly kind: "Acted"; readonly outcome: WorkOutcome<Result> } | ActionRefusal> {
+    const principal = { kind: "Employee", accountId: request.principalAccountId } as const;
+    const read = await this.#decider.decide({
+      principal,
+      actionKey: READ,
+      subjectAccountId: change.accountId,
+    });
+    const decision = combineDecisions(
+      await this.#decider.decide({
+        principal,
+        actionKey: change.actionKey,
+        subjectAccountId: change.accountId,
+        contactAccountId: change.contactAccountId,
+        context: change.context,
+      }),
+      read,
+    );
+    const participants =
+      change.contactAccountId === null
+        ? []
+        : [{ role: "Contact" as const, accountId: change.contactAccountId }];
+    const record = (
+      actionKey: string,
+      outcome: AuditOutcomeOf,
+      reasons: readonly string[],
+      detail: JsonObject = {},
+    ) =>
+      this.#audit.record({
+        actorAccountId: request.principalAccountId,
+        sessionId: request.sessionId,
+        traceId: request.traceId,
+        actionKey,
+        outcome,
+        policySetVersion: decision.policySetVersion,
+        subjectAccountId: change.accountId,
+        caseId: request.caseId,
+        changeRequestId: change.changeRequestId,
+        detail,
+        participants,
+        reasons,
+      });
+    await record(change.actionKey, decision.outcome, decision.reasonCodes);
+    if (read.outcome !== "Allow") {
+      const disclosure = disclose(read, true);
+      return disclosure.kind === "Denied" ? disclosure : { kind: "NotFound" };
+    }
+    if (change.mode === "Enforce" && decision.outcome === "Deny")
+      return { kind: "Denied", reasonCodes: decision.reasonCodes };
+    const outcome = await work(decision);
+    await record(
+      change.recordAs,
+      outcome.outcome,
+      outcome.outcome === "Failed" ? [outcome.reasonCode] : [],
+      outcome.detail,
+    );
+    return { kind: "Acted", outcome };
+  }
+
   #record(
     request: CaseActionRequest,
     actionKey: string,
@@ -160,6 +327,7 @@ export class CaseActionEnforcement {
     reasons: readonly string[],
     policySetVersion: string,
     detail: JsonObject,
+    changeRequestId: Uuid | null,
   ): Promise<void> {
     return this.#audit.record({
       actorAccountId: request.principalAccountId,
@@ -170,7 +338,7 @@ export class CaseActionEnforcement {
       policySetVersion,
       subjectAccountId: accountId,
       caseId: request.caseId,
-      changeRequestId: null,
+      changeRequestId,
       detail,
       participants: [],
       reasons,

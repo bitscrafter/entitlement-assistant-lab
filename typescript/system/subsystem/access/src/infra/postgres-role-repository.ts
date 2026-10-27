@@ -27,6 +27,17 @@ export class PostgresRoleRepository implements RoleRepository {
     return rows.map((row) => row.role_key);
   }
 
+  async systemRoles(accountId: Uuid, now: Date): Promise<readonly string[]> {
+    const rows = await this.#connection.query<{ role_key: string }>(
+      `SELECT role_key FROM internal_role_assignment
+        WHERE internal_account_id = $1 AND principal_kind = 'System' AND ended_at IS NULL
+          AND (expires_at IS NULL OR expires_at > $2)
+        ORDER BY role_key`,
+      [accountId, now],
+    );
+    return rows.map((row) => row.role_key);
+  }
+
   async rolePermissions(roleKeys: readonly string[]): Promise<ReadonlyMap<string, readonly string[]>> {
     const rows = await this.#connection.query<{ role_key: string; permissions: string[] }>(
       `SELECT role_key, array_agg(permission_key ORDER BY permission_key) AS permissions

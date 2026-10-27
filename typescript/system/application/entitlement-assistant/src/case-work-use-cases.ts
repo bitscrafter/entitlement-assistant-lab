@@ -3,6 +3,7 @@ import type { ExplainAccess } from "../../../subsystem/support/src/usecase/expla
 import type { FindCustomerAccount } from "../../../subsystem/support/src/usecase/find-customer-account.ts";
 import type { ListEntitlements } from "../../../subsystem/support/src/usecase/list-entitlements.ts";
 import type { OpenCase } from "../../../subsystem/support/src/usecase/open-case.ts";
+import type { PrepareChangeRequest } from "../../../subsystem/support/src/usecase/prepare-change-request.ts";
 import type { ProposeCaseSubject } from "../../../subsystem/support/src/usecase/propose-case-subject.ts";
 
 /** The use cases a case agent's tools and the verification tests call (api.md §10). */
@@ -13,4 +14,5 @@ export interface CaseWorkUseCases {
   readonly listEntitlements: ListEntitlements;
   readonly explainAccess: ExplainAccess;
   readonly proposeCaseSubject: ProposeCaseSubject;
+  readonly prepareChangeRequest: PrepareChangeRequest;
 }

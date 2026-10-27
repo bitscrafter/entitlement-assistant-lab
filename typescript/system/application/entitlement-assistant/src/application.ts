@@ -3,6 +3,7 @@ import {
   APPLICATION_DATABASE_ROLE,
   type PostgresConnection,
 } from "../../../adapter/postgres/postgres-connection.ts";
+import { PostgresTransactionalOutbox } from "../../../adapter/postgres/postgres-transactional-outbox.ts";
 import { PostgresUnitOfWork } from "../../../adapter/postgres/postgres-unit-of-work.ts";
 import { JoseSessionToken } from "../../../adapter/session-token/jose-session-token.ts";
 import type { Tool } from "../../../external/ai.ts";
@@ -23,6 +24,13 @@ import { SignOut } from "../../../subsystem/account/src/usecase/sign-out.ts";
 import { PostgresAuditRecorder } from "../../../subsystem/attribution/src/infra/postgres-audit-recorder.ts";
 import { PostgresCaseRecordRepository } from "../../../subsystem/attribution/src/infra/postgres-case-record-repository.ts";
 import { ListCaseRecords } from "../../../subsystem/attribution/src/usecase/list-case-records.ts";
+import { PostgresGrantRepository } from "../../../subsystem/entitlement/src/infra/postgres-grant-repository.ts";
+import { EntitlementDiffs } from "../../../subsystem/entitlement/src/usecase/entitlement-diffs.ts";
+import {
+  ChangeGrants,
+  GetGrant,
+  RecordGrantExpiries,
+} from "../../../subsystem/entitlement/src/usecase/grant-changes.ts";
 import { PostgresEmployeeRepository } from "../../../subsystem/internal-identity/src/infra/postgres-employee-repository.ts";
 import { WebCryptoPasswordHasher } from "../../../subsystem/internal-identity/src/infra/web-crypto-password-hasher.ts";
 import { GetEmployeeProfile } from "../../../subsystem/internal-identity/src/usecase/get-employee-profile.ts";
@@ -30,25 +38,43 @@ import { VerifyEmployeeCredential } from "../../../subsystem/internal-identity/s
 import type { PolicySet } from "../../../subsystem/policy/src/model/policy.ts";
 import { PolicySetActivationCheck } from "../../../subsystem/policy/src/usecase/evaluate-policies.ts";
 import { PostgresCaseRepository } from "../../../subsystem/support/src/infra/postgres-case-repository.ts";
+import { PostgresChangeRequestRepository } from "../../../subsystem/support/src/infra/postgres-change-request-repository.ts";
+import type { DenialReason } from "../../../subsystem/support/src/model/change-request.ts";
+import {
+  ApplyApprovedChange,
+  ExpireApproval,
+} from "../../../subsystem/support/src/usecase/approval-process-steps.ts";
 import { AuthenticateContact } from "../../../subsystem/support/src/usecase/authenticate-contact.ts";
+import { CancelChangeRequest } from "../../../subsystem/support/src/usecase/cancel-change-request.ts";
 import {
   type ActionRefusal,
   CaseActionEnforcement,
   CaseAssigneeCheck,
   type CaseRefusal,
 } from "../../../subsystem/support/src/usecase/case-action-enforcement.ts";
+import { ChangeApplication } from "../../../subsystem/support/src/usecase/change-application.ts";
 import { CheckEntitlement } from "../../../subsystem/support/src/usecase/check-entitlement.ts";
 import { CloseCase } from "../../../subsystem/support/src/usecase/close-case.ts";
+import {
+  APPROVAL_PROCESS_DESTINATION,
+  ConfirmChangeRequest,
+} from "../../../subsystem/support/src/usecase/confirm-change-request.ts";
+import {
+  DecideApproval,
+  ListPendingApprovals,
+} from "../../../subsystem/support/src/usecase/decide-approval.ts";
 import { ExplainAccess } from "../../../subsystem/support/src/usecase/explain-access.ts";
 import {
   FindCustomerAccount,
   MINIMUM_QUERY_LENGTH,
 } from "../../../subsystem/support/src/usecase/find-customer-account.ts";
 import { type CaseView, GetCase } from "../../../subsystem/support/src/usecase/get-case.ts";
+import { GetChangeRequest } from "../../../subsystem/support/src/usecase/get-change-request.ts";
 import { type CaseEvent, ListCaseEvents } from "../../../subsystem/support/src/usecase/list-case-events.ts";
 import { ListClosedCases } from "../../../subsystem/support/src/usecase/list-closed-cases.ts";
 import { ListEntitlements } from "../../../subsystem/support/src/usecase/list-entitlements.ts";
 import { OpenCase } from "../../../subsystem/support/src/usecase/open-case.ts";
+import { PrepareChangeRequest } from "../../../subsystem/support/src/usecase/prepare-change-request.ts";
 import { ProposeCaseSubject } from "../../../subsystem/support/src/usecase/propose-case-subject.ts";
 import { ReadEnforcement } from "../../../subsystem/support/src/usecase/read-enforcement.ts";
 import { SetCaseContact } from "../../../subsystem/support/src/usecase/set-case-contact.ts";
@@ -58,9 +84,11 @@ import { caseStateLine } from "./agent/case-state.ts";
 import { REASON_DESCRIPTIONS } from "./agent/reason-descriptions.ts";
 import { lookupOutputOf } from "./agent/tools.ts";
 import { type ConnectionSession, WebSocketMessageGuard } from "./agent/websocket-message-guard.ts";
+import type { ApprovalProcess } from "./approval-process.ts";
 import type { CaseEventsDelivery } from "./case-events-delivery.ts";
 import type { CaseWebSocketConnections } from "./case-websocket-connections.ts";
 import type { CaseWorkUseCases } from "./case-work-use-cases.ts";
+import { diffBody, parametersBody, reasonsBody } from "./change-request-body.ts";
 import { type CaseWork, composeCaseWork } from "./compose-case-work.ts";
 import {
   authenticatePrincipal,
@@ -71,6 +99,7 @@ import {
 import { detailedErrorResponse, errorResponse, jsonResponse, noContent } from "./http/responses.ts";
 import { clearedSessionCookie, sessionCookie } from "./http/session-cookie.ts";
 import { traceIdOf } from "./http/trace.ts";
+import { deliverApprovalMessage } from "./outbox-relay.ts";
 
 /** Everything the application needs from its environment; the Worker builds it from bindings, tests build it directly. */
 export interface ApplicationDependencies {
@@ -100,6 +129,12 @@ export interface ApplicationDependencies {
   readonly searchRateLimiter: MessageRateLimiter;
   /** Hands a case's new events to its agent after an action commits (case-lifecycle D21). */
   readonly caseEventsDelivery: CaseEventsDelivery;
+  /** Starts, wakes, and stops the approval process of each approval (grants-and-approvals D6). */
+  readonly approvalProcess: ApprovalProcess;
+  /** How long an approval waits for a decision (D9: 72 hours). */
+  readonly approvalWindowMilliseconds: number;
+  /** How old an undelivered outbox message is before the sweep delivers it (D6: `OUTBOX_RETRY_AFTER_SECONDS`). */
+  readonly outboxRetryAfterMilliseconds: number;
 }
 
 export type { CaseWorkUseCases };
@@ -114,6 +149,13 @@ export interface Application {
   withUseCases<Value>(work: (useCases: CaseWorkUseCases) => Promise<Value>): Promise<Value>;
   /** What the case agent of one case needs from the application, with the adapter only its runtime supplies. */
   caseAgentParts(caseId: Uuid, adapters: { readonly rateLimiter: MessageRateLimiter }): CaseAgentParts;
+  /**
+   * The scheduled sweep (grants-and-approvals D6, D10): records expired grants, expires approvals whose deadline
+   * passed without their process, and delivers outbox messages still undelivered after the retry delay.
+   */
+  sweep(): Promise<void>;
+  /** The approval process woke for its approval: the decision arrived, or the deadline (D8, D9). */
+  approvalProcessWoke(approvalId: Uuid, cause: "decision" | "deadline"): Promise<void>;
 }
 
 export interface CaseAgentParts {
@@ -194,6 +236,18 @@ const closureBody = z.strictObject({
   close_reason: z.enum(["Resolved", "Abandoned"]),
   summary: z.string().trim().min(1).max(4000),
 });
+const DENIAL_REASONS = ["PolicyLimit", "InsufficientJustification", "CustomerNotEligible", "Other"] as const;
+const decisionBody = z.strictObject({
+  decision: z.enum(["Approved", "Denied"]),
+  decision_reason: z.enum(DENIAL_REASONS).optional(),
+  decision_comment: z.string().trim().min(1).max(1000).optional(),
+});
+
+/** How many outbox messages one sweep delivers at most; the next sweep delivers the rest. */
+const OUTBOX_MESSAGES_PER_SWEEP = 100;
+
+/** How many approvals past their deadline one sweep expires at most. */
+const OVERDUE_APPROVALS_PER_SWEEP = 100;
 
 /** How a malformed field reads to an authenticated caller (api.md §3). */
 const FIELD_DESCRIPTIONS: Readonly<Record<string, string>> = {
@@ -203,6 +257,9 @@ const FIELD_DESCRIPTIONS: Readonly<Record<string, string>> = {
   passed: "Must be true or false.",
   close_reason: "Must be Resolved or Abandoned.",
   summary: "Must be 1 to 4,000 characters.",
+  decision: "Must be Approved or Denied.",
+  decision_reason: "A denial needs PolicyLimit, InsufficientJustification, CustomerNotEligible, or Other.",
+  decision_comment: "Other needs a comment of 1 to 1,000 characters.",
 };
 
 /** A 400 naming the first offending field of a body that failed its schema. */
@@ -292,6 +349,7 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     "POST /api/cases": openCaseHandler,
     "GET /api/cases": closedCasesHandler,
     "GET /api/accounts": accountSearchHandler,
+    "GET /api/approvals": approvalsHandler,
   };
 
   /** The handlers under `/api/cases/{case_id}` (api.md §5), by method and action. */
@@ -302,6 +360,30 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     "POST contact-authentication": authenticateContactHandler,
     "POST closure": closeCaseHandler,
   };
+
+  /** The change request routes of a case (api.md §6), by method and action. */
+  const changeRequestRoutes: Readonly<
+    Record<string, (context: RequestContext, caseId: string, changeRequestId: string) => Promise<Response>>
+  > = {
+    "GET ": getChangeRequestHandler,
+    "POST confirmation": confirmChangeRequestHandler,
+    "POST cancellation": cancelChangeRequestHandler,
+  };
+
+  /** A change request or approval route's handler; undefined when the path is not one. */
+  function changeRouteOf(method: string, pathname: string): Handler | undefined {
+    const change = /^\/api\/cases\/([^/]+)\/change-requests\/([^/]+)(?:\/([a-z-]+))?$/.exec(pathname);
+    if (change !== null) {
+      const handler = changeRequestRoutes[`${method} ${change[3] ?? ""}`];
+      return handler === undefined
+        ? undefined
+        : (context) => handler(context, change[1] ?? "", change[2] ?? "");
+    }
+    const decision = /^\/api\/approvals\/([^/]+)\/decision$/.exec(pathname);
+    if (decision !== null && method === "POST")
+      return (context) => decideApprovalHandler(context, decision[1] ?? "");
+    return undefined;
+  }
 
   /** A case route's handler, with the case id it names; undefined when the path is not one. */
   function caseRouteOf(method: string, pathname: string): Handler | undefined {
@@ -319,7 +401,89 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
   const describeReason = (reasonCode: string): string =>
     policyDescriptions.get(reasonCode) ?? REASON_DESCRIPTIONS[reasonCode] ?? reasonCode;
 
+  const newTraceId = () => traceIdOf(new Request(dependencies.applicationOrigin));
+  const logFailure = (log: string, error: unknown) =>
+    console.error(JSON.stringify({ log, message: String(error) }));
+
+  /**
+   * Delivers approval-process messages (D6): the given ones right after their transaction commits, or every one
+   * still undelivered after the retry delay. Each delivery is marked in a transaction of its own, after the
+   * destination took it; a failed one is counted and left for the next sweep.
+   */
+  async function relay(messageIds: readonly Uuid[] | "Due"): Promise<void> {
+    const messages = await withAllUseCases((useCases) =>
+      messageIds === "Due"
+        ? useCases.outbox.undelivered(
+            APPROVAL_PROCESS_DESTINATION,
+            new Date(dependencies.clock.now().getTime() - dependencies.outboxRetryAfterMilliseconds),
+            OUTBOX_MESSAGES_PER_SWEEP,
+          )
+        : useCases.outbox.undeliveredByIds(APPROVAL_PROCESS_DESTINATION, messageIds),
+    );
+    for (const message of messages) {
+      try {
+        await deliverApprovalMessage(dependencies.approvalProcess, message);
+        await withAllUseCases((useCases) =>
+          useCases.outbox.markDelivered(message.messageId, dependencies.clock.now()),
+        );
+      } catch (error) {
+        logFailure("outbox-delivery-failed", error);
+        await withAllUseCases((useCases) =>
+          useCases.outbox.markAttemptFailed(message.messageId, String(error)),
+        ).catch((markError: unknown) => logFailure("outbox-mark-failed", markError));
+      }
+    }
+  }
+
+  /** The approval process's wake (D8, D9): the use case runs as `sys_approval_process`; the case hears the outcome. */
+  async function approvalProcessWoke(approvalId: Uuid, cause: "decision" | "deadline"): Promise<void> {
+    const outcome = await withAllUseCases(async (useCases) => {
+      const systemAccountId = await useCases.loadPrincipal.systemAccountIdNamed("approval-process");
+      if (systemAccountId === null) throw new Error("The approval-process system identity is missing.");
+      const actor = { systemAccountId, traceId: newTraceId(), approvalId };
+      if (cause === "decision") return useCases.applyApprovedChange.execute(actor);
+      // A decision that arrived after the timer fired was approved in time: it is applied, never lost (review R1-1).
+      const expired = await useCases.expireApproval.execute(actor);
+      return expired.kind === "NothingToDo" ? useCases.applyApprovedChange.execute(actor) : expired;
+    });
+    if (outcome.kind !== "NothingToDo")
+      await dependencies.caseEventsDelivery
+        .deliver(outcome.caseId)
+        .catch((error: unknown) => logFailure("case-events-delivery-failed", error));
+  }
+
   return {
+    async sweep(): Promise<void> {
+      const now = dependencies.clock.now();
+      // Each stage runs whatever the others do: one failure never stops the outbox's delivery (review R1-6).
+      const stage = (name: string, work: () => Promise<void>) =>
+        work().catch((error: unknown) => logFailure(`sweep-${name}-failed`, error));
+      await stage("grant-expiries", () =>
+        withAllUseCases(async (useCases) => {
+          const systemAccountId = await useCases.loadPrincipal.systemAccountIdNamed("grant-expiry");
+          if (systemAccountId === null) throw new Error("The grant-expiry system identity is missing.");
+          await useCases.recordGrantExpiries.execute({ systemAccountId, at: now, traceId: newTraceId() });
+        }),
+      );
+      await stage("approvals", async () => {
+        // Pending past the deadline (a lost process), or approved and not applied (a lost decision): each wakes.
+        const { overdue, approved } = await withAllUseCases(async (useCases) => ({
+          overdue: await useCases.changeRequests.overdueApprovals(now, OVERDUE_APPROVALS_PER_SWEEP),
+          approved: await useCases.changeRequests.approvedNotApplied(
+            new Date(now.getTime() - dependencies.outboxRetryAfterMilliseconds),
+            OVERDUE_APPROVALS_PER_SWEEP,
+          ),
+        }));
+        for (const approval of overdue)
+          await stage("approval", () => approvalProcessWoke(approval.approvalId, "deadline"));
+        for (const approval of approved)
+          await stage("approval", () => approvalProcessWoke(approval.approvalId, "decision"));
+      });
+      await stage("outbox", () => relay("Due"));
+    },
+
+    approvalProcessWoke,
+
     async fetch(request: Request): Promise<Response> {
       const url = new URL(request.url);
       const traceId = traceIdOf(request);
@@ -331,6 +495,7 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
       const handler =
         routes[`${request.method} ${url.pathname}`] ??
         caseRouteOf(request.method, url.pathname) ??
+        changeRouteOf(request.method, url.pathname) ??
         (request.method === "GET" && url.pathname.startsWith(CASE_AGENT_PATH) ? caseAgentHandler : undefined);
       if (handler === undefined) return errorResponse("not_found");
 
@@ -381,7 +546,6 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     },
 
     caseAgentParts(caseId, adapters): CaseAgentParts {
-      const newTraceId = () => traceIdOf(new Request(dependencies.applicationOrigin));
       /** The case state line of D22, as the actor may read the case now. */
       const caseStateIn = async (
         useCases: UseCases,
@@ -714,7 +878,231 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
     if (result.kind !== "Closed") return refusalResponse(context, result);
     const caseId = parsed.request.caseId;
     context.afterCommit(() => dependencies.caseWebSocketConnections.closeAll(caseId));
+    const messageIds = result.outboxMessageIds;
+    if (messageIds.length > 0) context.afterCommit(() => relay(messageIds));
     return noContent();
+  }
+
+  /** A change request's id in a path; a malformed one is not found (api.md §6). */
+  function changeRequestIdIn(written: string): Uuid | null {
+    const decoded = decodeIdentifier("chg", written);
+    return decoded.ok ? decoded.value : null;
+  }
+
+  async function getChangeRequestHandler(
+    context: RequestContext,
+    caseIdWritten: string,
+    changeRequestIdWritten: string,
+  ): Promise<Response> {
+    const parsed = await caseRequestOf(context, caseIdWritten, null);
+    if (!parsed.ok) return parsed.response;
+    const changeRequestId = changeRequestIdIn(changeRequestIdWritten);
+    if (changeRequestId === null) return errorResponse("not_found");
+    const result = await context.useCases.getChangeRequest.execute({ ...parsed.request, changeRequestId });
+    if (result.kind === "ChangeRequestNotFound") return errorResponse("not_found");
+    if (result.kind !== "Found") return refusalResponse(context, result);
+    const request = result.changeRequest;
+    return jsonResponse(200, {
+      change_request_id: encodeIdentifier("chg", request.changeRequestId),
+      change_kind: request.change.kind,
+      status: request.status,
+      status_reason: request.statusReason,
+      parameters: parametersBody(request.change),
+      diff: diffBody(request.diff),
+      preview: {
+        outcome: request.previewOutcome,
+        reasons: reasonsBody(request.previewReasonCodes, describeReason),
+      },
+      approval:
+        result.approval === null
+          ? null
+          : {
+              approval_id: encodeIdentifier("apr", result.approval.approvalId),
+              approval_status: result.approval.status,
+              expires_at: result.approval.expiresAt.toISOString(),
+            },
+      requested_at: request.requestedAt.toISOString(),
+      confirmed_at: request.confirmedAt?.toISOString() ?? null,
+      applied_at: request.appliedAt?.toISOString() ?? null,
+    });
+  }
+
+  async function confirmChangeRequestHandler(
+    context: RequestContext,
+    caseIdWritten: string,
+    changeRequestIdWritten: string,
+  ): Promise<Response> {
+    const parsed = await caseRequestOf(context, caseIdWritten, emptyBody);
+    if (!parsed.ok) return parsed.response;
+    const changeRequestId = changeRequestIdIn(changeRequestIdWritten);
+    if (changeRequestId === null) return errorResponse("not_found");
+    const result = await context.useCases.confirmChangeRequest.execute({
+      ...parsed.request,
+      changeRequestId,
+    });
+    switch (result.kind) {
+      case "Confirmed": {
+        deliverEvents(context, parsed.request.caseId);
+        const messageIds = result.outboxMessageIds;
+        if (messageIds.length > 0) context.afterCommit(() => relay(messageIds));
+        return result.response.status === "Applied"
+          ? jsonResponse(200, { status: "Applied" })
+          : jsonResponse(202, {
+              status: "AwaitingApproval",
+              approval_id: encodeIdentifier("apr", result.response.approvalId),
+            });
+      }
+      case "Stale":
+        deliverEvents(context, parsed.request.caseId);
+        return detailedErrorResponse("conflict", [
+          {
+            error: "stale_change_request",
+            error_description: "The account changed since the request was prepared: prepare it again.",
+          },
+        ]);
+      case "NotAwaitingConfirmation":
+        return detailedErrorResponse("conflict", [
+          {
+            error: "change_request_not_awaiting_confirmation",
+            error_description: "The change request is no longer awaiting confirmation.",
+          },
+        ]);
+      case "ChangeRequestNotFound":
+        return errorResponse("not_found");
+      default:
+        return refusalResponse(context, result);
+    }
+  }
+
+  async function cancelChangeRequestHandler(
+    context: RequestContext,
+    caseIdWritten: string,
+    changeRequestIdWritten: string,
+  ): Promise<Response> {
+    const parsed = await caseRequestOf(context, caseIdWritten, emptyBody);
+    if (!parsed.ok) return parsed.response;
+    const changeRequestId = changeRequestIdIn(changeRequestIdWritten);
+    if (changeRequestId === null) return errorResponse("not_found");
+    const result = await context.useCases.cancelChangeRequest.execute({ ...parsed.request, changeRequestId });
+    switch (result.kind) {
+      case "Canceled":
+        deliverEvents(context, parsed.request.caseId);
+        return jsonResponse(200, { status: "Canceled" });
+      case "NotAwaitingConfirmation":
+        return detailedErrorResponse("conflict", [
+          {
+            error: "change_request_not_awaiting_confirmation",
+            error_description: "The change request is no longer awaiting confirmation.",
+          },
+        ]);
+      case "ChangeRequestNotFound":
+        return errorResponse("not_found");
+      default:
+        return refusalResponse(context, result);
+    }
+  }
+
+  /** The approvals panel's list (D7): `GET /api/approvals?status=Pending`, for holders of `approval.decide`. */
+  async function approvalsHandler(context: RequestContext): Promise<Response> {
+    const authenticated = await authenticatePrincipal(
+      context.request,
+      tokens,
+      context.useCases.loadPrincipal,
+      dependencies.clock.now(),
+    );
+    if (!authenticated.ok) return context.reject(authenticated.failure);
+    if (new URL(context.request.url).searchParams.get("status") !== "Pending")
+      return detailedErrorResponse("invalid_request", [
+        { error: "status", error_description: "Only status=Pending is supported." },
+      ]);
+    const result = await context.useCases.listPendingApprovals.execute({
+      principalAccountId: authenticated.value.principal.accountId,
+      sessionId: authenticated.value.claims.sessionId,
+      traceId: context.traceId,
+    });
+    if (result.kind === "Forbidden") return errorResponse("forbidden");
+    const person = (who: { readonly accountId: Uuid; readonly displayName: string | null }) => ({
+      account_id: encodeIdentifier("iac", who.accountId),
+      display_name: who.displayName,
+    });
+    return jsonResponse(200, {
+      approvals: result.approvals.map((approval) => ({
+        approval_id: encodeIdentifier("apr", approval.approvalId),
+        expires_at: approval.expiresAt.toISOString(),
+        change_request_id: encodeIdentifier("chg", approval.changeRequestId),
+        change_kind: approval.change.kind,
+        parameters: parametersBody(approval.change),
+        preview_reasons: reasonsBody(approval.previewReasonCodes, describeReason),
+        subject: {
+          account_id: encodeIdentifier("acc", approval.subject.accountId),
+          display_name: approval.subject.displayName,
+        },
+        requested_by: person(approval.requestedBy),
+        confirmed_by: approval.confirmedBy === null ? null : person(approval.confirmedBy),
+        requested_at: approval.requestedAt.toISOString(),
+      })),
+    });
+  }
+
+  /** A supervisor's decision (D7, D9): `POST /api/approvals/{id}/decision`. */
+  async function decideApprovalHandler(
+    context: RequestContext,
+    approvalIdWritten: string,
+  ): Promise<Response> {
+    const authenticated = await authenticatePrincipal(
+      context.request,
+      tokens,
+      context.useCases.loadPrincipal,
+      dependencies.clock.now(),
+    );
+    if (!authenticated.ok) return context.reject(authenticated.failure);
+    if (!(context.request.headers.get("content-type") ?? "").startsWith("application/json"))
+      return errorResponse("invalid_request");
+    const parsed = decisionBody.safeParse(parseJson(context.body));
+    if (!parsed.success) return invalidField(parsed.error);
+    const body = parsed.data;
+    const invalid = (field: string) =>
+      detailedErrorResponse("invalid_request", [
+        { error: field, error_description: FIELD_DESCRIPTIONS[field] ?? "The field is not allowed." },
+      ]);
+    if (body.decision === "Denied" && body.decision_reason === undefined) return invalid("decision_reason");
+    if (body.decision === "Denied" && body.decision_reason === "Other" && body.decision_comment === undefined)
+      return invalid("decision_comment");
+    if (
+      body.decision === "Approved" &&
+      (body.decision_reason !== undefined || body.decision_comment !== undefined)
+    )
+      return invalid(body.decision_reason !== undefined ? "decision_reason" : "decision_comment");
+    const approvalId = decodeIdentifier("apr", approvalIdWritten);
+    if (!approvalId.ok) return errorResponse("not_found");
+    const result = await context.useCases.decideApproval.execute({
+      principalAccountId: authenticated.value.principal.accountId,
+      sessionId: authenticated.value.claims.sessionId,
+      traceId: context.traceId,
+      approvalId: approvalId.value,
+      decision: body.decision,
+      reason: (body.decision_reason ?? null) as DenialReason | null,
+      comment: body.decision_comment ?? null,
+    });
+    switch (result.kind) {
+      case "Decided": {
+        deliverEvents(context, result.caseId);
+        const messageIds = result.outboxMessageIds;
+        context.afterCommit(() => relay(messageIds));
+        return jsonResponse(200, { approval_status: result.status });
+      }
+      case "NotFound":
+        return errorResponse("not_found");
+      case "NotPending":
+        return detailedErrorResponse("conflict", [
+          { error: "approval_not_pending", error_description: "The approval is no longer pending." },
+        ]);
+      case "Denied":
+        return detailedErrorResponse(
+          "access_denied",
+          result.reasonCodes.map((code) => ({ error: code, error_description: describeReason(code) })),
+        );
+    }
   }
 
   /**
@@ -846,6 +1234,16 @@ interface UseCases extends CaseWorkUseCases {
   readonly closeCase: CloseCase;
   readonly listClosedCases: ListClosedCases;
   readonly listCaseEvents: ListCaseEvents;
+  readonly getChangeRequest: GetChangeRequest;
+  readonly confirmChangeRequest: ConfirmChangeRequest;
+  readonly cancelChangeRequest: CancelChangeRequest;
+  readonly listPendingApprovals: ListPendingApprovals;
+  readonly decideApproval: DecideApproval;
+  readonly applyApprovedChange: ApplyApprovedChange;
+  readonly expireApproval: ExpireApproval;
+  readonly recordGrantExpiries: RecordGrantExpiries;
+  readonly changeRequests: PostgresChangeRequestRepository;
+  readonly outbox: PostgresTransactionalOutbox;
   readonly unitOfWork: PostgresUnitOfWork;
   readonly caseWork: CaseWork;
   readonly cases: PostgresCaseRepository;
@@ -898,12 +1296,91 @@ function buildUseCases(
     audit,
     getCustomerAccount: caseWork.getCustomerAccount,
   });
+  const changeRequests = new PostgresChangeRequestRepository(connection);
+  const outbox = new PostgresTransactionalOutbox(connection);
+  const grants = new PostgresGrantRepository(connection);
+  const getGrant = new GetGrant({ grants });
+  const changeApplication = new ChangeApplication({
+    diffs: new EntitlementDiffs({ computeEffectiveEntitlements: caseWork.computeEffectiveEntitlements }),
+    getGrant,
+    changeGrants: new ChangeGrants({ grants }),
+    accountVersions: caseWork.accountVersions,
+    changeRequests,
+    ids,
+    clock,
+  });
   return {
+    prepareChangeRequest: new PrepareChangeRequest({
+      check,
+      enforcement: actions,
+      changeRequests,
+      application: changeApplication,
+      getGrant,
+      getCatalog: caseWork.getCatalog,
+      ids,
+      clock,
+    }),
+    getChangeRequest: new GetChangeRequest({ check, enforcement: actions, changeRequests }),
+    confirmChangeRequest: new ConfirmChangeRequest({
+      check,
+      enforcement: actions,
+      changeRequests,
+      application: changeApplication,
+      getGrant,
+      outbox,
+      ids,
+      clock,
+      approvalWindowMilliseconds: dependencies.approvalWindowMilliseconds,
+    }),
+    cancelChangeRequest: new CancelChangeRequest({
+      check,
+      enforcement: actions,
+      changeRequests,
+      outbox,
+      ids,
+      clock,
+    }),
+    listPendingApprovals: new ListPendingApprovals({
+      decider: caseWork.decider,
+      changeRequests,
+      getCustomerAccount: caseWork.getCustomerAccount,
+      getInternalAccountNames: new GetInternalAccountNames({ accounts }),
+      clock,
+    }),
+    decideApproval: new DecideApproval({
+      decider: caseWork.decider,
+      audit,
+      changeRequests,
+      outbox,
+      ids,
+      clock,
+    }),
+    applyApprovedChange: new ApplyApprovedChange({
+      decider: caseWork.decider,
+      audit,
+      changeRequests,
+      application: changeApplication,
+      getGrant,
+      clock,
+    }),
+    expireApproval: new ExpireApproval({ decider: caseWork.decider, audit, changeRequests, clock }),
+    recordGrantExpiries: new RecordGrantExpiries({ grants, decider: caseWork.decider, audit }),
+    changeRequests,
+    outbox,
     getCase: new GetCase({ check, enforcement, listAccountRoles: caseWork.listAccountRoles }),
     setCaseSubject: new SetCaseSubject({ check, enforcement: actions, cases, ids, clock }),
     setCaseContact: new SetCaseContact({ check, enforcement: actions, cases, ids, clock }),
     authenticateContact: new AuthenticateContact({ check, enforcement: actions, cases, clock }),
-    closeCase: new CloseCase({ check, enforcement: actions, cases, clock }),
+    closeCase: new CloseCase({
+      check,
+      enforcement: actions,
+      cases,
+      changeRequests,
+      outbox,
+      audit,
+      ids,
+      clock,
+    }),
     listCaseEvents: new ListCaseEvents({
       listCaseRecords: new ListCaseRecords({ records: new PostgresCaseRecordRepository(connection) }),
       getInternalAccountNames: new GetInternalAccountNames({ accounts }),

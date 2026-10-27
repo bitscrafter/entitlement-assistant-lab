@@ -38,6 +38,15 @@ export class PostgresInternalAccountRepository implements InternalAccountReposit
     return row === undefined ? null : toInternalAccount(row);
   }
 
+  async systemAccountIdNamed(name: string): Promise<Uuid | null> {
+    const [row] = await this.#connection.query<{ account_id: Uuid }>(
+      `SELECT a.account_id FROM system_identity s JOIN internal_account a USING (internal_identity_id)
+        WHERE s.name = $1`,
+      [name],
+    );
+    return row?.account_id ?? null;
+  }
+
   async unreleasedHolds(accountId: Uuid): Promise<readonly HoldReason[]> {
     const rows = await this.#connection.query<{ hold_reason: HoldReason }>(
       "SELECT hold_reason FROM account_hold WHERE account_id = $1 AND released_at IS NULL",

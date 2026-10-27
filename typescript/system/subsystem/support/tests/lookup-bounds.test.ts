@@ -32,6 +32,7 @@ function lookupOfPersonWithRoles(roleAccounts: number) {
   const accountOf = (accountId: Uuid): CustomerAccount => ({
     accountId,
     displayName: `Account ${accountId.slice(-3)}`,
+    version: 0,
     accountCategory: "Standalone",
     customerId: accountId,
     customerKind: "Organization",
@@ -44,6 +45,8 @@ function lookupOfPersonWithRoles(roleAccounts: number) {
     },
     findByCustomer: async () => accountOf(OWN),
     searchByDisplayName: async () => [],
+    lockVersion: async () => 0,
+    advanceVersion: async () => undefined,
   };
   const getCustomerAccount = new GetCustomerAccount({ accounts });
   const audit: AuditRecorder = { record: async () => undefined };

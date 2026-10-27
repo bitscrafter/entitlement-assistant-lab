@@ -7,6 +7,11 @@ import { createWorkersAI, simulateStreamingMiddleware, wrapLanguageModel } from 
 import { importHashKey } from "../../../subsystem/attribution/src/infra/audit-record-hash.ts";
 import { type Application, createApplication } from "./application.ts";
 import {
+  approvalProcessWorkflow,
+  WorkflowApprovalProcess,
+  type WorkflowBinding,
+} from "./approval-process-workflow.ts";
+import {
   caseAgentObject,
   DurableObjectCaseEventsDelivery,
   DurableObjectCaseWebSocketConnections,
@@ -32,6 +37,17 @@ interface Environment {
   readonly AI: unknown;
   readonly CASE_AGENT: DurableObjectNamespace;
   readonly MESSAGE_RATE_LIMITER: DurableObjectNamespace;
+  readonly APPROVAL_PROCESS: WorkflowBinding;
+  /** How long an approval waits for a decision, in seconds (grants-and-approvals D9); 72 hours when unset. */
+  readonly APPROVAL_WINDOW_SECONDS?: string;
+  /** How old an undelivered outbox message is before the sweep delivers it, in seconds (D6); 60 when unset. */
+  readonly OUTBOX_RETRY_AFTER_SECONDS?: string;
+}
+
+/** A positive whole number of seconds from a setting, in milliseconds; the default when unset or malformed. */
+export function secondsSetting(value: string | undefined, defaultSeconds: number): number {
+  const seconds = Number(value);
+  return (value !== undefined && Number.isInteger(seconds) && seconds > 0 ? seconds : defaultSeconds) * 1000;
 }
 
 let application: Promise<Application> | undefined;
@@ -70,10 +86,11 @@ export async function importSessionSigningKey(
 
 /** Builds the application once per isolate: keys are imported once, a database connection is opened per request. */
 async function build(environment: Environment): Promise<Application> {
+  const clock = new SystemClock();
   return createApplication({
     applicationOrigin: environment.APPLICATION_ORIGIN,
     openDatabase: () => PostgresConnection.open(environment.HYPERDRIVE.connectionString),
-    clock: new SystemClock(),
+    clock,
     idGenerator: new UuidVersion7Generator(),
     securityEventLog: new ConsoleSecurityEventLog(),
     sessionSigningKey: {
@@ -94,6 +111,9 @@ async function build(environment: Environment): Promise<Application> {
       "account-search:",
     ),
     caseEventsDelivery: new DurableObjectCaseEventsDelivery(environment.CASE_AGENT),
+    approvalProcess: new WorkflowApprovalProcess(environment.APPROVAL_PROCESS, clock),
+    approvalWindowMilliseconds: secondsSetting(environment.APPROVAL_WINDOW_SECONDS, 72 * 60 * 60),
+    outboxRetryAfterMilliseconds: secondsSetting(environment.OUTBOX_RETRY_AFTER_SECONDS, 60),
   });
 }
 
@@ -113,7 +133,15 @@ export default {
     }
     return running.fetch(request);
   },
+
+  /** The Cron trigger (grants-and-approvals D6, D10): grant expiries, overdue approvals, and the outbox. */
+  async scheduled(_controller: unknown, environment: Environment): Promise<void> {
+    await (await applicationFor(environment)).sweep();
+  },
 };
+
+/** The approval process of each approval (a Workflow instance per approval). */
+export const ApprovalProcessWorkflow = approvalProcessWorkflow<Environment>(applicationFor);
 
 /** The model behind the case agent (ADR CM-19: gpt-oss-120b on Workers AI, chosen by spike K5). */
 const WORKERS_AI_MODEL = "@cf/openai/gpt-oss-120b";

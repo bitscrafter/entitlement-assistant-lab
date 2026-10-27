@@ -6,6 +6,11 @@ import type { Uuid } from "../../../../kernel/identifier.ts";
 import { importHashKey } from "../../../../subsystem/attribution/src/infra/audit-record-hash.ts";
 import { type Application, createApplication } from "../../src/application.ts";
 import {
+  approvalProcessWorkflow,
+  WorkflowApprovalProcess,
+  type WorkflowBinding,
+} from "../../src/approval-process-workflow.ts";
+import {
   caseAgentObject,
   DurableObjectCaseEventsDelivery,
   DurableObjectCaseWebSocketConnections,
@@ -34,6 +39,9 @@ interface Environment {
   readonly TEST_LANGUAGE_MODEL_SCRIPT: string;
   readonly CASE_AGENT: DurableObjectNamespace;
   readonly MESSAGE_RATE_LIMITER: DurableObjectNamespace;
+  readonly APPROVAL_PROCESS: WorkflowBinding;
+  /** A few seconds, so the real Workflow timer fires during a test (grants-and-approvals invariants). */
+  readonly TEST_APPROVAL_WINDOW_SECONDS: string;
 }
 
 const clock = new FixedClock(new Date("2026-10-22T15:00:00Z"));
@@ -76,6 +84,9 @@ function applicationFor(environment: Environment): Promise<Application> {
             ? Promise.resolve()
             : new DurableObjectCaseEventsDelivery(environment.CASE_AGENT).deliver(caseId),
       },
+      approvalProcess: new WorkflowApprovalProcess(environment.APPROVAL_PROCESS, clock),
+      approvalWindowMilliseconds: Number(environment.TEST_APPROVAL_WINDOW_SECONDS) * 1000,
+      outboxRetryAfterMilliseconds: 60 * 1000,
     }))();
   return application;
 }
@@ -140,6 +151,8 @@ export class CaseAgentObject extends BaseCaseAgentObject {
 }
 
 export { MessageRateLimiterObject };
+
+export const ApprovalProcessWorkflow = approvalProcessWorkflow<Environment>(applicationFor);
 
 export default {
   async fetch(request: Request, environment: Environment): Promise<Response> {

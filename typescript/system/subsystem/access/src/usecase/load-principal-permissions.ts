@@ -8,7 +8,8 @@ export type PermissionHoldings = ReadonlyMap<string, readonly string[]>;
 
 export type PermissionPrincipal =
   | { readonly kind: "Employee"; readonly employee: EmployeeJobAttributes }
-  | { readonly kind: "Individual"; readonly accountId: Uuid; readonly contextAccountId: Uuid };
+  | { readonly kind: "Individual"; readonly accountId: Uuid; readonly contextAccountId: Uuid }
+  | { readonly kind: "System"; readonly accountId: Uuid };
 
 /**
  * A principal's effective permissions, computed fresh by one building block (access §5). Internal: the Policy
@@ -31,6 +32,7 @@ export class LoadPrincipalPermissions {
 
   /**
    * @ensures An employee holds the permissions of their birthright and internal roles, and their direct assignments.
+   * @ensures A system identity holds the permissions of the roles assigned to its account.
    * @ensures An individual holds, in the context account, the permissions of their active role assignments there,
    *          counting only assignments justified by the same account or an active membership in the organization
    *          that owns it (access §6).
@@ -45,6 +47,8 @@ export class LoadPrincipalPermissions {
       }
       return holdings;
     }
+    if (principal.kind === "System")
+      return this.#holdingsOf(await this.#roles.systemRoles(principal.accountId, now));
     const assignments = await this.#roles.accountRoleAssignments(
       { memberAccountId: principal.accountId, memberOfAccountId: principal.contextAccountId },
       now,
