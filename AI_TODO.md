@@ -10,6 +10,8 @@
 
 ## Completed
 
+- Usage guards (2026-10-27): daily AI budget from one setting, per-employee daily messages, bounded turns, sign-in per IP, kill switch, `npm run demo:reset`, reviewer accounts `cf-` and `bc-`; merged to `main` and deployed.
+
 - Grants-and-approvals live check passed against the deployment (discovery 34) and merged to `main` (`7c8914c`, 2026-10-27); deployed from `main` (`c05d86ca`), GREEN 607, smoke test passed.
 
 - Grants-and-approvals built, reviewed twice, committed on `feature/grants-and-approvals` (`0ef4f28`), deployed (`ff293743`, 2026-10-27) after a Neon reset and reseed with Morgan; GREEN 606.
