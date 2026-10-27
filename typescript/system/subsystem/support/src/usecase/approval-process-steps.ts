@@ -6,7 +6,7 @@ import type { Clock } from "../../../../port/clock.ts";
 import type { GetGrant } from "../../../entitlement/src/usecase/grant-changes.ts";
 import { actionKeyOf } from "../model/change-request.ts";
 import { authenticationExpiresAt } from "../model/contact-authentication.ts";
-import type { ChangeApplication } from "./change-application.ts";
+import type { ApplyChangeRequest } from "./apply-change-request.ts";
 import type { Approval, ChangeRequest, ChangeRequestRepository } from "./change-request-repository.ts";
 import { combineDecisions } from "./combined-decision.ts";
 import { changeContextOf, changeDetail } from "./prepare-change-request.ts";
@@ -76,7 +76,7 @@ export class ApplyApprovedChange {
   readonly #decider: AuthorizationDecider;
   readonly #audit: AuditRecorder;
   readonly #changeRequests: ChangeRequestRepository;
-  readonly #application: ChangeApplication;
+  readonly #applyChangeRequest: ApplyChangeRequest;
   readonly #getGrant: GetGrant;
   readonly #clock: Clock;
 
@@ -84,14 +84,14 @@ export class ApplyApprovedChange {
     readonly decider: AuthorizationDecider;
     readonly audit: AuditRecorder;
     readonly changeRequests: ChangeRequestRepository;
-    readonly application: ChangeApplication;
+    readonly applyChangeRequest: ApplyChangeRequest;
     readonly getGrant: GetGrant;
     readonly clock: Clock;
   }) {
     this.#decider = dependencies.decider;
     this.#audit = dependencies.audit;
     this.#changeRequests = dependencies.changeRequests;
-    this.#application = dependencies.application;
+    this.#applyChangeRequest = dependencies.applyChangeRequest;
     this.#getGrant = dependencies.getGrant;
     this.#clock = dependencies.clock;
   }
@@ -102,7 +102,7 @@ export class ApplyApprovedChange {
    * @ensures The confirmer's decision re-run now with their current permissions, `account.read` on the subject,
    *          `approval_granted`, and the contact's authentication as it stood at confirmation; recorded, naming the
    *          confirmer. A refusal ends the request `Refused` with the first reason.
-   * @ensures Allowed: `ChangeApplication.apply` by the system identity (`Stale` cancels the request), recorded under
+   * @ensures Allowed: `ApplyChangeRequest` by the system identity (`Stale` cancels the request), recorded under
    *          `change-request.apply`.
    */
   async execute(
@@ -181,7 +181,7 @@ export class ApplyApprovedChange {
       await record("change-request.apply", "Failed", [reason], rerun.policySetVersion, detail);
       return { kind: "Refused", caseId };
     }
-    const applied = await this.#application.apply(request, actor.systemAccountId);
+    const applied = await this.#applyChangeRequest.execute(request, actor.systemAccountId);
     if (applied.kind === "Stale") {
       await record(
         "change-request.apply",

@@ -40,6 +40,7 @@ import { PolicySetActivationCheck } from "../../../subsystem/policy/src/usecase/
 import { PostgresCaseRepository } from "../../../subsystem/support/src/infra/postgres-case-repository.ts";
 import { PostgresChangeRequestRepository } from "../../../subsystem/support/src/infra/postgres-change-request-repository.ts";
 import type { DenialReason } from "../../../subsystem/support/src/model/change-request.ts";
+import { ApplyChangeRequest } from "../../../subsystem/support/src/usecase/apply-change-request.ts";
 import {
   ApplyApprovedChange,
   ExpireApproval,
@@ -52,7 +53,6 @@ import {
   CaseAssigneeCheck,
   type CaseRefusal,
 } from "../../../subsystem/support/src/usecase/case-action-enforcement.ts";
-import { ChangeApplication } from "../../../subsystem/support/src/usecase/change-application.ts";
 import { CheckEntitlement } from "../../../subsystem/support/src/usecase/check-entitlement.ts";
 import { CloseCase } from "../../../subsystem/support/src/usecase/close-case.ts";
 import {
@@ -1300,8 +1300,9 @@ function buildUseCases(
   const outbox = new PostgresTransactionalOutbox(connection);
   const grants = new PostgresGrantRepository(connection);
   const getGrant = new GetGrant({ grants });
-  const changeApplication = new ChangeApplication({
-    diffs: new EntitlementDiffs({ computeEffectiveEntitlements: caseWork.computeEffectiveEntitlements }),
+  const diffs = new EntitlementDiffs({ computeEffectiveEntitlements: caseWork.computeEffectiveEntitlements });
+  const applyChangeRequest = new ApplyChangeRequest({
+    diffs,
     getGrant,
     changeGrants: new ChangeGrants({ grants }),
     accountVersions: caseWork.accountVersions,
@@ -1314,7 +1315,7 @@ function buildUseCases(
       check,
       enforcement: actions,
       changeRequests,
-      application: changeApplication,
+      diffs,
       getGrant,
       getCatalog: caseWork.getCatalog,
       ids,
@@ -1325,7 +1326,7 @@ function buildUseCases(
       check,
       enforcement: actions,
       changeRequests,
-      application: changeApplication,
+      applyChangeRequest,
       getGrant,
       outbox,
       ids,
@@ -1359,7 +1360,7 @@ function buildUseCases(
       decider: caseWork.decider,
       audit,
       changeRequests,
-      application: changeApplication,
+      applyChangeRequest,
       getGrant,
       clock,
     }),

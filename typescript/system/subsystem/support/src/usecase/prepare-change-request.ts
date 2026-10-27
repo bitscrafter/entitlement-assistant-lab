@@ -2,10 +2,14 @@ import type { Uuid } from "../../../../kernel/identifier.ts";
 import type { DecisionContext } from "../../../../port/authorization-decider.ts";
 import type { Clock } from "../../../../port/clock.ts";
 import type { IdGenerator } from "../../../../port/id-generator.ts";
-import type { DiffOperation } from "../../../entitlement/src/usecase/entitlement-diffs.ts";
+import type {
+  AssumedGrantChange,
+  DiffOperation,
+  EntitlementDiffs,
+} from "../../../entitlement/src/usecase/entitlement-diffs.ts";
 import { type GetGrant, isActive, type StoredGrant } from "../../../entitlement/src/usecase/grant-changes.ts";
 import type { GetCatalog } from "../../../product/src/usecase/get-catalog.ts";
-import { actionKeyOf, type ChangeAsked, grantWindowOf } from "../model/change-request.ts";
+import { actionKeyOf, type ChangeAsked, daysAfter, grantWindowOf } from "../model/change-request.ts";
 import { authenticationExpiresAt } from "../model/contact-authentication.ts";
 import type {
   ActionRefusal,
@@ -15,7 +19,6 @@ import type {
   CaseRefusal,
 } from "./case-action-enforcement.ts";
 import type { SupportCase } from "./case-repository.ts";
-import type { ChangeApplication } from "./change-application.ts";
 import type { ChangeRequestRepository } from "./change-request-repository.ts";
 
 /** A prepared change request as the tools and the card show it (grants-and-approvals D1, D2). */
@@ -83,7 +86,7 @@ export class PrepareChangeRequest {
   readonly #check: CaseAssigneeCheck;
   readonly #enforcement: CaseActionEnforcement;
   readonly #changeRequests: ChangeRequestRepository;
-  readonly #application: ChangeApplication;
+  readonly #diffs: EntitlementDiffs;
   readonly #getGrant: GetGrant;
   readonly #getCatalog: GetCatalog;
   readonly #ids: IdGenerator;
@@ -93,7 +96,7 @@ export class PrepareChangeRequest {
     readonly check: CaseAssigneeCheck;
     readonly enforcement: CaseActionEnforcement;
     readonly changeRequests: ChangeRequestRepository;
-    readonly application: ChangeApplication;
+    readonly diffs: EntitlementDiffs;
     readonly getGrant: GetGrant;
     readonly getCatalog: GetCatalog;
     readonly ids: IdGenerator;
@@ -102,7 +105,7 @@ export class PrepareChangeRequest {
     this.#check = dependencies.check;
     this.#enforcement = dependencies.enforcement;
     this.#changeRequests = dependencies.changeRequests;
-    this.#application = dependencies.application;
+    this.#diffs = dependencies.diffs;
     this.#getGrant = dependencies.getGrant;
     this.#getCatalog = dependencies.getCatalog;
     this.#ids = dependencies.ids;
@@ -160,7 +163,8 @@ export class PrepareChangeRequest {
         mode: "Preview",
       },
       async (decision) => {
-        const diff = await this.#application.diffOf(subjectAccountId, change, grant);
+        // The entitlement diff were the change applied now (SU-4): what the card shows and what applying re-checks.
+        const diff = await this.#diffs.diffOf(subjectAccountId, at, assumptionOf(change, grant, at));
         const preview = { outcome: decision.outcome, reasonCodes: decision.reasonCodes };
         await this.#changeRequests.insert({
           changeRequestId,
@@ -202,4 +206,34 @@ export function changeDetail(change: ChangeAsked, grant: StoredGrant | null) {
     ...(change.kind === "RevokeGrant" ? {} : { duration_days: change.durationDays }),
     ...(change.kind === "CreateGrant" && change.quota !== undefined ? { quota: change.quota } : {}),
   };
+}
+
+/** The grant change as the computation assumes it (the diff's "after"). */
+function assumptionOf(change: ChangeAsked, grant: StoredGrant | null, at: Date): AssumedGrantChange {
+  switch (change.kind) {
+    case "CreateGrant":
+      return {
+        adding: {
+          featureKey: change.featureKey,
+          quota: change.quota ?? null,
+          startsAt: at,
+          expiresAt: daysAfter(at, change.durationDays),
+          endedAt: null,
+        },
+      };
+    case "RevokeGrant":
+      return { ending: change.grantId };
+    case "ExtendGrant":
+      if (grant === null) throw new Error("An extension's diff needs its grant.");
+      return {
+        ending: change.grantId,
+        adding: {
+          featureKey: grant.featureKey,
+          quota: grant.quota,
+          startsAt: at,
+          expiresAt: daysAfter(grant.expiresAt, change.durationDays),
+          endedAt: null,
+        },
+      };
+  }
 }

@@ -13,8 +13,9 @@ import { FindIndividualByEmail } from "../../../subsystem/customer-identity/src/
 import { GetIndividuals } from "../../../subsystem/customer-identity/src/usecase/get-individuals.ts";
 import { HasActiveMembership } from "../../../subsystem/customer-identity/src/usecase/has-active-membership.ts";
 import { PostgresSubscriptionRepository } from "../../../subsystem/entitlement/src/infra/postgres-subscription-repository.ts";
+import { CheckGrantEligibility } from "../../../subsystem/entitlement/src/usecase/check-grant-eligibility.ts";
 import { ComputeEffectiveEntitlements } from "../../../subsystem/entitlement/src/usecase/compute-effective-entitlements.ts";
-import { JudgeGrantChange } from "../../../subsystem/entitlement/src/usecase/judge-grant-change.ts";
+import { CountGrantedTotals } from "../../../subsystem/entitlement/src/usecase/count-granted-totals.ts";
 import { CelPolicyExpressionEvaluator } from "../../../subsystem/policy/src/infra/cel-policy-expression-evaluator.ts";
 import { PostgresPolicySetRepository } from "../../../subsystem/policy/src/infra/postgres-policy-set-repository.ts";
 import type { PolicySet } from "../../../subsystem/policy/src/model/policy.ts";
@@ -71,7 +72,8 @@ export function composeCaseWork(
       hasActiveMembership,
     }),
     computeEffectiveEntitlements,
-    judgeGrantChange: new JudgeGrantChange({ subscriptions }),
+    checkGrantEligibility: new CheckGrantEligibility(),
+    countGrantedTotals: new CountGrantedTotals({ subscriptions }),
     evaluatePolicies,
     getCatalog,
     clock,

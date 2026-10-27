@@ -239,7 +239,7 @@ async function decideGrantChange(attributes: DecisionAttributes) {
   if (featureKey === undefined) throw new Error("A grant was decided without its feature.");
   const subject = await attributes.subject();
   if (subject === null) throw new Error("A grant was decided without a subject account.");
-  const reasonCodes = attributes.judgeGrantChange.refusals(subject, {
+  const reasonCodes = attributes.checkGrantEligibility.execute(subject, {
     featureKey,
     quota: attributes.request.context?.quota ?? null,
     extendsGrantId: attributes.request.context?.extendsGrantId ?? null,

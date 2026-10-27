@@ -2,25 +2,22 @@ import type { Uuid } from "../../../../kernel/identifier.ts";
 import type { Clock } from "../../../../port/clock.ts";
 import type { IdGenerator } from "../../../../port/id-generator.ts";
 import type { AccountVersions } from "../../../account/src/usecase/account-versions.ts";
-import type {
-  AssumedGrantChange,
-  DiffOperation,
-  EntitlementDiffs,
-} from "../../../entitlement/src/usecase/entitlement-diffs.ts";
-import type { ChangeGrants, GetGrant, StoredGrant } from "../../../entitlement/src/usecase/grant-changes.ts";
-import { type ChangeAsked, daysAfter } from "../model/change-request.ts";
+import type { EntitlementDiffs } from "../../../entitlement/src/usecase/entitlement-diffs.ts";
+import type { ChangeGrants, GetGrant } from "../../../entitlement/src/usecase/grant-changes.ts";
+import { daysAfter } from "../model/change-request.ts";
 import type { ChangeRequest, ChangeRequestRepository } from "./change-request-repository.ts";
 
-/** What applying a change did (D8, D12, D13). */
-export type Application =
+/** What applying a change request did (D8, D12, D13). */
+export type AppliedChange =
   | { readonly kind: "Applied"; readonly createdGrantId: Uuid | null; readonly expiresAt: Date | null }
   | { readonly kind: "Stale" };
 
 /**
- * Previews and applies grant changes (SU-4, SU-15): the entitlement diff when preparing; the version and diff checks,
- * then the grant change, when applying. Decides nothing: its callers enforce first.
+ * Applies a change request (SU-4, SU-15): the version and diff checks, then the grant change. The shared last step of
+ * confirming (`ConfirmChangeRequest`) and of the approval process (`ApplyApprovedChange`): it decides nothing, and
+ * is called only once their decision allows.
  */
-export class ChangeApplication {
+export class ApplyChangeRequest {
   readonly #diffs: EntitlementDiffs;
   readonly #getGrant: GetGrant;
   readonly #changeGrants: ChangeGrants;
@@ -48,20 +45,6 @@ export class ChangeApplication {
   }
 
   /**
-   * The entitlement diff of a change were it applied now (SU-4): the new grant's source is `grant:new`.
-   *
-   * @ensures The RFC 6902 operations from the subject's effective entitlements now to those after the change.
-   */
-  async diffOf(
-    accountId: Uuid,
-    change: ChangeAsked,
-    grant: StoredGrant | null,
-  ): Promise<readonly DiffOperation[]> {
-    const at = this.#clock.now();
-    return this.#diffs.diffOf(accountId, at, assumptionOf(change, grant, at));
-  }
-
-  /**
    * Applies a change request in the caller's transaction (D8): the subject is locked, then its version and the
    * diff's `test` operations are checked against now.
    *
@@ -70,7 +53,7 @@ export class ChangeApplication {
    * @ensures Otherwise the grant change made at now, the subject's version advanced, and the request `Applied` by
    *          `by`, with the grant it created.
    */
-  async apply(request: ChangeRequest, by: Uuid): Promise<Application> {
+  async execute(request: ChangeRequest, by: Uuid): Promise<AppliedChange> {
     const at = this.#clock.now();
     const version = await this.#accountVersions.locked(request.subjectAccountId);
     if (
@@ -125,7 +108,7 @@ export class ChangeApplication {
     return { kind: "Applied", createdGrantId, expiresAt };
   }
 
-  async #stale(request: ChangeRequest): Promise<Application> {
+  async #stale(request: ChangeRequest): Promise<AppliedChange> {
     await this.#changeRequests.end(
       request.changeRequestId,
       ["AwaitingConfirmation", "AwaitingApproval"],
@@ -133,35 +116,5 @@ export class ChangeApplication {
       "support.stale-change-request",
     );
     return { kind: "Stale" };
-  }
-}
-
-/** The grant change as the computation assumes it (the diff's "after"). */
-function assumptionOf(change: ChangeAsked, grant: StoredGrant | null, at: Date): AssumedGrantChange {
-  switch (change.kind) {
-    case "CreateGrant":
-      return {
-        adding: {
-          featureKey: change.featureKey,
-          quota: change.quota ?? null,
-          startsAt: at,
-          expiresAt: daysAfter(at, change.durationDays),
-          endedAt: null,
-        },
-      };
-    case "RevokeGrant":
-      return { ending: change.grantId };
-    case "ExtendGrant":
-      if (grant === null) throw new Error("An extension's diff needs its grant.");
-      return {
-        ending: change.grantId,
-        adding: {
-          featureKey: grant.featureKey,
-          quota: grant.quota,
-          startsAt: at,
-          expiresAt: daysAfter(grant.expiresAt, change.durationDays),
-          endedAt: null,
-        },
-      };
   }
 }

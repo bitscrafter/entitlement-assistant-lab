@@ -5,11 +5,12 @@ import type {
   GetCustomerAccount,
 } from "../../../account/src/usecase/get-customer-account.ts";
 import type { EmployeePrincipal, LoadPrincipal } from "../../../account/src/usecase/load-principal.ts";
+import type { CheckGrantEligibility } from "../../../entitlement/src/usecase/check-grant-eligibility.ts";
 import type {
   AccountEntitlements,
   ComputeEffectiveEntitlements,
 } from "../../../entitlement/src/usecase/compute-effective-entitlements.ts";
-import type { JudgeGrantChange } from "../../../entitlement/src/usecase/judge-grant-change.ts";
+import type { CountGrantedTotals } from "../../../entitlement/src/usecase/count-granted-totals.ts";
 
 /** What a principal's account says about it, loaded fresh (CM-16). */
 export type PrincipalState =
@@ -28,8 +29,9 @@ export class DecisionAttributes {
   readonly #loadPrincipal: LoadPrincipal;
   readonly #getCustomerAccount: GetCustomerAccount;
   readonly #computeEffectiveEntitlements: ComputeEffectiveEntitlements;
-  /** The grant rules (EN-4, D5), for the entitlement and policy steps. */
-  readonly judgeGrantChange: JudgeGrantChange;
+  /** Whether a grant may exist (EN-4), for the entitlement step. */
+  readonly checkGrantEligibility: CheckGrantEligibility;
+  readonly #countGrantedTotals: CountGrantedTotals;
   #principal: Promise<PrincipalState> | undefined;
   #subject: Promise<AccountEntitlements | null> | undefined;
   #contact: Promise<CustomerAccountView | null> | undefined;
@@ -41,7 +43,8 @@ export class DecisionAttributes {
       readonly loadPrincipal: LoadPrincipal;
       readonly getCustomerAccount: GetCustomerAccount;
       readonly computeEffectiveEntitlements: ComputeEffectiveEntitlements;
-      readonly judgeGrantChange: JudgeGrantChange;
+      readonly checkGrantEligibility: CheckGrantEligibility;
+      readonly countGrantedTotals: CountGrantedTotals;
     },
   ) {
     this.request = request;
@@ -49,7 +52,8 @@ export class DecisionAttributes {
     this.#loadPrincipal = sources.loadPrincipal;
     this.#getCustomerAccount = sources.getCustomerAccount;
     this.#computeEffectiveEntitlements = sources.computeEffectiveEntitlements;
-    this.judgeGrantChange = sources.judgeGrantChange;
+    this.checkGrantEligibility = sources.checkGrantEligibility;
+    this.#countGrantedTotals = sources.countGrantedTotals;
   }
 
   /** @ensures The principal's account state; an account that does not exist rejects (sessions name real accounts). */
@@ -94,7 +98,7 @@ export class DecisionAttributes {
       return null;
     const subject = await this.subject();
     if (subject === null) return null;
-    return this.judgeGrantChange.quotaGranted(
+    return this.#countGrantedTotals.quota(
       subject.account.accountId,
       context.featureKey,
       context.grantWindow,
@@ -108,7 +112,7 @@ export class DecisionAttributes {
     if (context?.grantWindow === undefined || context.featureKey === undefined) return null;
     const subject = await this.subject();
     if (subject === null) return null;
-    return this.judgeGrantChange.daysGranted(
+    return this.#countGrantedTotals.days(
       subject.account.accountId,
       context.featureKey,
       context.grantWindow,

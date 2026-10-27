@@ -5,6 +5,7 @@ import type { IdGenerator } from "../../../../port/id-generator.ts";
 import type { TransactionalOutbox } from "../../../../port/transactional-outbox.ts";
 import type { GetGrant, StoredGrant } from "../../../entitlement/src/usecase/grant-changes.ts";
 import { actionKeyOf } from "../model/change-request.ts";
+import type { ApplyChangeRequest } from "./apply-change-request.ts";
 import type {
   ActionRefusal,
   CaseActionEnforcement,
@@ -12,7 +13,6 @@ import type {
   CaseAssigneeCheck,
   CaseRefusal,
 } from "./case-action-enforcement.ts";
-import type { ChangeApplication } from "./change-application.ts";
 import type { ChangeRequest, ChangeRequestRepository } from "./change-request-repository.ts";
 import { changeContextOf, changeDetail, contactOf } from "./prepare-change-request.ts";
 
@@ -63,7 +63,7 @@ export class ConfirmChangeRequest {
   readonly #check: CaseAssigneeCheck;
   readonly #enforcement: CaseActionEnforcement;
   readonly #changeRequests: ChangeRequestRepository;
-  readonly #application: ChangeApplication;
+  readonly #applyChangeRequest: ApplyChangeRequest;
   readonly #getGrant: GetGrant;
   readonly #outbox: TransactionalOutbox;
   readonly #ids: IdGenerator;
@@ -74,7 +74,7 @@ export class ConfirmChangeRequest {
     readonly check: CaseAssigneeCheck;
     readonly enforcement: CaseActionEnforcement;
     readonly changeRequests: ChangeRequestRepository;
-    readonly application: ChangeApplication;
+    readonly applyChangeRequest: ApplyChangeRequest;
     readonly getGrant: GetGrant;
     readonly outbox: TransactionalOutbox;
     readonly ids: IdGenerator;
@@ -84,7 +84,7 @@ export class ConfirmChangeRequest {
     this.#check = dependencies.check;
     this.#enforcement = dependencies.enforcement;
     this.#changeRequests = dependencies.changeRequests;
-    this.#application = dependencies.application;
+    this.#applyChangeRequest = dependencies.applyChangeRequest;
     this.#getGrant = dependencies.getGrant;
     this.#outbox = dependencies.outbox;
     this.#ids = dependencies.ids;
@@ -99,7 +99,7 @@ export class ConfirmChangeRequest {
    *          written again (D4); one canceled, refused, or expired before confirmation is `NotAwaitingConfirmation`.
    * @ensures Otherwise the decision now, with the request's contact and their authentication now: `Deny` is
    *          `Denied` with every reason (D17), the request still awaiting confirmation. `Allow` applies the change
-   *          (`ChangeApplication.apply`; `Stale` when it no longer applies). `Conditional` makes the request
+   *          (`ApplyChangeRequest`; `Stale` when it no longer applies). `Conditional` makes the request
    *          `AwaitingApproval` with a `Pending` approval and an outbox message to start its process, together.
    * @ensures The contact's authentication at confirmation is kept on the request (D8).
    */
@@ -160,7 +160,7 @@ export class ConfirmChangeRequest {
             status: response.status,
           });
         if (decision.outcome === "Allow") {
-          const applied = await this.#application.apply(changeRequest, request.principalAccountId);
+          const applied = await this.#applyChangeRequest.execute(changeRequest, request.principalAccountId);
           if (applied.kind === "Stale") {
             return {
               outcome: "Failed",
