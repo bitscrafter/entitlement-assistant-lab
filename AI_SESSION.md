@@ -1,6 +1,6 @@
 # AI Session — current state
 
-**Updated:** 2026-10-27 (case-lifecycle built; live evaluations waiting for Workers AI)
+**Updated:** 2026-10-27 (four features and usage guards merged and deployed; live checks done; next: README)
 
 ## State
 
@@ -25,27 +25,25 @@
   Spec §5 evaluation, 4 messages × 5 runs: tool choice 20/20; answers in words 13/20, then 20/20 after the fix
   (discoveries 33, 34). State in `tech-docs/features/explain-access/workflow/progress.md`.
 
-- **Feature case-lifecycle: built** on branch `feature/case-lifecycle` (from `feature/explain-access`; last commit
-  c164cc2; GREEN 537 @ c164cc2), deployed (version `418de419`; Neon migrated through `support/003`). Spec approved
-  with three amendments (D18–D22: the case panel's account search, closing by the assignee, guidance, case events
-  in the conversation, the case state line); adversarial review: 6 rounds, every finding fixed or ruled (discoveries 8–15).
-  State in `tech-docs/features/case-lifecycle/workflow/progress.md`.
+- **Feature case-lifecycle: done.** Merged to `main` (16d63fc); live check passed (discovery 16); a drafted summary
+  may not contain an email address (discovery 17, `fdea8bb`).
+- **Feature grants-and-approvals: done.** Two adversarial review rounds fixed; live check against the deployment passed
+  (discovery 34); merged to `main` (`7c8914c`).
+- **Usage guards: done.** One setting (`AI_NEURONS_PER_DAY`) derives the daily model-call cap and each employee's
+  daily messages; bounded turns; sign-in per IP; kill switch; `npm run demo:reset`; reviewer accounts `cf-` and `bc-`
+  (generated 24-character passwords in `.env.seed-passwords`); merged to `main` (`208f5fa`).
+- **Account on Workers Paid** (2026-10-27). Explain-access §5 evaluation complete (discovery 40).
+- **Deployed** from `main`: version `2e02c861` (`fdea8bb`), GREEN 636. Demo runbook: `tech-docs/demo-runbook.md`.
 
 ## Next session
 
-1. Owner: keep the production secrets in a password manager.
-2. Resume here: the live evaluations wait for Workers AI's free allocation, which still refused calls at 01:12 UTC on
-   2026-10-27 although the dashboard showed 0 of 10k used today; yesterday's 14.68k overran the allocation, so the
-   enforcement may count a rolling window. The probe script is `/tmp/ai-probe.mjs` (run from `typescript/system`). Then: `EVALUATION_ORIGIN=https://entitlement-assistant.jose-luis-rios.workers.dev
-   SEED_PASSWORDS_FILE=.env.seed-passwords npm run eval:live` (explain-access §5, 25 turns), and the case-lifecycle
-   live check (`/tmp/case-lifecycle-live.mjs`, run from `typescript/system`: proposal, case events and line, draft).
-   Record both (explain-access discovery 39, case-lifecycle discovery 16).
-3. Done: both features merged into `main` (7d64a27, 16d63fc), GREEN 537 on `main`, deployed from `main`
-   (`0c06f4f0`), smoke test passed. The live checks are the one open item of their close-out.
-4. For the owner's review: case-lifecycle discoveries 1–15 (judgment calls made autonomously), the glossary terms
-   added (case panel, case assignee check, case WebSocket connections, server WebSocket message, case event, case
-   events delivery, case state line, case account name).
-5. At the end: prompt history export (redacted, under `tech-docs/`), GitHub remote.
+1. Owner: keep the production secrets in a password manager; share reviewer credentials privately.
+2. Documentation drift fixes (from the bitscrafter page session's survey), then the README (outline proposed to the
+   owner), `PROMPTS.md` and the prompt-history export, a secret scan, the GitHub repository (name with the
+   assignment's prefix, to confirm).
+3. For the owner: AI_CONSTITUTION.md lines ~92 and ~96 claim or owe an architecture test that every use case calls
+   the decision point; no such test exists.
+4. Later: documentation of the solution's viewpoints with videos and a live player (bitscrafter.com page).
 
 ## Decisions (owner, 2026-10-22)
 
