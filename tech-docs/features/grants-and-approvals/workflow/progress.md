@@ -2,7 +2,7 @@
 
 | | |
 | :--- | :--- |
-| **Status** | Built, reviewed, committed (`0ef4f28`), deployed (`ff293743`); the change flow's live smoke test waits for Workers AI |
+| **Status** | Done: built, reviewed, live check passed (discovery 34), merged to `main` |
 | **References** | • Plan: [`architect-plan.md`](architect-plan.md)<br>• Spec: [`../grants-and-approvals.verification-spec.md`](../grants-and-approvals.verification-spec.md)<br>• Discoveries: [`discoveries.md`](discoveries.md) |
 
 | Phase | Role | Status | Outcome |
@@ -17,6 +17,6 @@
 | P5 approvals and the process | coder | ✅ | list and decide (window checked in the deciding transaction), apply as the system with the re-run of D8, expire; the transactional outbox and its relay; the Workflow adapter and class; the Cron sweep |
 | P6 agent and case events | coder | ✅ | three preparing tools; case events for every change and approval outcome; instructions; 41 RED tests green, plus event tests |
 | P7 UI | coder | ✅ | the change request card (diff in words, preview, Confirm and Cancel, re-read after each click); the approvals panel (collapsible, count, 30 s refresh, approve or deny with a reason) |
-| P8 deploy | coder | 🟡 | Neon reset (owner's option A), 17 migrations, seeded with Morgan (generated password); policy set `-DTHb-j1…` registered and active at `0ef4f28`; deployed `ff293743` with the Workflow and the Cron trigger. Smoke test without the model passed: sign-in (Alex, Morgan), approvals 200 for Morgan and 403 for Alex, unknown approval and change request 404, a denial without a reason 400. Pending: prepare, confirm, approve, revoke, extend through the assistant once Workers AI answers; the card and the panel in the browser |
+| P8 deploy | coder | ✅ | Neon reset (owner's option A) and reseeded with Morgan; policy set registered; deployed; live check passed (discovery 34) |
 | GREEN gate | assistant | ✅ | 598 tests (537 before, 41 RED now green, 20 new), Biome, types, dependency rules; mutation checks on the security rules all killed (discovery 17) |
 | Adversarial review | review agent | ✅ rounds 1–2 | round 1: 8 findings (1 High), 7 fixed, 1 open question (discoveries 20–28); round 2: no deadlock or double application, 6 findings fixed (29–32); 605 tests green |

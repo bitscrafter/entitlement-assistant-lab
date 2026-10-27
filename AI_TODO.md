@@ -4,13 +4,13 @@
 
 1. At the end: export the prompt history, redacted, into a folder under `tech-docs/` (owner, 2026-10-25); raw transcripts stay git-ignored.
 2. At the end: GitHub remote (owner, 2026-10-25).
-3. Live evaluations of explain-access (§5) and case-lifecycle, once Workers AI answers again (its free allocation still refused calls at 01:12 UTC on 2026-10-27, though the dashboard showed 0 used): record as explain-access discovery 39 and case-lifecycle discovery 16.
-4. Grants-and-approvals: once Workers AI answers, the live smoke test of the change flow (prepare, confirm, a 30-day grant approved by Morgan, a denial, revoke, extend) and the card and approvals panel in the browser; then commit and merge to `main` on success (owner approved, 2026-10-27; discoveries reviewed and approved).
-
-5. Next (owner, 2026-10-27): rather than a new feature, make what exists deployable and demoable, so the owner can demo the app and submit the Cloudflare job application.
-6. Later (owner, 2026-10-27): documentation of the solution's viewpoints with videos and a live player: ER diagram, sequence and state diagrams, security decisions, principles.
+3. Live checks when Workers AI allows (or after the Workers Paid plan): a full explain-access §5 run (discovery 39 was partial) and the case-lifecycle live check (discovery 16 deferred).
+4. Next (owner, 2026-10-27): rather than a new feature, make what exists deployable and demoable, so the owner can demo the app and submit the Cloudflare job application.
+5. Later (owner, 2026-10-27): documentation of the solution's viewpoints with videos and a live player: ER diagram, sequence and state diagrams, security decisions, principles.
 
 ## Completed
+
+- Grants-and-approvals live check passed against the deployment (discovery 34) and merged to `main` (2026-10-27).
 
 - Grants-and-approvals built, reviewed twice, committed on `feature/grants-and-approvals` (`0ef4f28`), deployed (`ff293743`, 2026-10-27) after a Neon reset and reseed with Morgan; GREEN 606.
 
