@@ -1,5 +1,5 @@
 @startuml sign-in
-title Employee sign-in (feature employee-sign-in, S01–S03, S04a–S04f)
+title Employee sign-in (feature employee-sign-in, S01–S03, S04a–S04f; usage-guards UG5)
 
 skinparam sequenceMessageAlign left
 skinparam responseMessageBelowArrow true
@@ -16,6 +16,7 @@ box "Cloudflare network" #FFF7EC
   participant "Static assets" as assets
   participant "Worker\nfetch handler\n(bootstrap)" as worker
   participant "SignInEndpoint\n«inbound adapter»" as endpoint
+  participant "Sign-in rate limiter\n«MessageRateLimiterObject,\none per IP address»" as limiter
   participant "SignIn\n«use case, Account»" as usecase
   participant "PostgresEmployeeCredentialRepository\n«infra»" as credentials
   participant "WebCryptoPasswordHasher\n«adapter»" as hasher
@@ -50,7 +51,20 @@ activate worker
 worker -> worker : bootstrap builds adapters from bindings\n(env.HYPERDRIVE, env.SESSION_SIGNING_KEY, env.AUDIT_HASH_KEY)
 worker -> endpoint : handle(request)
 activate endpoint
-endpoint -> endpoint : Origin equals the app origin? (else 403)\nparse body strictly (else 400)
+endpoint -> endpoint : Origin equals the app origin? (else 403)
+endpoint -> limiter : attempt(cf-connecting-ip)
+limiter --> endpoint : Allowed | Refused
+alt over 10 attempts a minute from this address (usage-guards D6)
+  endpoint --> worker : 429 { error: "rate_limited", error_description }
+  worker --> ui : 429, whatever the password
+  ui --> employee : "Too many requests. Wait a moment, then try again."
+  note right of endpoint
+    Refused before any other work: no body
+    parsing, no password hashing, no audit
+    record; a usage-cap-reached log line.
+  end note
+end
+endpoint -> endpoint : parse body strictly (else 400)
 endpoint -> usecase : signIn(email, password, declaredAccount?)
 activate usecase
 usecase -> usecase : normalizeEmail(email) (CM-10)

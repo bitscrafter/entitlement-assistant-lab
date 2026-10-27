@@ -34,12 +34,12 @@ A CSR using the application can:
 - **Ask about entitlements** in three shapes: *does this account have feature F?* (yes or no, with its
   quota), *what is this account entitled to?* (the full list), and *can this person do this with
   feature F in this account, and why?* (the access explanation).
-- **Change a subscription** (upgrade, downgrade, cancel). The assistant prepares a change request and
+- **Change a subscription** (upgrade, downgrade, cancel; planned: feature change-subscription). The assistant prepares a change request and
   shows its effect on entitlements; nothing is applied until the CSR confirms it in the UI.
 - **Grant a feature temporarily** (for example, a 7-day grant of audit log export). The grant ends on its own.
 - **Escalate**: a change beyond a policy limit becomes **conditional on an approval** that a supervisor
   decides, outside the chat. The case is told the outcome.
-- **Review history**: what changed on an account, who asked, who did it, and why it was allowed.
+- **Review history** (planned: feature change-subscription): what changed on an account, who asked, who did it, and why it was allowed.
 - **Resume a case**: the conversation and its pending change requests survive a page reload.
 
 ### Why this problem
@@ -81,7 +81,7 @@ It exercises the core concepts of an IAM system in one small product:
 | Required component | Cloudflare building block |
 | --- | --- |
 | LLM | gpt-oss-120b on **Workers AI**, with tool calling (ADR CM-19) |
-| Workflow / coordination | One **Agent** (Agents SDK, backed by a Durable Object) per case runs the chat loop. A durable **process instance** (Cloudflare Workflows, behind a port) per approval waits for the decision or its deadline. A scheduled sweep records expired grants. |
+| Workflow / coordination | One **Agent** (Agents SDK, backed by a Durable Object) per case runs the chat loop. A durable **process instance** (Cloudflare Workflows, behind a port) per approval waits for the decision or its deadline. A scheduled sweep records expired grants. Two more Durable Objects count usage: `MessageRateLimiterObject` (chat messages per minute per employee, account searches, sign-in attempts per IP address) and `DailyAllowanceObject` (the day's model calls and each employee's daily messages). |
 | User input via chat | A browser chat UI served as **static assets by the same Worker** that serves the API, streaming over the Agents SDK WebSocket |
 | Memory or state | The case conversation in the Agent's embedded SQLite. Everything else (accounts, subscriptions, grants, policies, cases, change requests, the audit chain) in PostgreSQL |
 
@@ -225,7 +225,8 @@ decision and change is recorded in the audit chain (AT-3, AT-4).
 
 Scenarios are grouped into **features**; each feature is cohesive and deployable on its own, and its
 authoritative statement is its verification spec. Scenario ids (S01, S02, …) are stable across documents.
-Features are built in the order listed; each depends on the ones before it. Grants and approvals come before
+Features are built in the order listed; each depends on the ones before it. Features 1 to 4 and usage-guards
+are built; the others are planned. Grants and approvals come before
 plan changes (owner, 2026-10-26): a grant is the simplest change, and an approval waited on by a durable
 process covers the assignment's workflow component; it carries the change-request core (S15, S17, S18).
 
@@ -236,11 +237,15 @@ process covers the assignment's workflow component; it carries the change-reques
 | 3 | case-lifecycle | S27, S33, S34 | explain-access | [`features/case-lifecycle/case-lifecycle.verification-spec.md`](features/case-lifecycle/case-lifecycle.verification-spec.md) |
 | 4 | grants-and-approvals | S15, S17, S18, S21–S26, S38, S39 | case-lifecycle | [`features/grants-and-approvals/grants-and-approvals.verification-spec.md`](features/grants-and-approvals/grants-and-approvals.verification-spec.md) |
 | 5 | change-subscription | S14, S16, S16a, S16b, S19, S20 | grants-and-approvals | planned |
+| — | usage-guards (operational, outside the scenario order) | UG1–UG7 | employee-sign-in, explain-access | [`features/usage-guards/usage-guards.verification-spec.md`](features/usage-guards/usage-guards.verification-spec.md) |
 | — | candidate features | S28–S32 | — | — |
 
-The seeded dataset is the one in the explain-access spec: customers Acme, Acme Labs, Initech, Globex,
-Hooli, Wayne, Stark, Umbrella, their people, three employees (Alex, Blair, Sam), two system identities, the
-catalog of the `standard` plan ladder, and the starting policy set.
+The seeded dataset is the one the feature specs share (`resource/seed/fixtures.yaml`): customers Acme, Acme
+Labs, Initech, Globex, Hooli, Wayne, Stark, Umbrella, Cyberdyne, Tyrell, and Soylent, with their people; the
+employees Alex and Blair (representatives, levels 1 and 2), Sam and Morgan (supervisors, levels 1 and 2), Drew
+(finance), and Casey and Dana (suspended, for the refusal scenarios); reviewer copies of the four support roles with
+the `cf-` and `bc-` prefixes (usage-guards D7); three system identities (grant expiry, approval process,
+deployment); the catalog of the `standard` plan ladder; and the starting policy set.
 
 ### Feature employee-sign-in
 

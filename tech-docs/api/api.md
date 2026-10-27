@@ -4,7 +4,7 @@
 | :--- | :--- |
 | **Purpose** | Every way into the system: the HTTP endpoints the browser calls, the case agent's WebSocket and its messages, the tools the language model may call, and the use cases behind all three. One error format and one disclosure rule apply to all of them. |
 | **Status** | Ruled by the owner (2026-10-25) |
-| **References** | • Use cases and their decisions: [`../adr/`](../adr/README.md) (AU-1, AU-4, AU-6, SU-9, SU-12, SU-14, SU-15, CM-5, CM-16, CM-17)<br>• Data model: [`../data-model/README.md`](../data-model/README.md)<br>• Feature specs: [`../features/`](../features/)<br>• Proposal: [`../entitlement-assistant-proposal.md`](../entitlement-assistant-proposal.md) §2, §6, §9 |
+| **References** | • Use cases and their decisions: [`../adr/`](../adr/README.md) (AU-1, AU-4, AU-6, SU-9, SU-12, SU-14, SU-15, CM-5, CM-16, CM-17)<br>• Data model: [`../data-model/README.md`](../data-model/README.md)<br>• Feature specs: [`../features/`](../features/), including the usage guards ([`usage-guards`](../features/usage-guards/usage-guards.verification-spec.md))<br>• Proposal: [`../entitlement-assistant-proposal.md`](../entitlement-assistant-proposal.md) §2, §6, §9 |
 
 ## Contents
 
@@ -80,8 +80,8 @@ appears only when the caller's authentication context allows what it says (AU-6)
 | 403 | `access_denied` | The request was denied by policy. | an action on a subject account, refused to a principal who holds `account.read` on it, stopped by a policy | the reason codes, each with its fixed description |
 | 403 | `absolute_lifetime_reached` | The session reached its maximum lifetime. | session renewal at the 8-hour cap | never |
 | 404 | `not_found` | The resource was not found. | the resource does not exist, **or** the caller may not know it exists: not the case's assignee, no `account.read`, any refusal not covered by `access_denied` | never; byte-identical to a missing resource |
-| 409 | `conflict` | The resource is not in a state that allows this request. | change request not awaiting confirmation, approval not `Pending` or past its deadline, case closed, stale change request, subject already set | the state: `stale_change_request`, `case_closed`, `approval_not_pending`, `subject_already_set`, `contact_authentication_failed` |
-| 429 | `rate_limited` | Too many requests. Wait a moment, then try again. | the case panel's account search past 20 a minute per employee (case-lifecycle D18) | never |
+| 409 | `conflict` | The resource is not in a state that allows this request. | change request not awaiting confirmation, approval not `Pending` or past its deadline, case closed, stale change request, subject already set | the state: `stale_change_request`, `change_request_not_awaiting_confirmation`, `case_closed`, `approval_not_pending`, `subject_already_set`, `contact_authentication_failed` |
+| 429 | `rate_limited` | Too many requests. Wait a moment, then try again. | sign-in past 10 attempts a minute per IP address, before any other work (usage-guards D6); the case panel's account search past 20 a minute per employee (case-lifecycle D18) | never |
 | 500 | `server_error` | An unexpected error occurred. | anything unexpected, including an audit record that could not be written (fail closed) | never; the trace id in a response header |
 
 **The rule behind the table** (AU-6): a caller learns that a customer account, case, change request, or
@@ -95,7 +95,7 @@ Specified in [`../features/employee-sign-in/`](../features/employee-sign-in/empl
 
 | Endpoint | Use case | Success | Errors |
 | --- | --- | --- | --- |
-| `POST /api/authentication/sign-in` | `SignIn` (Account) | 204 + cookie | 400, 401 `invalid_credentials`, 403 origin |
+| `POST /api/authentication/sign-in` | `SignIn` (Account) | 204 + cookie | 400, 401 `invalid_credentials`, 403 origin, 429 `rate_limited` (the 11th attempt within a minute from one IP address, whatever the password; usage-guards D6) |
 | `POST /api/authentication/session/renewal` | `RenewSession` (Account) | 204, with a renewed cookie past half-life | 401, 403 `absolute_lifetime_reached` |
 | `GET /api/authentication/session` | `GetSessionPrincipal` (Access, over Account's `LoadPrincipal`) | 200 principal: account, display name, job attributes, roles | 401 |
 | `POST /api/authentication/sign-out` | `SignOut` (Account) | 204 + cookie cleared (`Max-Age=0`); audit `session.sign-out` | 401 |
@@ -116,20 +116,20 @@ Set-Cookie: __Host-session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=
 ## 5. Case endpoints
 
 Every endpoint under `/api/cases/{case_id}` answers `404` unless the caller is the case's current assignee
-(SU-14), except `reassignment`, which needs `case.reassign`. A closed case has no assignee, so it answers `404`
-(case-lifecycle D9). Actions answer `204`; the case panel then reads the case (case-lifecycle D16).
+(SU-14). A closed case has no assignee, so it answers `404` (case-lifecycle D9). Actions answer `204`; the case
+panel then reads the case (case-lifecycle D16). Rows marked **planned** are designed and not built.
 
 | Endpoint | Use case · action key | Body | Success |
 | --- | --- | --- | --- |
 | `POST /api/cases` | `OpenCase` · `case.open` | `{}` | 201 `{ case_id }` |
-| `GET /api/cases` | `ListMyCases` · none (own assignments only) | — | 200 open cases assigned to the caller |
+| `GET /api/cases` (**planned**) | `ListMyCases` · none (own assignments only) | — | 200 open cases assigned to the caller. Not built: `GET /api/cases` answers only the closed-cases query below, and `400` without `status=closed` |
 | `GET /api/accounts?query={query}` | `FindCustomerAccount` · `account.read` per candidate | — | 200 the lookup's answer, as `find_customer_account` gives it (`found`, `ambiguous`); refusals as any read; 400 `query` under 3 or over 320 characters; 429 past 20 a minute (case-lifecycle D18) |
-| `GET /api/cases?subject={account_id}&status=closed` | `ListClosedCases` · `account.read` on the account | — | 200 `{ cases }`: the account's closed cases, newest first, at most 20, with reason, closer, and summary (case-lifecycle D17) |
+| `GET /api/cases?subject={account_id}&status=closed` | `ListClosedCases` · `account.read` on the account | — | 200 `{ cases }`: the account's closed cases, newest first, at most 20, each `{ case_id, closed_at, closed_by: { account_id, display_name }, close_reason, summary }` (case-lifecycle D17); 400 with the field (`status`, `subject`) when `status` is not `closed` or `subject` is not an account id; refusals as any read |
 | `GET /api/cases/{case_id}` | `GetCase` · `account.read` on the subject and on the contact, when set | — | 200 case: subject (holds), contact (holds, roles in the subject), authentication (kind, method, expiry); a part the caller may not read shows only its id and `readable: false` |
 | `PUT /api/cases/{case_id}/subject` | `SetCaseSubject` · `case.set-subject` | `{ account_id }` | 204 |
 | `PUT /api/cases/{case_id}/contact` | `SetCaseContact` · `case.set-contact` | `{ account_id }` | 204 (contact authentication cleared) |
 | `POST /api/cases/{case_id}/contact-authentication` | `AuthenticateContact` · `case.authenticate-contact` | `{ kind, method, passed }` | 204, or 409 `contact_authentication_failed` (audited) |
-| `POST /api/cases/{case_id}/reassignment` | `ReassignCase` · `case.reassign` | `{ assignee_account_id }` | 200 case |
+| `POST /api/cases/{case_id}/reassignment` (**planned**) | `ReassignCase` · `case.reassign` | `{ assignee_account_id }` | 200 case. Not built: the route answers `404` (production-readiness §1) |
 | `POST /api/cases/{case_id}/closure` | `CloseCase` · `case.close` (without `account.read` on the subject, case-lifecycle D19) | `{ close_reason, summary }` | 204 (pending changes and approvals canceled; open connections closed with `4404`) |
 
 `PUT …/subject` takes the account the assistant proposed (the result of `propose_case_subject`, §9) or one the
@@ -156,12 +156,15 @@ Change requests are created by preparing tools (§9) and acted on only here, und
 
 | Endpoint | Use case · action key | Body | Success |
 | --- | --- | --- | --- |
-| `GET /api/cases/{case_id}/change-requests/{change_request_id}` | `GetChangeRequest` · `account.read` on the subject | — | 200: kind, parameters, stored diff, status, approval |
-| `POST /api/cases/{case_id}/change-requests/{change_request_id}/confirmation` | `ConfirmChangeRequest` · `change-request.confirm`, decided under the kind's permission | `{}` | 200 `{ status: Applied }`, 202 `{ status: AwaitingApproval, approval_id }`, or 403 `access_denied` with details |
-| `POST /api/cases/{case_id}/change-requests/{change_request_id}/cancellation` | `CancelChangeRequest` · `change-request.cancel` | `{}` | 200 `{ status: Canceled }` |
+| `GET /api/cases/{case_id}/change-requests/{change_request_id}` | `GetChangeRequest` · `account.read` on the subject | — | 200 `{ change_request_id, change_kind, status, status_reason, parameters, diff, preview: { outcome, reasons }, approval, requested_at, confirmed_at, applied_at }`; `approval` is `null` or `{ approval_id, approval_status, expires_at }` |
+| `POST /api/cases/{case_id}/change-requests/{change_request_id}/confirmation` | `ConfirmChangeRequest` · `change-request.confirm`, decided under the kind's permission | `{}` | 200 `{ status: Applied }`, 202 `{ status: AwaitingApproval, approval_id }`, or 403 `access_denied` with every reason (the request stays `AwaitingConfirmation`) |
+| `POST /api/cases/{case_id}/change-requests/{change_request_id}/cancellation` | `CancelChangeRequest` · `change-request.cancel` | `{}` | 200 `{ status: Canceled }`; 409 `change_request_not_awaiting_confirmation` |
 
 A repeated confirmation returns the first response (A6). A stale request answers `409` with
-`stale_change_request` and ends `Canceled`.
+`stale_change_request` and ends `Canceled`. A request canceled, expired, or refused before any confirmation
+answers `409` with `change_request_not_awaiting_confirmation`. A confirmation refused by the decision answers
+`403 access_denied` with every reason the CSR may see (grants-and-approvals D17); the request stays
+`AwaitingConfirmation`, so the same card can be confirmed once the reason is fixed.
 
 ```http
 POST /api/cases/cse_AZK6v3Wr7kq9Yg3hQm2xTA/change-requests/chg_AZK6v4b1Qx2r8Kp0sWm9Lg/confirmation HTTP/1.1
@@ -192,11 +195,11 @@ The approvals panel (SU-12). Listing needs `approval.decide`; without it the lis
 
 | Endpoint | Use case · action key | Body | Success |
 | --- | --- | --- | --- |
-| `GET /api/approvals?status=Pending` | `ListPendingApprovals` · `approval.decide` | — | 200 pending approvals the caller may decide (never their own requests or confirmations) |
-| `POST /api/approvals/{approval_id}/decision` | `DecideApproval` · `approval.decide` | `{ decision, decision_reason?, decision_comment? }` | 200 `{ approval_status }`; 409 with `approval_not_pending` when not `Pending` or past `expires_at` |
+| `GET /api/approvals?status=Pending` | `ListPendingApprovals` · `approval.decide` | — | 200 `{ approvals }`, each `{ approval_id, expires_at, change_request_id, change_kind, parameters, preview_reasons, subject: { account_id, display_name }, requested_by, confirmed_by, requested_at }`; 400 without `status=Pending` |
+| `POST /api/approvals/{approval_id}/decision` | `DecideApproval` · `approval.decide` | `{ decision, decision_reason?, decision_comment? }` | 200 `{ approval_status }`; 403 `access_denied` with reasons (a decision on one's own request or confirmation: `policy.no-self-approval`); 404; 409 with `approval_not_pending` when not `Pending` or past `expires_at` |
 
 `decision` is `Approved` or `Denied`; `Denied` requires `decision_reason`, and `Other` requires
-`decision_comment`. An approved change is applied by `sys_approval_process` after the decision (SU-15);
+`decision_comment`; `Approved` takes neither (400 with the field). An approved change is applied by `sys_approval_process` after the decision (SU-15);
 the case is notified through its agent (§8).
 
 ## 8. The case agent connection
@@ -216,8 +219,10 @@ storage. The alternative without the Agents SDK: design/case-agent-without-agent
 | cancel | stop the current model response |
 | stream resume (request, acknowledgement) | resume receiving a response after reconnecting |
 
-Every message is checked for the token's expiry and re-loads the principal (explain-access D6, D10); a user
-message is also counted against the rate limit (D13). Any other message is dropped.
+Every message is first checked for size (D11). A message the agent acts on is checked for the token's expiry,
+re-loads the principal, and checks that the case is still assigned to the caller (explain-access D6, D10); a user
+message is counted before that against the rate limit (D13) and the employee's daily messages (usage-guards D3).
+Any other message is dropped. The order and the closes are CM-18's.
 
 **Server WebSocket messages:**
 
@@ -225,12 +230,17 @@ message is also counted against the rate limit (D13). Any other message is dropp
 | --- | --- |
 | assistant message (streamed) | the model's text |
 | tool call, tool result | shown in the transcript for transparency; results are structured (reason codes, facts) |
-| `change_request_card` | `{ change_request_id, change_kind, diff, status }`, rendered from the stored diff, never from model text (SU-9); the UI offers Confirm and Cancel, calling §6 |
-| `case_event` | something happened outside the chat: change applied, approval decided or expired, case reassigned or closed |
-| close `4401 session_expired` | the token the connection was opened with expired |
-| close `4401 invalid_session` | the principal, re-loaded at a message, is no longer active (identity inactive or account suspended) |
+| a preparing tool's result | `{ result: "prepared", change_request: { change_request_id, change_kind, status, parameters, diff, preview: { outcome, reasons } } }`, each reason `{ code, description }`. The UI renders the change request card from this stored result, never from model text (SU-9), and offers Confirm and Cancel, calling §6 |
+| case event | a system message in the conversation, `{ id: "evt_<audit record id>", role: "system", parts: [{ type: "text", text }] }`: something recorded outside the chat (subject or contact set, contact authenticated, a change prepared, confirmed, applied, or canceled, an approval decided or expired). Derived from the case's audit records, appended once by id, and sent to every open connection with the conversation (case-lifecycle D21, grants-and-approvals D15) |
 | close `1009 message_too_big` | a message from the browser was larger than 16 KiB; the model was not called |
-| close `4404 case_unavailable` | the case was closed or reassigned away from the caller |
+| close `4429 rate_limited` | the employee sent more than 20 messages within a minute, across connections and cases (explain-access D13) |
+| close `4430 daily_limit` | the employee's messages for the UTC day are used up (usage-guards D3) |
+| close `4401 session_expired` | the token the connection was opened with expired (at a message, or when its timer fires) |
+| close `4401 invalid_session` | the principal, re-loaded at a message, is no longer active (identity inactive or account suspended), or the connection carries no session |
+| close `4404 case_unavailable` | the case was closed, or is no longer assigned to the caller |
+
+When the day's model calls are used up (usage-guards D2), the turn is not sent to the model and the reply reads
+"The assistant's daily allowance for this demo is used up; try again tomorrow (UTC)."; the connection stays open.
 
 Cards and buttons are rendered by the UI from tool results and server WebSocket messages; the model can
 neither send a message with a different card id nor click a button.
@@ -238,6 +248,7 @@ neither send a message with a different card id nor click a button.
 ## 9. Tools
 
 Tools are typed functions the model may call; arguments are validated strictly (unknown fields rejected).
+Tools marked **planned** are designed and not built: the model is not offered them.
 The principal and the case always come from the connection, never from arguments. Change tools act on the
 case's subject only and fail when it is not set (SU-9). A refusal reaches the model in the same two levels
 as §3: details only when the CSR may see them. Every result names its kind in `result`, a snake_case code
@@ -252,13 +263,13 @@ subject is set, the read tools act on it only (case-lifecycle D6).
 | `explain_access` | `ExplainAccess` | `person_email`, `account_id`, `feature_key`, `operation` | outcome, findings, remedy | explain-access |
 | `propose_case_subject` | `ProposeCaseSubject` · `account.read` | `account_id` | `proposed` with the account as stored; nothing is set; the UI offers **Set as case subject** | case-lifecycle |
 | `draft_case_summary` | none | `summary` | `drafted` with the summary; nothing is stored; the case panel offers it for review | case-lifecycle |
-| `prepare_change_plan` | `PrepareChangeRequest` (`ChangePlan`) | `target_plan_key`, `coverage_source?`, `duration_days?` | change request id and diff, or refusal | change-subscription |
-| `prepare_cancellation` | `PrepareChangeRequest` (`CancelSubscription`) | none | change request id and diff, or refusal | change-subscription |
-| `get_account_history` | `GetAccountHistory` · `audit.read` | `limit?` | audit records with actor, participants, outcome, reasons | change-subscription |
-| `prepare_grant` | `PrepareChangeRequest` (`CreateGrant`) | `feature_key`, `quota?`, `duration_days`, `reason` | `prepared` with the change request (id, kind, parameters, diff, preview with reasons), or a refusal | grants-and-approvals |
+| `prepare_change_plan` | `PrepareChangeRequest` (`ChangePlan`) | `target_plan_key`, `coverage_source?`, `duration_days?` | change request id and diff, or refusal | change-subscription (**planned**) |
+| `prepare_cancellation` | `PrepareChangeRequest` (`CancelSubscription`) | none | change request id and diff, or refusal | change-subscription (**planned**) |
+| `get_account_history` | `GetAccountHistory` · `audit.read` | `limit?` | audit records with actor, participants, outcome, reasons | change-subscription (**planned**) |
+| `prepare_grant` | `PrepareChangeRequest` (`CreateGrant`) | `feature_key`, `quota?`, `duration_days`, `reason` | `prepared` with the change request (id, kind, status, parameters, diff, preview with reasons; §8), or a refusal | grants-and-approvals |
 | `prepare_grant_revocation` | `PrepareChangeRequest` (`RevokeGrant`) | `grant_id`, `reason` | as `prepare_grant`; an inactive grant is refused | grants-and-approvals |
 | `prepare_grant_extension` | `PrepareChangeRequest` (`ExtendGrant`) | `grant_id`, `duration_days`, `reason` | as `prepare_grant`; an expired grant is refused (prepare a new grant) | grants-and-approvals |
-| `prepare_courtesy_term` | `PrepareChangeRequest` (`AddCourtesyTerm`) | `duration_days`, `reason` | change request id and diff, or refusal | candidate S28 |
+| `prepare_courtesy_term` | `PrepareChangeRequest` (`AddCourtesyTerm`) | `duration_days`, `reason` | change request id and diff, or refusal | candidate S28 (**planned**) |
 
 Preparing runs the decision early so that the card can show a refusal or an approval need before the CSR
 confirms; the decision that counts is the one at confirmation (SU-4).
@@ -274,14 +285,14 @@ Each use case is a PEP (AU-5): authorize through `AuthorizationDecider`, execute
 | Internal Identity | `VerifyEmployeeCredential` (internal, used by `SignIn`), `GetEmployeeProfile` (internal, used by `LoadPrincipal`) |
 | Product | `GetCatalog`, `FindLowestPlanIncluding` (remedies, PR-10) |
 | Access | `GetSessionPrincipal` (who am I, with roles: roles live in Access, above Account), `LoadPrincipalPermissions` (internal, used by the PIP), `CountSeatsInUse` |
-| Entitlement | `ComputeEffectiveEntitlements` (internal), `ChangePlan`, `CancelSubscription`, `CreateGrant`, `AddCourtesyTerm`, `RecordGrantExpiry` |
+| Entitlement | `ComputeEffectiveEntitlements` (internal), `ChangeGrants` (internal: creates, revokes, and extends grants when a change is applied), `RecordGrantExpiries`; planned: `ChangePlan`, `CancelSubscription`, `AddCourtesyTerm` |
 | Policy | `RegisterPolicySet`, `ActivatePolicySet` (deployment), `EvaluatePolicies` (internal, used by the PDP) |
 | Authorization | `Decide` (the PDP, behind `AuthorizationDecider`) |
-| Support | `OpenCase`, `ListMyCases`, `GetCase`, `SetCaseSubject`, `SetCaseContact`, `AuthenticateContact`, `ReassignCase`, `CloseCase`, `PrepareChangeRequest`, `GetChangeRequest`, `ConfirmChangeRequest`, `CancelChangeRequest`, `ListPendingApprovals`, `DecideApproval`, `ApplyApprovedChange`, `ExpireApproval`, `FindCustomerAccount`, `CheckEntitlement`, `ListEntitlements`, `ExplainAccess`, `GetAccountHistory` |
+| Support | `OpenCase`, `GetCase`, `SetCaseSubject`, `ProposeCaseSubject`, `SetCaseContact`, `AuthenticateContact`, `CloseCase`, `ListClosedCases`, `ListCaseEvents`, `PrepareChangeRequest`, `GetChangeRequest`, `ConfirmChangeRequest`, `CancelChangeRequest`, `ListPendingApprovals`, `DecideApproval`, `ApplyApprovedChange`, `ExpireApproval`, `FindCustomerAccount`, `CheckEntitlement`, `ListEntitlements`, `ExplainAccess`; planned: `ListMyCases`, `ReassignCase`, `GetAccountHistory` |
 | Attribution | `Record` (behind `AuditRecorder`), `VerifyChain` |
 
-The read use cases (`FindCustomerAccount`, `CheckEntitlement`, `ListEntitlements`, `ExplainAccess`,
-`GetAccountHistory`) live in Support because they are case work by an employee and depend on Account,
+The read use cases (`FindCustomerAccount`, `CheckEntitlement`, `ListEntitlements`, `ExplainAccess`, and the
+planned `GetAccountHistory`) live in Support because they are case work by an employee and depend on Account,
 Entitlement, and Authorization below it (CM-15).
 
 ## 11. Not addressed

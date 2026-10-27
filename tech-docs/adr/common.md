@@ -230,7 +230,7 @@
 
 |  |  |
 | :--- | :--- |
-| **Decision** | Subsystems form a layer order, and database foreign keys only point downward:<br>• customer identity, internal identity → account → access, product → entitlement → policy → authorization → support<br>• attribution is a sink: everyone writes to it; it depends on no one's tables<br>• a column that must point upward is a soft reference (no foreign key)<br>• no exceptions |
+| **Decision** | Subsystems form a layer order, and database foreign keys only point downward:<br>• customer identity, internal identity → account → product → access → entitlement → policy → authorization → support (Access references Product's feature operations)<br>• attribution is a sink: everyone writes to it; it depends on no one's tables<br>• a column that must point upward is a soft reference (no foreign key)<br>• no exceptions |
 | **Status** | Accepted · 2026-10-25 · decided by the owner |
 | **Context** | Every subsystem's tables and migrations. |
 | **Rationale** | • Each subsystem's schema, migrations, and tests stand on what is below it.<br>• No cycles between subsystems.<br>• Audit records outlive and may outrank what they reference; a fail-closed audit is never blocked by another subsystem's table. |
@@ -245,7 +245,7 @@
 
 |  |  |
 | :--- | :--- |
-| **Decision** | The session token says who, never what they may do:<br>• claims: `sub` (the account), `sid` (the session, kept across renewals), `auth_time`, `iat`, `exp`, `jti`<br>• every decision loads the principal fresh: roles, assignments, holds, identity status<br>• `POST /api/session/renew` re-issues the token past half its lifetime, with the same `sid` and `auth_time`, never beyond 8 hours<br>• the server closes a WebSocket when its token expires; the UI renews over HTTP and reconnects |
+| **Decision** | The session token says who, never what they may do:<br>• claims: `sub` (the account), `sid` (the session, kept across renewals), `auth_time`, `iat`, `exp`, `jti`<br>• every decision loads the principal fresh: roles, assignments, holds, identity status<br>• `POST /api/authentication/session/renewal` re-issues the token past half its lifetime, with the same `sid` and `auth_time`, never beyond 8 hours<br>• the server closes a WebSocket when its token expires; the UI renews over HTTP and reconnects |
 | **Status** | Accepted · 2026-10-25 · decided by the owner |
 | **Context** | Supersedes CM-9. Every decision already reads the database to write its audit record (AT-3), so token-carried roles saved nothing. |
 | **Rationale** | • Security: a demotion, suspension, or hold takes effect on the next decision.<br>• `sid` groups a session's audit records across renewals; `jti` stays unique per token (RFC 7519). |
@@ -278,6 +278,9 @@
 | **Consequences** | • The hardening depends on how `AIChatAgent` installs its handler; an SDK upgrade is checked by the runtime tests of the hardening before it is taken.<br>• The agent runs only in the Workers runtime, so its scenarios are tested there, with test controls inside the agent. |
 | **Alternatives** | • A plain Durable Object without the Agents SDK, on the WebSocket hibernation API: no client-supplied history by construction and no SDK dependency, at the cost of resumable streams, live multi-tab updates, the SDK client, and maintaining the protocol ourselves. Built and tested during explain-access before this decision; described in full in [`../design/case-agent-without-agents-sdk.md`](../design/case-agent-without-agents-sdk.md).<br>• The SDK's base `Agent` class without `AIChatAgent`: the SDK's routing, connections, and scheduling, with our own chat handling; still needs the SDK's state sync blocked. |
 | **Related** | • [AU-6](authorization.md#au-6-refusals-reveal-nothing-beyond-what-a-legitimate-principal-may-know)<br>• [CM-16](#cm-16-the-session-token-carries-identity-only) |
+| **Amendments** | 2026-10-27 — the guard's full order, with case-lifecycle and usage-guards: size, message kind, rate, the employee's daily messages (usage-guards D3), the token's expiry, the principal, the case still assigned to the caller. The server closes a connection with one of:<br>• `1009 message_too_big`: a message over 16 KiB (explain-access D11)<br>• `4429 rate_limited`: over 20 messages a minute for the employee (explain-access D13)<br>• `4430 daily_limit`: the employee's messages for the UTC day are used up (usage-guards D3)<br>• `4401 session_expired`: the token the connection was opened with expired, at a message or when its timer fires (explain-access D6)<br>• `4401 invalid_session`: the principal may no longer act, or the connection carries no session (explain-access D10)<br>• `4404 case_unavailable`: the case was closed, or is no longer assigned to the caller (case-lifecycle D7) |
+
+---
 
 ### CM-19. gpt-oss-120b answers, and the screen writes every name
 
@@ -290,3 +293,4 @@
 | **Consequences** | • Free tier: both models fit Workers AI's 10,000 free neurons a day at roughly 50 turns; past it, requests fail until 00:00 UTC (production-readiness).<br>• A model that ignores the reference format shows its own spelling; the live evaluation counts answers that name accounts or people without references.<br>• The model id is one constant; another model is a change to that constant and a re-run of the evaluation. |
 | **Alternatives** | • Keep Llama 3.3 with the fallback for tool calls written as text (discovery 34): works, but guesses ids and slips more often.<br>• Instructions alone for names: cheapest, but nothing enforces them.<br>• A check after the turn for shortened names: detecting a partial name in free text is guesswork. |
 | **Related** | • [CM-18](#cm-18-the-case-agent-is-a-hardened-aichatagent)<br>• [CM-10](#cm-10-store-only-the-normalized-email) |
+| **Amendments** | 2026-10-27 — the account is on Workers Paid; the application caps its own Workers AI use (model calls per UTC day, messages per employee per day, bounds per turn), so a demo stays within the daily allowance it is set to ([usage-guards](../features/usage-guards/usage-guards.verification-spec.md) D1–D5). The free-tier consequence above no longer applies. |

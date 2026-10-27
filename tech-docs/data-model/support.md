@@ -66,7 +66,7 @@ Each step is a use case with its own action key, audited (SU-9). Every step exce
 CSR asks ──▶ AwaitingConfirmation (parameters, subject_account_version, entitlement_diff stored)
                ├─ CSR cancels, or the case closes ──────────────────────▶ Canceled
                ├─ the subject account changed (stale) ─────────────────▶ Canceled · support.stale-change-request
-               └─ CSR confirms ─┬─ decision Deny ────────────────────────▶ Refused
+               └─ CSR confirms ─┬─ decision Deny ───▶ 403 with every reason; stays AwaitingConfirmation
                                 ├─ decision Allow ───────────────────────▶ Applied
                                 └─ decision Conditional (Approval) ─▶ AwaitingApproval + change_approval (Pending)
                                         ├─ approved, re-checks hold (SU-15) ─▶ Applied
@@ -78,8 +78,9 @@ CSR asks ──▶ AwaitingConfirmation (parameters, subject_account_version, en
 ```
 
 **Preparing** stores the parameters, the subject's current `account.version` as
-`subject_account_version`, and the diff. A target plan equal to the current plan is refused at preparation
-(`entitlement.plan-unchanged`). Change tools act on the case's subject only (SU-9).
+`subject_account_version`, and the diff. A target plan equal to the current plan will be refused at
+preparation (`entitlement.plan-unchanged`; change-subscription, planned). Change tools act on the case's
+subject only (SU-9).
 
 **Confirming** is a client action the LLM cannot trigger (an endpoint or a typed frame), and the
 confirmation card renders the stored diff, never model text (SU-9). The confirmer is recorded in
@@ -95,7 +96,11 @@ confirmation card renders the stored diff, never model text (SU-9). The confirme
 5. On `Conditional`: the request becomes `AwaitingApproval`, a `Pending` approval and an outbox row are
    written; the version does not move, because nothing has changed yet.
 
-A refused confirmation rolls back; its audit record is then written in its own transaction (SU-13).
+A refused confirmation rolls back; its audit record is then written in its own transaction (SU-13). The
+confirmation answers `403 access_denied` with every reason, and the request stays `AwaitingConfirmation`:
+once the reason is fixed (the contact authenticates, say), the same card can be confirmed
+(grants-and-approvals discovery 7). `Refused` is for a denial by a supervisor and a refusal when an approved
+change is applied.
 
 **Applying an approved change** (SU-15) re-runs the confirmer's decision with their current state and
 `approval_granted`, checks that `sys_approval_process` holds `change-request.apply` and is not suspended,
@@ -110,13 +115,16 @@ direct `Allow`, recorded under the governing permission; `sys_approval_process` 
 ## 5. Change kinds and parameters
 
 Each kind maps to exactly one employee permission and, when a contact asks, one customer permission (SU-8).
+The database accepts the built kinds only (`support/004-change-requests.sql`); the planned kinds are added with their feature.
 
 | `change_kind` | Employee permission | Contact permission | Parameters |
 | --- | --- | --- | --- |
-| `ChangePlan` | `subscription.change-plan` | `subscription.request-plan-change` | `target_plan_key` (never the current plan). An upgrade to a `Paid` target adds coverage: `source` (`Trial`, `Courtesy`) and `duration_days`, within the policy limits. A downgrade to a `Free` plan starts a `FreePlan` term. A `Paid` target without coverage is refused when no current term covers it. |
-| `CancelSubscription` | `subscription.cancel` | `subscription.request-cancellation` | none; needs an authenticated contact or an approval (`cancel-needs-contact-or-approval`) |
 | `CreateGrant` | `grant.create` | `grant.request` | `feature_key`, `quota` (metered only, within the policy limit), `duration_days`, `reason` |
-| `AddCourtesyTerm` | `subscription.add-courtesy-term` | — (the CSR's own initiative) | `duration_days`, `reason` |
+| `RevokeGrant` | `grant.revoke`, held through `grant.create` | `grant.request` | `grant_id`, `reason`; an inactive grant is refused |
+| `ExtendGrant` | `grant.create` | `grant.request` | `grant_id`, `duration_days`, `reason`; an expired grant is refused (a new grant is prepared instead) |
+| `ChangePlan` (planned: change-subscription) | `subscription.change-plan` | `subscription.request-plan-change` | `target_plan_key` (never the current plan). An upgrade to a `Paid` target adds coverage: `source` (`Trial`, `Courtesy`) and `duration_days`, within the policy limits. A downgrade to a `Free` plan starts a `FreePlan` term. A `Paid` target without coverage is refused when no current term covers it. |
+| `CancelSubscription` (planned: change-subscription) | `subscription.cancel` | `subscription.request-cancellation` | none; needs an authenticated contact or an approval (`cancel-needs-contact-or-approval`) |
+| `AddCourtesyTerm` (planned: candidate S28) | `subscription.add-courtesy-term` | — (the CSR's own initiative) | `duration_days`, `reason` |
 
 ## 6. The entitlement diff
 

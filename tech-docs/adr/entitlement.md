@@ -91,7 +91,7 @@
 | **Status** | Accepted · 2026-10-23 · decided by the owner |
 | **Rationale** | A late or failed job never extends access; the end is still visible and attributed. |
 | **Related** | [II-1](internal-identity.md#ii-1-internal-identity-as-supertype-with-employee-and-system-kinds) |
-| **Amendments** | 2026-10-25 — the system permission is `grant.record-expiry`; `grant.revoke` means explicit early revocation by an employee (designed, not built). |
+| **Amendments** | 2026-10-25 — the system permission is `grant.record-expiry`; `grant.revoke` means explicit early revocation by an employee (designed, not built).<br>2026-10-27 — `grant.revoke` is built (grants-and-approvals: `RevokeGrant` change requests), held through `grant.create` (grants-and-approvals D12). |
 
 ---
 

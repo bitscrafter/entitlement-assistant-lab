@@ -67,7 +67,7 @@
 | **Status** | Accepted · 2026-10-23 · decided by the owner |
 | **Context** | Changes have a lifecycle (confirm, approve, apply) that reads do not. |
 | **Rationale** | • The name says it changes state (the common service-management term).<br>• One typed column fits a small, closed set of kinds. |
-| **Examples** | `ChangePlan` with `target_plan_key: pro`; `CreateGrant` with `feature_key`, `duration_days`, `reason`. |
+| **Examples** | `CreateGrant` with `feature_key`, `duration_days`, `reason`; `RevokeGrant` with `grant_id`, `reason`. `ChangePlan` with `target_plan_key: pro` is planned (change-subscription). |
 | **Alternatives** | • "Case request" or "proposal": do not say a change.<br>• A table per kind: more structure for a few fields. |
 
 ---
@@ -94,7 +94,7 @@
 | **Decision** | A change request ends in exactly one final status:<br>• `Applied`<br>• `Canceled`: withdrawn, or its case closed while awaiting confirmation<br>• `Refused`: denied by policy or by an approver<br>• `Expired`: its approval was not decided in time |
 | **Status** | Accepted · 2026-10-23 · decided by the owner |
 | **Rationale** | No change is left in limbo; closing a case leaves nothing pending. |
-| **Amendments** | 2026-10-25 — `Refused` covers any denial by the decision chain or an approver; `Canceled` also covers stale requests (SU-13) and requests awaiting approval when the case closes (SU-12). |
+| **Amendments** | 2026-10-25 — `Refused` covers any denial by the decision chain or an approver; `Canceled` also covers stale requests (SU-13) and requests awaiting approval when the case closes (SU-12).<br>2026-10-27 — a `Deny` at confirmation does not end the request: the confirmation answers `403` with every reason, and the request stays `AwaitingConfirmation`, so the same card can be confirmed once the reason is fixed (grants-and-approvals discovery 7). `Refused` is for a denial by a supervisor and a refusal when an approved change is applied (SU-15). |
 
 ---
 

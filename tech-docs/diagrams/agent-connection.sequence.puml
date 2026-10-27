@@ -1,5 +1,5 @@
 @startuml agent-connection
-title Case agent connection (feature explain-access, S05a–S05m, S06a, S13)
+title Case agent connection (feature explain-access, S05a–S05m, S06a, S13; usage-guards UG1, UG3)
 
 skinparam sequenceMessageAlign left
 skinparam responseMessageBelowArrow true
@@ -15,6 +15,7 @@ end box
 box "Cloudflare network" #FFF7EC
   participant "Worker\nfetch handler" as worker
   participant "Case agent cse_alex_1\n«Durable Object, one per case»" as agent
+  participant "Usage counters\n«Durable Objects: MessageRateLimiterObject,\nDailyAllowanceObject»" as counters
   participant "Language model\n«port; Workers AI,\ngpt-oss-120b»" as model
   participant "Read use case\n«Support: FindCustomerAccount,\nCheckEntitlement, …»" as usecase
   participant "PDP\n«AuthorizationDecider»" as pdp
@@ -58,10 +59,21 @@ end note
 
 employee -> ui : "Does Acme have SSO?"
 ui -> agent : user message frame
-agent -> agent : in order: over 16 KiB? (D11: close 1009)\nover 20 messages a minute for this employee? (D13: close 4429)\npast the token's expiry? (close 4401 session_expired)
-agent -> postgres : re-load the principal (D10: inactive → close 4401 invalid_session)
-agent -> model : conversation + tool definitions
+agent -> agent : over 16 KiB? (D11: close 1009 message_too_big)
+agent -> counters : over 20 messages a minute for this employee?\n(D13: close 4429 rate_limited)
+agent -> counters : the employee's messages for the UTC day used up?\n(usage-guards D3: close 4430 daily_limit)
+agent -> agent : past the token's expiry? (close 4401 session_expired)
+agent -> postgres : re-load the principal (D10: inactive → close 4401 invalid_session);\nthe case still assigned to iac_alex? (else close 4404 case_unavailable)
+agent -> counters : take one model call from the day's allowance (usage-guards D2)
+alt none left, or AI_NEURONS_PER_DAY = 0
+  agent --> ui : "The assistant's daily allowance for this demo is used up;\ntry again tomorrow (UTC)." (the model is not called)
+end
+agent -> model : the latest 20 messages + tool definitions\n(at most 1,024 output tokens; usage-guards D4)
 model --> agent : tool call check_entitlement\n{ account_id: acc_acme, feature_key: sso }
+note right of agent
+  Every model call of the turn (at most 5)
+  takes one from the day's allowance first.
+end note
 agent -> agent : validate the arguments strictly\n(an unknown field such as acting_as is rejected, S06b)
 agent -> usecase : CheckEntitlement(principal from the connection, never from the model)
 usecase -> pdp : decide account.read on acc_acme (AU-4)

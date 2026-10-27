@@ -59,7 +59,7 @@ or extend a decision; a change of decision is a new ADR, and the old one becomes
 | CM-2 | PostgreSQL through Hyperdrive as system of record | Accepted | 2026-10-22 |
 | CM-3 | Application sign-in with a stateless session token | Accepted | 2026-10-22 |
 | CM-4 | A policy engine of our own, behind a port | Accepted | 2026-10-22 |
-| CM-5 | The LLM proposes; the policy engine decides | Accepted | 2026-10-22 |
+| CM-5 | The LLM proposes; the policy engine decides | Accepted | 2026-10-25 |
 | CM-6 | Shape for many, constrain to one | Accepted | 2026-10-23 |
 | CM-7 | Never delete identities or history | Accepted | 2026-10-23 |
 | CM-8 | One email normalization | Superseded by CM-10 | 2026-10-23 |
@@ -151,6 +151,8 @@ or extend a decision; a change of decision is a new ADR, and the old one becomes
 | SU-14 | Case actions require the case's assignee | Accepted | 2026-10-25 |
 | SU-15 | Applying an approved change re-runs the confirmer's decision against what was shown | Accepted | 2026-10-25 |
 | CM-17 | Authorization and attribution are reached through shared ports | Accepted | 2026-10-25 |
+| CM-18 | The case agent is a hardened `AIChatAgent` | Accepted | 2026-10-25 |
+| CM-19 | gpt-oss-120b answers, and the screen writes every name | Accepted | 2026-10-26 |
 
 The Access records were created as `AZ-1` to `AZ-8` and renamed `AC-1` to `AC-8` with their subsystem
 on 2026-10-23, before anything outside these documents referred to them.

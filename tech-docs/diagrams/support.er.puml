@@ -97,15 +97,20 @@ entity "**change_request**" as change_request {
 	* subject_account_id : uuid
 	contact_account_id : uuid (who asked; empty if CSR-initiated)
 	contact_customer_kind : text = 'Individual'
-	* change_kind : text (ChangePlan | CancelSubscription | CreateGrant | AddCourtesyTerm)
+	* change_kind : text (CreateGrant | RevokeGrant | ExtendGrant; planned: ChangePlan | CancelSubscription | AddCourtesyTerm)
 	* parameters : jsonb (typed per change_kind)
 	* subject_account_version : integer
 	* entitlement_diff : jsonb (RFC 6902 JSON Patch)
+	* preview_outcome : text (Allow | Deny | Conditional)
+	* preview_reason_codes : jsonb (the preview's reasons)
 	* change_status : text (AwaitingConfirmation | AwaitingApproval | Applied | Canceled | Refused | Expired)
+	status_reason : text (a reason code)
 	* requested_by : uuid
 	* requested_at : timestamptz
 	confirmed_at : timestamptz
 	confirmed_by : uuid
+	contact_authenticated_at : timestamptz (as it stood at confirmation)
+	confirmation_response : jsonb (repeated to later confirmations)
 	applied_at : timestamptz
 	applied_by : uuid
 	created_grant_id : uuid (the grant this change created)
@@ -122,12 +127,12 @@ entity "**change_approval**" as change_approval {
 	* approval_id : uuid «apr_…»
 	* change_request_id : uuid
 	* approval_status : text (Pending | Approved | Denied | Expired | Canceled)
-	* process_instance_id : text
+	* requested_at : timestamptz
 	* expires_at : timestamptz
 	decided_by : uuid
 	decided_at : timestamptz
-	decision_reason : text (InsufficientJustification | ExceedsCustomerAgreement | RiskConcern | DuplicateRequest | Other)
-	decision_comment : text
+	decision_reason : text (PolicyLimit | InsufficientJustification | CustomerNotEligible | Other)
+	decision_comment : text (required for Other)
 }
 
 entity "**customer_account**\n<size:10>Account subsystem</size>" as customer_account #F7F7F7 ##[dashed]A0A0A0 {

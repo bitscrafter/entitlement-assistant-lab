@@ -65,7 +65,7 @@ resource permission (`role-assignment.create`).
 | `account` | `place-hold`, `release-hold` | Employee (designed, not built) |
 | `grant` | `create` | Employee |
 | `grant` | `record-expiry` | System |
-| `grant` | `revoke` | Employee (explicit early revocation; designed, not built) |
+| `grant` | `revoke` | Employee (explicit early revocation; held through `grant.create`, grants-and-approvals D12) |
 | `approval` | `decide` | Employee |
 | `change-request` | `apply` | System |
 | `role-assignment` | `create`, `end` | Individual (designed, not built) |
