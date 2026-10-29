@@ -10,6 +10,7 @@ Redaction, applied to the readable rendering:
   - names of the owner's other, private projects become "[another project]"
   - messages from sessions of those projects are left out, with a note
   - system reminders, task notifications, and images are left out; tool outputs are never rendered
+  - paths are relative to the project; links lose their tracking parameters
 
 Usage:
   scripts/export_prompt_history.py [--transcripts-dir DIR ...] [--redact TEXT ...]
@@ -86,11 +87,40 @@ def secret_values() -> list[str]:
     return sorted(values, key=len, reverse=True)
 
 
+# Links keep their page, not their tracking parameters.
+TRACKED_LINK = re.compile(r"(https://job-boards\.greenhouse\.io/[^\s?)\]]+)\?[^\s)\]]*")
+TEMPORARY_FILE = re.compile(r"/private/tmp/[^\s`'\")\]]+")
+
+
+def path_replacements() -> list[tuple[str, str]]:
+    """Absolute paths of this machine, rewritten relative to the project, computed here (no folder is written down)."""
+    sessions_directory = REPOSITORY_ROOT.parent
+    workspace = sessions_directory.parent.parent
+    replacements = [
+        (str(REPOSITORY_ROOT) + "/", ""),
+        (str(REPOSITORY_ROOT), "."),
+        # Sessions start in the directory above the repository; a typo of its name was used once.
+        (str(sessions_directory).replace("cloudflare", "clooudflare") + "/", "../"),
+        (str(sessions_directory) + "/", "../"),
+        (str(sessions_directory), ".."),
+        (str(workspace) + "/", "<workspace>/"),
+        (str(Path.home()) + "/", "~/"),
+    ]
+    # Claude Code names a project's transcript folder after its absolute path.
+    for directory in (str(sessions_directory).replace("cloudflare", "clooudflare"), str(sessions_directory)):
+        replacements.insert(0, (re.sub(r"[^A-Za-z0-9]", "-", directory), "<this-project>"))
+    return replacements
+
+
 def redact(text: str, redactions: list[str]) -> str:
     for redaction in redactions:
         text = text.replace(redaction, "[redacted]")
     for pattern, replacement in PRIVATE_PROJECT_NAMES:
         text = pattern.sub(replacement, text)
+    text = TRACKED_LINK.sub(r"\1", text)
+    text = TEMPORARY_FILE.sub("[a temporary file]", text)
+    for absolute, relative in path_replacements():
+        text = text.replace(absolute, relative)
     return text
 
 

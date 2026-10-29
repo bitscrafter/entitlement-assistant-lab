@@ -84,7 +84,7 @@ nothing serious remained. Each feature's judgment calls are logged for review in
 | [`tech-docs/features/`](tech-docs/features/) | One verification spec per feature, with its plan, progress, and discoveries |
 | [`tech-docs/adr/`](tech-docs/adr/), [`tech-docs/data-model/`](tech-docs/data-model/), [`tech-docs/api/api.md`](tech-docs/api/api.md), [`tech-docs/diagrams/`](tech-docs/diagrams/) | Decisions, data model, API, diagrams |
 | `AI_CONSTITUTION.md`, `AI_WORKFLOW.md`, `AI_AS_*.md` | How the owner and the assistant worked: rules, roles, quality bar |
-| Prompt history | The AI-assisted coding transcripts, redacted (being exported) |
+| [`PROMPTS.md`](PROMPTS.md), [`tech-docs/prompt-history/`](tech-docs/prompt-history/) | The AI-assisted coding history, redacted: every prompt, reply, and tool call |
 
 **Tests:** about 660 (unit, use case against PostgreSQL, HTTP, the Workers runtime with a scripted model and real
 Workflows), with live evaluations of the real model recorded in each feature's discoveries.
