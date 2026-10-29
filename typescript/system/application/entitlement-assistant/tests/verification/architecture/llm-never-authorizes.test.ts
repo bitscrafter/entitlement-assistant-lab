@@ -92,7 +92,7 @@ const ROUTE_REQUESTS: Readonly<
   },
   "PUT /api/cases/{case_id}/contact": {
     path: `/api/cases/${caseId}/contact`,
-    body: { account_id: external("acc_bob") },
+    body: { account_id: external("acc_jane") },
   },
   "POST /api/cases/{case_id}/contact-authentication": {
     path: `/api/cases/${caseId}/contact-authentication`,

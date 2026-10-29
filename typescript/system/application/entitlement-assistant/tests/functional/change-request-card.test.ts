@@ -66,7 +66,7 @@ describe("the change request card (grants-and-approvals D1, D2)", () => {
         { op: "test", path: "/api-access", value: { quota: null, sources: ["grant:grt_x"] } },
         { op: "remove", path: "/api-access" },
       ]),
-    ).toEqual(["Seats: 3 → 13", "Sso: from the new grant", "Removes Api access"]);
+    ).toEqual(["Seats: 3 → 13", "SSO: from the new grant", "Removes API access"]);
   });
 
   test("ensures a card is listed once however many times the reply repeats it", () => {

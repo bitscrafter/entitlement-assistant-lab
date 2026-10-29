@@ -18,6 +18,9 @@ export const EVENT_ACTIONS = [
   "approval.expire",
 ] as const;
 
+/** Keys whose words are acronyms: `sso` reads as `SSO`, `api-access` as `API access`. */
+const FEATURE_WORDS: Readonly<Record<string, string>> = { sso: "SSO", "api-access": "API access" };
+
 const DENIAL_WORDS: Readonly<Record<string, string>> = {
   PolicyLimit: "policy limit",
   InsufficientJustification: "insufficient justification",
@@ -34,7 +37,7 @@ function changeWords(detail: Readonly<Record<string, unknown>>, withDays: boolea
     typeof detail.feature_key === "string" && /^[a-z0-9-]{1,64}$/.test(detail.feature_key)
       ? detail.feature_key
       : null;
-  const feature = key === null ? "a feature" : key.replace(/-/g, " ");
+  const feature = key === null ? "a feature" : (FEATURE_WORDS[key] ?? key.replace(/-/g, " "));
   const quota = typeof detail.quota === "number" ? ` +${detail.quota}` : "";
   const days = typeof detail.duration_days === "number" ? detail.duration_days : null;
   return `${feature}${quota}${withDays && days !== null ? `, ${days} ${days === 1 ? "day" : "days"}` : ""}`;

@@ -61,6 +61,9 @@ export class SetCaseContact {
   async execute(request: CaseActionRequest & { readonly accountId: Uuid }): Promise<SetCaseContactResult> {
     const assigned = await this.#check.execute(request);
     if (assigned.kind !== "Assigned") return assigned;
+    // Already this case's contact (a second click): nothing changes, so nothing is decided or recorded, and the
+    // contact's authentication stands. The assignee already sees the contact in the case.
+    if (assigned.supportCase.contactAccountId === request.accountId) return { kind: "ContactSet" };
     const acted = await this.#enforcement.act<
       { readonly kind: "ContactSet" } | { readonly kind: "NotAPerson" }
     >(request, "case.set-contact", request.accountId, async (account) => {

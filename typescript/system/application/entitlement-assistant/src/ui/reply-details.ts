@@ -216,9 +216,14 @@ const asStrings = (value: unknown): readonly string[] => (Array.isArray(value) ?
 
 /** `business` reads as `Business`; `audit-log-export` as `Audit log export`. */
 export function titleOf(key: string): string {
+  const named = FEATURE_NAMES[key];
+  if (named !== undefined) return named;
   const words = key.replaceAll("-", " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
+
+/** Keys whose words are acronyms: `sso` reads as `SSO`, not `Sso`. */
+const FEATURE_NAMES: Readonly<Record<string, string>> = { sso: "SSO", "api-access": "API access" };
 
 /** An ISO instant as the calendar day it falls on (`2026-11-01`). */
 export function dayOf(instant: string): string {
