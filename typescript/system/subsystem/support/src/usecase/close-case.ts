@@ -3,6 +3,7 @@ import type { AuditRecorder } from "../../../../port/audit-recorder.ts";
 import type { Clock } from "../../../../port/clock.ts";
 import type { IdGenerator } from "../../../../port/id-generator.ts";
 import type { TransactionalOutbox } from "../../../../port/transactional-outbox.ts";
+import { containsEmailAddress } from "../model/case-summary.ts";
 import { cancelPending } from "./cancel-change-request.ts";
 import type {
   ActionRefusal,
@@ -17,6 +18,8 @@ import { changeDetail } from "./prepare-change-request.ts";
 
 export type CloseCaseResult =
   | { readonly kind: "Closed"; readonly outboxMessageIds: readonly Uuid[] }
+  /** The summary holds an email address (case-lifecycle discovery 19): nothing is decided or changed. */
+  | { readonly kind: "SummaryHasEmail" }
   | CaseRefusal
   | ActionRefusal;
 
@@ -59,6 +62,8 @@ export class CloseCase {
    *          canceled; those awaiting approval are canceled with their approvals, and an outbox message stops each
    *          approval process; each cancellation is recorded (`change-request.cancel`). The caller closes the case's
    *          WebSocket connections and delivers the outbox messages once the transaction commits.
+   * @ensures A summary holding an email address is `SummaryHasEmail`, after the assignee check, with nothing decided,
+   *          changed, or recorded (discovery 19).
    * @ensures A case closed meanwhile by a concurrent request is `CaseNotAssigned`, `Failed` (`support.case-closed`).
    */
   async execute(
@@ -66,6 +71,7 @@ export class CloseCase {
   ): Promise<CloseCaseResult> {
     const assigned = await this.#check.execute(request);
     if (assigned.kind !== "Assigned") return assigned;
+    if (containsEmailAddress(request.summary)) return { kind: "SummaryHasEmail" };
     const acted = await this.#enforcement.act<
       | { readonly kind: "Closed"; readonly outboxMessageIds: readonly Uuid[] }
       | { readonly kind: "CaseNotAssigned" }

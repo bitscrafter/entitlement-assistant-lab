@@ -176,7 +176,7 @@ People's emails are `first-name@domain`: `bob@initech.com`, `carol@acme.com`, `l
 | :--- | :--- |
 | **As** | `cf-alex`, in the S7 case |
 | **Steps** | • Type `Please draft the case summary.`<br>• In **Close**, click **Use the assistant's draft**, review it<br>• Choose *Resolved*, then **Close case** |
-| **Expect** | • A draft about the account only<br>• A draft containing an email address is **refused**, and the assistant rewrites it |
+| **Expect** | • A draft about the account only<br>• A summary containing an email address is **refused**, whether the assistant drafts it (it rewrites it) or you submit it |
 | **Shows** | A closed case's summary is read by anyone who may read the account, so it carries no one's details. |
 
 ---

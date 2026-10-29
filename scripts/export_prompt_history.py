@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""Export the Claude Code transcripts of this project into prompt-history/.
+"""Export the Claude Code transcripts of this project for publication.
 
 For each session transcript (JSONL) it writes:
-  prompt-history/raw/<session-id>.jsonl   the transcript, with redactions applied
-  prompt-history/<session-id>.md          a readable rendering: prompts, replies, tool calls
+  prompt-history/raw/<session-id>.jsonl      the transcript as recorded (git-ignored; never published)
+  tech-docs/prompt-history/<session-id>.md    a readable rendering, redacted: prompts, replies, one line per tool call
+
+Redaction, applied to the readable rendering:
+  - every secret value found in the local secret files (passwords, connection strings, keys) becomes "[redacted]"
+  - names of the owner's other, private projects become "[another project]"
+  - messages from sessions of those projects are left out, with a note
+  - system reminders, task notifications, and images are left out; tool outputs are never rendered
 
 Usage:
   scripts/export_prompt_history.py [--transcripts-dir DIR ...] [--redact TEXT ...]
 
-By default the transcripts directory is the Claude Code project folder of this repository's parent
-directory, where sessions are started. Every --redact value is replaced by "[redacted]" in both outputs.
+By default the transcripts directory is the Claude Code project folder of this repository's parent directory, where
+sessions are started. Every --redact value is also replaced by "[redacted]".
 """
 
 import argparse
@@ -18,19 +24,73 @@ import re
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
-OUTPUT_DIRECTORY = REPOSITORY_ROOT / "prompt-history"
-SYSTEM_REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
+RAW_DIRECTORY = REPOSITORY_ROOT / "prompt-history" / "raw"
+PUBLISHED_DIRECTORY = REPOSITORY_ROOT / "tech-docs" / "prompt-history"
+SECRET_FILES = [
+    REPOSITORY_ROOT / "typescript" / "system" / name
+    for name in (".env.seed-passwords", ".env.neon", ".dev.vars", ".env.production-secrets.json")
+]
+
+SYSTEM_REMINDER = re.compile(r"<system-reminder[^>]*>.*?</system-reminder[^>]*>", re.DOTALL)
+TASK_NOTIFICATION = re.compile(r"<task-notification>.*?</task-notification>", re.DOTALL)
+CROSS_SESSION = re.compile(
+    r"<cross-session-message[^>]*from-name=\"(?P<sender>[^\"]+)\"[^>]*>(?P<body>.*?)</cross-session-message>", re.DOTALL
+)
+AGENT_MESSAGE = re.compile(r"<agent-message[^>]*>(?P<body>.*?)</agent-message>", re.DOTALL)
+HARNESS_FRAMING = re.compile(
+    r"Another Claude session sent a message:|This came from another Claude session.*?(?=\n\n|\Z)"
+    r"|That \"other Claude session\" is an agent.*?(?=\n\n|\Z)|\[Subagent hand-back\].*?The report follows:",
+    re.DOTALL,
+)
+IMAGE_NOTE = re.compile(r"\[Image[^\]]*\]")
+
+# The owner's other projects are private: their names never appear, and their sessions' messages are left out.
+PRIVATE_PROJECT_NAMES = [
+    (re.compile(r"private-project[-a-z0-9]*", re.IGNORECASE), "[another project]"),
+]
+PRIVATE_SESSION_PREFIXES = ("private-project",)
 
 
-def default_transcripts_directory() -> Path:
-    session_directory = str(REPOSITORY_ROOT.parent)
-    project_slug = re.sub(r"[^A-Za-z0-9]", "-", session_directory)
-    return Path.home() / ".claude" / "projects" / project_slug
+def secret_values() -> list[str]:
+    """Every secret value of the local secret files, longest first, and the password of each connection string."""
+    values: set[str] = set()
+
+    def add(value: str) -> None:
+        value = value.strip().strip("'\"")
+        if len(value) >= 8 and not value.startswith("http"):
+            values.add(value)
+            match = re.search(r"://[^:/@]+:([^@]+)@", value)
+            if match:
+                values.add(match.group(1))
+
+    for path in SECRET_FILES:
+        if not path.exists():
+            continue
+        if path.suffix == ".json":
+
+            def walk(node: object) -> None:
+                if isinstance(node, dict):
+                    for child in node.values():
+                        walk(child)
+                elif isinstance(node, list):
+                    for child in node:
+                        walk(child)
+                elif isinstance(node, str):
+                    add(node)
+
+            walk(json.loads(path.read_text(encoding="utf-8")))
+        else:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if "=" in line and not line.lstrip().startswith("#"):
+                    add(line.split("=", 1)[1])
+    return sorted(values, key=len, reverse=True)
 
 
 def redact(text: str, redactions: list[str]) -> str:
     for redaction in redactions:
         text = text.replace(redaction, "[redacted]")
+    for pattern, replacement in PRIVATE_PROJECT_NAMES:
+        text = pattern.sub(replacement, text)
     return text
 
 
@@ -39,6 +99,34 @@ def content_blocks(message: dict) -> list[dict]:
     if isinstance(content, str):
         return [{"type": "text", "text": content}]
     return content
+
+
+def render_user_text(text: str) -> str:
+    """A user turn as published: the owner's prompt, or a message from another session or agent, labeled."""
+    text = TASK_NOTIFICATION.sub("", SYSTEM_REMINDER.sub("", text))
+    text = IMAGE_NOTE.sub("*(an image)*", text)
+
+    def cross_session(match: re.Match) -> str:
+        sender = match.group("sender")
+        if sender.lower().startswith(PRIVATE_SESSION_PREFIXES):
+            return "\n*(A message from a session of another project, left out.)*\n"
+        return f"\n**Message from another session ({sender}):**\n\n{match.group('body').strip()}\n"
+
+    text = CROSS_SESSION.sub(cross_session, text)
+    text = AGENT_MESSAGE.sub(
+        lambda match: f"\n**Report from an agent of this session:**\n\n{match.group('body').strip()}\n", text
+    )
+    return HARNESS_FRAMING.sub("", text).strip()
+
+
+def heading_of(text: str, timestamp: str) -> str:
+    if text.startswith("This session is being continued"):
+        return f"## Context summary — {timestamp}"
+    if text.startswith("**Message from another session") or text.startswith("*(A message from"):
+        return f"## Message — {timestamp}"
+    if text.startswith("**Report from an agent"):
+        return f"## Agent report — {timestamp}"
+    return f"## Prompt — {timestamp}"
 
 
 def render_session(transcript_lines: list[dict]) -> str:
@@ -51,9 +139,9 @@ def render_session(transcript_lines: list[dict]) -> str:
         for block in content_blocks(entry.get("message", {})):
             block_type = block.get("type")
             if entry_type == "user" and block_type == "text":
-                prompt = SYSTEM_REMINDER.sub("", block.get("text", "")).strip()
+                prompt = render_user_text(block.get("text", ""))
                 if prompt:
-                    rendered.append(f"## Prompt — {timestamp}\n\n{prompt}\n")
+                    rendered.append(f"{heading_of(prompt, timestamp)}\n\n{prompt}\n")
             elif entry_type == "assistant" and block_type == "text":
                 reply = block.get("text", "").strip()
                 if reply:
@@ -80,19 +168,26 @@ def main() -> None:
     parser.add_argument("--redact", action="append", default=[])
     arguments = parser.parse_args()
 
-    raw_directory = OUTPUT_DIRECTORY / "raw"
-    raw_directory.mkdir(parents=True, exist_ok=True)
+    RAW_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    PUBLISHED_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    redactions = secret_values() + arguments.redact
 
     directories = arguments.transcripts_dir or [default_transcripts_directory()]
     transcripts = sorted(path for directory in directories for path in directory.glob("*.jsonl"))
     for transcript in transcripts:
-        text = redact(transcript.read_text(encoding="utf-8"), arguments.redact)
-        (raw_directory / transcript.name).write_text(text, encoding="utf-8")
+        text = transcript.read_text(encoding="utf-8")
+        (RAW_DIRECTORY / transcript.name).write_text(text, encoding="utf-8")
         lines = [json.loads(line) for line in text.splitlines() if line.strip()]
-        markdown = f"# Session {transcript.stem}\n\n" + render_session(lines)
-        (OUTPUT_DIRECTORY / f"{transcript.stem}.md").write_text(markdown, encoding="utf-8")
+        markdown = redact(f"# Session {transcript.stem}\n\n" + render_session(lines), redactions)
+        (PUBLISHED_DIRECTORY / f"{transcript.stem}.md").write_text(markdown, encoding="utf-8")
         print(f"exported {transcript.name}")
-    print(f"{len(transcripts)} session(s) exported to {OUTPUT_DIRECTORY}")
+    print(f"{len(transcripts)} session(s) exported to {PUBLISHED_DIRECTORY}")
+
+
+def default_transcripts_directory() -> Path:
+    session_directory = str(REPOSITORY_ROOT.parent)
+    project_slug = re.sub(r"[^A-Za-z0-9]", "-", session_directory)
+    return Path.home() / ".claude" / "projects" / project_slug
 
 
 if __name__ == "__main__":

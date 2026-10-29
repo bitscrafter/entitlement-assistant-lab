@@ -38,3 +38,31 @@ describe("case-lifecycle setting the same contact again (owner, 2026-10-29)", ()
     expect((await auditRecords(harness.owner)).length).toBe(before);
   });
 });
+
+describe("case-lifecycle a summary with an email address (owner, 2026-10-29)", () => {
+  let harness: Harness;
+  beforeEach(async () => {
+    harness = await createHarness();
+  });
+  afterEach(async () => {
+    await harness.close();
+  });
+
+  test("ensures closing refuses a summary holding an email address, and closes nothing", async () => {
+    await insertCase(harness.owner, "cse_alex_1", "iac_alex", at("14:00:00"));
+    await givenCase(harness.owner, "cse_alex_1", { subject: "acc_initech" });
+
+    const refused = await caseRequest(harness, "POST", casePath("cse_alex_1", "closure"), "iac_alex", {
+      close_reason: "Resolved",
+      summary: "Spoke with bob@initech.com about exports.",
+    });
+    const closed = await caseRequest(harness, "POST", casePath("cse_alex_1", "closure"), "iac_alex", {
+      close_reason: "Resolved",
+      summary: "Explained audit log export to the owner.",
+    });
+
+    expect(refused.status).toBe(400);
+    expect(JSON.stringify(await refused.json())).toContain("may not contain an email address");
+    expect(closed.status).toBe(204);
+  });
+});

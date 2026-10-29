@@ -41,6 +41,7 @@ import type { PolicySet } from "../../../subsystem/policy/src/model/policy.ts";
 import { PolicySetActivationCheck } from "../../../subsystem/policy/src/usecase/evaluate-policies.ts";
 import { PostgresCaseRepository } from "../../../subsystem/support/src/infra/postgres-case-repository.ts";
 import { PostgresChangeRequestRepository } from "../../../subsystem/support/src/infra/postgres-change-request-repository.ts";
+import { SUMMARY_WITH_EMAIL } from "../../../subsystem/support/src/model/case-summary.ts";
 import type { DenialReason } from "../../../subsystem/support/src/model/change-request.ts";
 import { ApplyChangeRequest } from "../../../subsystem/support/src/usecase/apply-change-request.ts";
 import {
@@ -934,6 +935,10 @@ export function createApplication(dependencies: ApplicationDependencies): Applic
       reason: parsed.body.close_reason,
       summary: parsed.body.summary,
     });
+    if (result.kind === "SummaryHasEmail")
+      return detailedErrorResponse("invalid_request", [
+        { error: "summary", error_description: SUMMARY_WITH_EMAIL },
+      ]);
     if (result.kind !== "Closed") return refusalResponse(context, result);
     const caseId = parsed.request.caseId;
     context.afterCommit(() => dependencies.caseWebSocketConnections.closeAll(caseId));
