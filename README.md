@@ -5,7 +5,7 @@ to, built on Cloudflare. A lab: a built, deployed experiment, with the specs, de
 history that produced it.
 
 **The principle: the model proposes; the policy engine decides.** The language model only calls tools. Every tool
-reaches a use case that asks one decision point (roles, entitlements, and policies written in CEL) before it reads or
+that reads or changes data reaches a use case that asks one decision point (roles, entitlements, and policies written in CEL) before it reads or
 changes anything; a change is only prepared, and a person confirms it.
 
 - **Live:** <https://entitlement-assistant.jose-luis-rios.workers.dev> (sign-in only; reviewers receive accounts
@@ -19,7 +19,7 @@ changes anything; a change is only prepared, and a person confirms it.
 | Feature | What a CSR can do |
 | --- | --- |
 | **Employee sign-in** | Sign in; a short-lived signed session cookie; a suspended or unknown employee gets the same answer as a wrong password. |
-| **Explain access** | Ask the assistant: what plan an account is on, whether it has a feature, everything it is entitled to, and why a person can or cannot use a feature, with every reason and a remedy. An account the CSR may not read answers "not found", indistinguishable from one that does not exist. |
+| **Explain access** | Ask the assistant: what plan an account is on, whether it has a feature, everything it is entitled to, and why a person can or cannot use a feature, with every reason, and a remedy when a plan would include it. A refusal says only what the CSR may know: "not found" to one with no right to read accounts, the policy's reason to one stopped by a policy. |
 | **Case lifecycle** | Work in a case: the assistant proposes the account it is about and the CSR sets it; the CSR sets and authenticates the customer contact; events appear as a timeline; the assistant drafts the closing summary. |
 | **Grants and approvals** | The assistant prepares temporary feature grants (create, revoke, extend) as a card the CSR confirms; beyond 14 days, a supervisor approves in the approvals panel, and a Cloudflare Workflow waits up to 72 hours, then has the system apply or expire the change. |
 | **Usage guards** | One setting caps the assistant's daily AI use; per-employee daily messages; bounded turns; sign-in attempts per IP address; a kill switch. |
@@ -59,9 +59,9 @@ and ports; dependency rules are checked on every build.
 
 | Decision | Where |
 | --- | --- |
-| Every tool and every route asks the decision point before it reads; an architecture test runs each as an employee every decision refuses, and fails on anything unlisted | `AI_CONSTITUTION.md` (`llm-never-authorizes`), [grants-and-approvals discovery 35](tech-docs/features/grants-and-approvals/workflow/discoveries.md) |
+| Every tool and route that reaches data asks the decision point before it reads; an architecture test runs each as an employee every decision refuses, and fails on anything unlisted | `AI_CONSTITUTION.md` (`llm-never-authorizes`), [grants-and-approvals discovery 35](tech-docs/features/grants-and-approvals/workflow/discoveries.md) |
 | Deny by default: nothing is allowed unless a role grants it; policies only add requirements | [AU-3](tech-docs/adr/authorization.md) |
-| No existence leaks: a refused read answers as "not found"; reasons are shown only to those who may read the account | [AU-6](tech-docs/adr/authorization.md) |
+| No existence leaks: a refused read answers as "not found", indistinguishable from an account that does not exist; only a CSR who may read accounts and is stopped by policies alone sees the policy's reasons | [AU-6](tech-docs/adr/authorization.md) |
 | The session token says who, never what they may do; permissions are loaded fresh for every decision | [CM-16](tech-docs/adr/common.md) |
 | Changes are prepared by the model, confirmed by a person, applied once, re-checked against a stale account; supervisors never approve their own | [SU-4, SU-15](tech-docs/adr/support.md), [grants-and-approvals spec](tech-docs/features/grants-and-approvals/grants-and-approvals.verification-spec.md) |
 | A hash-chained audit trail, with no personal data in its records | [Attribution ADRs](tech-docs/adr/attribution.md) |

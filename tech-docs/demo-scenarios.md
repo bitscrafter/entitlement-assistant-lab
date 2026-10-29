@@ -20,7 +20,7 @@
 | S2 | [Does an account have a feature, and why?](#s2-does-an-account-have-a-feature-and-why) |
 | S3 | [Everything an account is entitled to](#s3-everything-an-account-is-entitled-to) |
 | S4 | [Why can't a person use a feature?](#s4-why-cant-a-person-use-a-feature) |
-| S5 | [An account you may not read](#s5-an-account-you-may-not-read) |
+| S5 | [An account a policy keeps from you](#s5-an-account-a-policy-keeps-from-you) |
 | S6 | [An ambiguous name](#s6-an-ambiguous-name) |
 | | **[Cases](#cases)** |
 | S7 | [Set the subject and the contact](#s7-set-the-subject-and-the-contact) |
@@ -117,20 +117,20 @@ People's emails are `first-name@domain`: `bob@initech.com`, `carol@acme.com`, `l
 | :--- | :--- |
 | **As** | `cf-alex` |
 | **Steps** | Type `Why can't carol@acme.com create API tokens at Acme Corp?` |
-| **Expect** | • **Her role (viewer) does not allow it**, though Acme has API access<br>• A remedy: a role that does |
+| **Expect** | **No role she holds in Acme Corp allows it** (she is a viewer), though Acme has API access |
 | **Also try** | • `Why can't lee@globex.com create API tokens at Globex?`: **no plan covers today**<br>• `Can dan@acme.com configure SSO at Acme Corp?`: **Dan is suspended** |
 | **Shows** | One decision point combines the person's roles, the account's entitlements, holds, and policies; the assistant explains its findings. |
 
 ---
 
-### S5. An account you may not read
+### S5. An account a policy keeps from you
 
 |  |  |
 | :--- | :--- |
 | **As** | `cf-alex` (level 1), then `cf-blair` (level 2) |
 | **Steps** | • As Alex, type `What plan is Cyberdyne Systems on?`<br>• Sign in as Blair and ask again |
-| **Expect** | • Alex: **no account found**, the same answer as for a name that does not exist<br>• Blair: **Enterprise** |
-| **Shows** | A refusal reveals nothing: a level-1 representative cannot even learn that the account exists (policy `enterprise-accounts-need-level-2`). |
+| **Expect** | • Alex: **denied by policy**, with its reason: Enterprise accounts need job level 2 or a supervisor<br>• Blair: **Enterprise** |
+| **Shows** | A refusal says only what its reader may know: a representative who may read accounts learns which policy stopped them; someone with no right to read accounts at all gets "not found", the same as for an account that does not exist (AU-6). |
 
 ---
 
