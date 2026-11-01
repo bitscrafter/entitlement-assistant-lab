@@ -3,12 +3,13 @@
 ## To Do
 
 1. Before publishing, and again at the very end: re-run the export (`scripts/export_prompt_history.py`, with both transcript folders `--redact` for the owner's personal email, and `--private-project` for each private project's name), check it, and commit `tech-docs/prompt-history/`.
-2. GitHub repository `entitlement-assistant-lab`: the owner creates the remote (2026-10-27). Secret scan of the whole history passed (2026-10-27): no secret value, key, or password in any commit; only key identifiers, a test's example host, and placeholders.
-3. When the bitscrafter.com page is public: link it from the README (owner, 2026-10-27; until then, the repository never links it).
-4. Next (owner, 2026-10-27): rather than a new feature, make what exists deployable and demoable, so the owner can demo the app and submit the Cloudflare job application.
-5. Later (owner, 2026-10-27): documentation of the solution's viewpoints with videos and a live player: ER diagram, sequence and state diagrams, security decisions, principles.
+2. When the bitscrafter.com page is public: link it from the README (owner, 2026-10-27; until then, the repository never links it).
+3. Next (owner, 2026-10-27): rather than a new feature, make what exists deployable and demoable, so the owner can demo the app and submit the Cloudflare job application.
+4. Later (owner, 2026-10-27): documentation of the solution's viewpoints with videos and a live player: ER diagram, sequence and state diagrams, security decisions, principles.
 
 ## Completed
+
+- Public repository https://github.com/bitscrafter/entitlement-assistant-lab (2026-11-01): pushed with the MIT licence; the last three commits rewritten before the first push so no private project's name is in the history (b4800e2 became 2171064).
 
 - Live checks complete (2026-10-27, Workers Paid): explain-access §5 25/25 turns (discovery 40), case-lifecycle live check passed (discovery 16).
 
