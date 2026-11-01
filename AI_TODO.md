@@ -2,12 +2,13 @@
 
 ## To Do
 
-1. Before publishing, and again at the very end: re-run the export (`scripts/export_prompt_history.py`, with both transcript folders `--redact` for each of the owner's personal emails (never published; the public contact is info@bitscrafter.com), and `--private-project` for each private project's name), check it, and commit `tech-docs/prompt-history/`.
-2. When the bitscrafter.com page is public: link it from the README (owner, 2026-10-27; until then, the repository never links it).
-3. Next (owner, 2026-10-27): rather than a new feature, make what exists deployable and demoable, so the owner can demo the app and submit the Cloudflare job application.
-4. Later (owner, 2026-10-27): documentation of the solution's viewpoints with videos and a live player: ER diagram, sequence and state diagrams, security decisions, principles.
+1. When the bitscrafter.com page is public: link it from the README (owner, 2026-10-27; until then, the repository never links it).
+2. Next (owner, 2026-10-27): rather than a new feature, make what exists deployable and demoable, so the owner can demo the app and submit the Cloudflare job application.
+3. Later (owner, 2026-10-27): documentation of the solution's viewpoints with videos and a live player: ER diagram, sequence and state diagrams, security decisions, principles.
 
 ## Completed
+
+- Prompt history final (owner, 2026-11-01): the work is done; later exchanges are administration and are not exported.
 
 - Public repository https://github.com/bitscrafter/entitlement-assistant-lab (2026-11-01): pushed with the MIT licence; the last three commits rewritten before the first push so no private project's name is in the history (b4800e2 became 2171064).
 
