@@ -122,3 +122,7 @@ demo routine (reset, accounts, usage caps, the kill switch) is in
 - **Candidates:** courtesy terms, role changes, "what am I allowed to do?", an MCP server, voice input.
 - Known limits of this lab, and what production would add, are in
   [`tech-docs/production-readiness.md`](tech-docs/production-readiness.md).
+
+## Licence
+
+[MIT](LICENSE).
