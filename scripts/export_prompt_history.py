@@ -13,7 +13,7 @@ Redaction, applied to the readable rendering:
   - paths are relative to the project; links lose their tracking parameters
 
 Usage:
-  scripts/export_prompt_history.py [--transcripts-dir DIR ...] [--redact TEXT ...]
+  scripts/export_prompt_history.py [--transcripts-dir DIR ...] [--redact TEXT ...] [--private-project NAME ...]
 
 By default the transcripts directory is the Claude Code project folder of this repository's parent directory, where
 sessions are started. Every --redact value is also replaced by "[redacted]".
@@ -45,11 +45,9 @@ HARNESS_FRAMING = re.compile(
 )
 IMAGE_NOTE = re.compile(r"\[Image[^\]]*\]")
 
-# The owner's other projects are private: their names never appear, and their sessions' messages are left out.
-PRIVATE_PROJECT_NAMES = [
-    (re.compile(r"private-project[-a-z0-9]*", re.IGNORECASE), "[another project]"),
-]
-PRIVATE_SESSION_PREFIXES = ("private-project",)
+# The owner's other projects are private: their names never appear, and their sessions' messages are left out. The
+# names are given on the command line (--private-project), so this script names none of them.
+private_project_names: list[str] = []
 
 
 def secret_values() -> list[str]:
@@ -115,8 +113,8 @@ def path_replacements() -> list[tuple[str, str]]:
 def redact(text: str, redactions: list[str]) -> str:
     for redaction in redactions:
         text = text.replace(redaction, "[redacted]")
-    for pattern, replacement in PRIVATE_PROJECT_NAMES:
-        text = pattern.sub(replacement, text)
+    for name in private_project_names:
+        text = re.sub(re.escape(name) + r"[-a-z0-9]*", "[another project]", text, flags=re.IGNORECASE)
     text = TRACKED_LINK.sub(r"\1", text)
     text = TEMPORARY_FILE.sub("[a temporary file]", text)
     for absolute, relative in path_replacements():
@@ -138,7 +136,7 @@ def render_user_text(text: str) -> str:
 
     def cross_session(match: re.Match) -> str:
         sender = match.group("sender")
-        if sender.lower().startswith(PRIVATE_SESSION_PREFIXES):
+        if any(sender.lower().startswith(name.lower()) for name in private_project_names):
             return "\n*(A message from a session of another project, left out.)*\n"
         return f"\n**Message from another session ({sender}):**\n\n{match.group('body').strip()}\n"
 
@@ -196,7 +194,14 @@ def main() -> None:
         help="a Claude Code project folder; repeat it when the sessions ran from more than one directory",
     )
     parser.add_argument("--redact", action="append", default=[])
+    parser.add_argument(
+        "--private-project",
+        action="append",
+        default=[],
+        help="the name of a private project: its mentions become [another project], its sessions' messages are left out",
+    )
     arguments = parser.parse_args()
+    private_project_names.extend(arguments.private_project)
 
     RAW_DIRECTORY.mkdir(parents=True, exist_ok=True)
     PUBLISHED_DIRECTORY.mkdir(parents=True, exist_ok=True)

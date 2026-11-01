@@ -2,7 +2,7 @@
 
 ## To Do
 
-1. Before publishing, and again at the very end: re-run the export (`scripts/export_prompt_history.py`, with both transcript folders and `--redact` for the owner's personal email), check it, and commit `tech-docs/prompt-history/`.
+1. Before publishing, and again at the very end: re-run the export (`scripts/export_prompt_history.py`, with both transcript folders `--redact` for the owner's personal email, and `--private-project` for each private project's name), check it, and commit `tech-docs/prompt-history/`.
 2. GitHub repository `entitlement-assistant-lab`: the owner creates the remote (2026-10-27). Secret scan of the whole history passed (2026-10-27): no secret value, key, or password in any commit; only key identifiers, a test's example host, and placeholders.
 3. When the bitscrafter.com page is public: link it from the README (owner, 2026-10-27; until then, the repository never links it).
 4. Next (owner, 2026-10-27): rather than a new feature, make what exists deployable and demoable, so the owner can demo the app and submit the Cloudflare job application.
