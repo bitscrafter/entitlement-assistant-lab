@@ -61,7 +61,7 @@
 | **Rationale** | Fail closed: nothing happens unaudited. Who looked at a customer's data is an audit question. |
 | **Consequences** | Direct database access bypasses the application and needs database-level auditing (production). |
 | **Related** | [CM-5](common.md#cm-5-the-llm-proposes-the-policy-engine-decides) |
-| **Amendments** | 2026-10-25 — canonical records: one record per decision (the `account.read` gate is a finding of the action's decision, not its own record), plus one `Succeeded` or `Failed` record per execution. |
+| **Amendments** | 2026-10-25 — canonical records: one record per decision (the `account.read` gate is a finding of the action's decision, not its own record), plus one `Succeeded` or `Failed` record per execution.<br>2026-11-02 — two decisions are not recorded: the decision about the person an explanation evaluates (not that person's action; the employee's read is recorded, [explain-access D5](../features/explain-access/explain-access.verification-spec.md)), and an allowed listing of pending approvals (the panel lists every 30 seconds; each approval shown is decided again on `account.read`, and a refused listing is recorded; [grants-and-approvals discovery 35](../features/grants-and-approvals/workflow/discoveries.md)). |
 
 ---
 

@@ -68,7 +68,9 @@ All three carry the `trace_id`.
 
 | Audited | Not audited (and where it is visible instead) |
 | --- | --- |
-| Every authorization decision, reads and denials included: **one record per decision** (the `account.read` gate is a finding within it, AT-3) | The conversation's text and the LLM's prompts (agent storage) |
+| Every authorization decision, reads and denials included: **one record per decision** (the `account.read` gate is a finding within it, AT-3), with two exceptions (right) | The conversation's text and the LLM's prompts (agent storage) |
+| | The decision about the person an explanation evaluates: not their action; the employee's read is recorded (explain-access D5) |
+| | An allowed listing of pending approvals: listed every 30 seconds; each approval shown is decided again on `account.read`, and a refused listing is recorded (grants-and-approvals discovery 35) |
 | Every execution of a state change: **one record per execution**, after its decision's record | Requests rejected before authentication (security event logs) |
 | Every authentication event: sign-in (success and failure), renewal that re-issues or is refused, sign-out, account switch; a renewal before half-life changes nothing and is not recorded | Reads of the product catalog (no customer data) |
 | Every system action: grant expiry, approval timeout | Static files, health checks (logs) |
